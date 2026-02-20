@@ -45,6 +45,7 @@ model Note {
   type                  NoteType
   title                 String
   content               String?
+  contentJson           Json?           @map("content_json")
   projectId             String?         @map("project_id")
   project               Project?        @relation("ProjectNotes", fields: [projectId], references: [id], onDelete: SetNull)
   clientId              String?         @map("client_id")

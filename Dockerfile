@@ -35,18 +35,18 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV WORKSPACE_PATH=/data
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+# Use the existing 'node' user (UID 1000, GID 1000) from node:alpine image
+# This matches the host user that owns ./data directory
 
 COPY --from=builder /app/public ./public
 
 # Set the correct permission for prerender cache
 RUN mkdir .next
-RUN chown nextjs:nodejs .next
+RUN chown node:node .next
 
 # Automatically leverage output traces to reduce image size
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=node:node /app/.next/standalone ./
+COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 
 # Copy Prisma files for migrations
 COPY --from=builder /app/prisma ./prisma
@@ -58,9 +58,12 @@ COPY --from=builder /app/scripts/start.sh ./start.sh
 RUN chmod +x ./start.sh
 
 # Create data directory for workspace storage
-RUN mkdir -p /data/attachments && chown -R nextjs:nodejs /data
+RUN mkdir -p /data/attachments && chown -R node:node /data
 
-USER nextjs
+# Create npm cache directory for prisma migrations (node home is /home/node)
+RUN mkdir -p /home/node/.npm && chown -R node:node /home/node
+
+USER node
 
 EXPOSE 3000
 

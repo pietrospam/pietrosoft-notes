@@ -31,17 +31,22 @@ export function TipTapEditor({ content, onChange, placeholder = 'Start writing..
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Use ref for noteId to avoid stale closure in editor handlers
+  const noteIdRef = useRef(noteId);
+  noteIdRef.current = noteId;
 
   // Upload image file to attachments API
   const uploadImage = useCallback(async (file: File): Promise<string | null> => {
-    if (!noteId) {
+    const currentNoteId = noteIdRef.current;
+    if (!currentNoteId) {
       console.error('No noteId provided for image upload');
       return null;
     }
 
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('noteId', noteId);
+    formData.append('noteId', currentNoteId);
 
     try {
       const response = await fetch('/api/attachments', {
@@ -59,7 +64,7 @@ export function TipTapEditor({ content, onChange, placeholder = 'Start writing..
       console.error('Failed to upload image:', error);
       return null;
     }
-  }, [noteId]);
+  }, []); // No dependencies - uses noteIdRef
 
   const editor = useEditor({
     extensions: [
@@ -95,7 +100,7 @@ export function TipTapEditor({ content, onChange, placeholder = 'Start writing..
         for (const item of Array.from(items)) {
           if (item.type.startsWith('image/')) {
             const file = item.getAsFile();
-            if (file && noteId) {
+            if (file && noteIdRef.current) {
               event.preventDefault();
               uploadImage(file).then(url => {
                 if (url && view.state.selection) {
@@ -121,7 +126,7 @@ export function TipTapEditor({ content, onChange, placeholder = 'Start writing..
         event.preventDefault();
         
         imageFiles.forEach(file => {
-          if (noteId) {
+          if (noteIdRef.current) {
             uploadImage(file).then(url => {
               if (url) {
                 const { state, dispatch } = view;

@@ -1,12 +1,12 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { Building2, FolderKanban, Database, Download, Upload, Loader2 } from 'lucide-react';
+import { Building2, FolderKanban, Database, Download, Upload, Loader2, Settings, Save } from 'lucide-react';
 import { ClientsManager } from './ClientsManager';
 import { ProjectsManager } from './ProjectsManager';
 import { useApp } from '../context/AppContext';
 
-type ConfigTab = 'clients' | 'projects' | 'backup';
+type ConfigTab = 'clients' | 'projects' | 'backup' | 'preferences';
 
 function BackupManager() {
   const { refreshNotes } = useApp();
@@ -145,6 +145,63 @@ function BackupManager() {
   );
 }
 
+function PreferencesManager() {
+  const { autoSaveEnabled, toggleAutoSave } = useApp();
+
+  return (
+    <div className="p-6 max-w-2xl">
+      <h2 className="text-xl font-semibold text-white mb-6">Preferencias</h2>
+      
+      <div className="space-y-6">
+        {/* Auto-save Section */}
+        <div className="bg-gray-900 rounded-lg p-4 border border-gray-800">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-500/20 rounded-lg">
+                <Save size={20} className="text-blue-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-medium text-white">Auto-guardado</h3>
+                <p className="text-gray-400 text-sm">
+                  Guardar automáticamente los cambios después de 2 segundos de inactividad
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={toggleAutoSave}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                autoSaveEnabled ? 'bg-blue-600' : 'bg-gray-600'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  autoSaveEnabled ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+          <div className="mt-3 text-sm text-gray-500">
+            {autoSaveEnabled ? (
+              <span className="text-green-400">✓ Auto-guardado activado</span>
+            ) : (
+              <span className="text-yellow-400">⚠ Deberás guardar manualmente con el botón de guardar</span>
+            )}
+          </div>
+        </div>
+
+        {/* Info about manual save */}
+        <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-800/50">
+          <h4 className="text-sm font-medium text-gray-300 mb-2">Guardado manual</h4>
+          <p className="text-gray-500 text-sm">
+            Siempre puedes guardar manualmente usando el botón de guardar (💾) en la barra del editor.
+            Un punto amarillo indicará cuando hay cambios sin guardar.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ConfigPanel() {
   const [activeTab, setActiveTab] = useState<ConfigTab>('clients');
 
@@ -194,6 +251,19 @@ export function ConfigPanel() {
               <Database size={18} />
               Backup
             </button>
+            <button
+              onClick={() => setActiveTab('preferences')}
+              className={`
+                w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors
+                ${activeTab === 'preferences'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                }
+              `}
+            >
+              <Settings size={18} />
+              Preferencias
+            </button>
           </nav>
         </div>
       </div>
@@ -203,6 +273,7 @@ export function ConfigPanel() {
         {activeTab === 'clients' && <ClientsManager />}
         {activeTab === 'projects' && <ProjectsManager />}
         {activeTab === 'backup' && <BackupManager />}
+        {activeTab === 'preferences' && <PreferencesManager />}
       </div>
     </div>
   );

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { getClient, updateClient, disableClient } from '@/lib/repositories/clients-repo';
-import { ensureWorkspaceDirectories } from '@/lib/storage/file-storage';
 import type { UpdateClientInput } from '@/lib/types';
 
 interface RouteParams {
@@ -10,8 +9,6 @@ interface RouteParams {
 // GET /api/clients/:id - Get a single client
 export async function GET(request: Request, { params }: RouteParams) {
   try {
-    await ensureWorkspaceDirectories();
-    
     const client = await getClient(params.id);
     if (!client) {
       return NextResponse.json(
@@ -33,8 +30,6 @@ export async function GET(request: Request, { params }: RouteParams) {
 // PUT /api/clients/:id - Update a client
 export async function PUT(request: Request, { params }: RouteParams) {
   try {
-    await ensureWorkspaceDirectories();
-    
     const body = await request.json() as UpdateClientInput;
     
     const client = await updateClient(params.id, body);
@@ -58,8 +53,6 @@ export async function PUT(request: Request, { params }: RouteParams) {
 // DELETE /api/clients/:id - Disable a client (soft delete)
 export async function DELETE(request: Request, { params }: RouteParams) {
   try {
-    await ensureWorkspaceDirectories();
-    
     const client = await disableClient(params.id);
     if (!client) {
       return NextResponse.json(

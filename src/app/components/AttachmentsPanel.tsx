@@ -1,7 +1,8 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { Paperclip, Download, Trash2, Upload, File, Image as ImageIcon, FileText, Loader2 } from 'lucide-react';
+import { Paperclip, Download, Trash2, Upload, File, Image as ImageIcon, FileText, Loader2, Eye, Pencil, X, Check } from 'lucide-react';
+import { AttachmentViewer } from './AttachmentViewer';
 import type { AttachmentMeta } from '@/lib/types';
 
 interface AttachmentsPanelProps {
@@ -9,6 +10,7 @@ interface AttachmentsPanelProps {
   attachments: AttachmentMeta[];
   onAttachmentAdded: (attachment: AttachmentMeta) => void;
   onAttachmentDeleted: (attachmentId: string) => void;
+  onAttachmentRenamed?: (attachmentId: string, newName: string) => void;
 }
 
 function formatFileSize(bytes: number): string {
@@ -27,11 +29,15 @@ export function AttachmentsPanel({
   noteId, 
   attachments, 
   onAttachmentAdded, 
-  onAttachmentDeleted 
+  onAttachmentDeleted,
+  onAttachmentRenamed,
 }: AttachmentsPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [viewingAttachment, setViewingAttachment] = useState<AttachmentMeta | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
 
   const handleUpload = async (file: File) => {
     setUploading(true);
@@ -61,14 +67,14 @@ export function AttachmentsPanel({
       });
     } catch (error) {
       console.error('Failed to upload:', error);
-      alert('Failed to upload file');
+      alert('Error al subir el archivo');
     } finally {
       setUploading(false);
     }
   };
 
   const handleDelete = async (attachmentId: string) => {
-    if (!confirm('Delete this attachment?')) return;
+    if (!confirm('¿Eliminar este anexo?')) return;
     
     setDeletingId(attachmentId);
 
@@ -84,9 +90,49 @@ export function AttachmentsPanel({
       onAttachmentDeleted(attachmentId);
     } catch (error) {
       console.error('Failed to delete:', error);
-      alert('Failed to delete attachment');
+      alert('Error al eliminar el anexo');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const startRename = (attachment: AttachmentMeta) => {
+    setRenamingId(attachment.id);
+    // Remove extension for editing
+    const lastDot = attachment.originalName.lastIndexOf('.');
+    setRenameValue(lastDot > 0 ? attachment.originalName.substring(0, lastDot) : attachment.originalName);
+  };
+
+  const handleRename = async (attachment: AttachmentMeta) => {
+    if (!renameValue.trim()) {
+      setRenamingId(null);
+      return;
+    }
+
+    // Preserve original extension
+    const lastDot = attachment.originalName.lastIndexOf('.');
+    const extension = lastDot > 0 ? attachment.originalName.substring(lastDot) : '';
+    const newName = renameValue.trim() + extension;
+
+    if (newName === attachment.originalName) {
+      setRenamingId(null);
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/attachments/${attachment.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ originalName: newName }),
+      });
+
+      if (response.ok && onAttachmentRenamed) {
+        onAttachmentRenamed(attachment.id, newName);
+      }
+    } catch (error) {
+      console.error('Failed to rename:', error);
+    } finally {
+      setRenamingId(null);
     }
   };
 
@@ -95,7 +141,7 @@ export function AttachmentsPanel({
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2 text-sm font-medium text-gray-400">
           <Paperclip size={14} />
-          <span>Attachments ({attachments.length})</span>
+          <span>Anexos ({attachments.length})</span>
         </div>
         
         <button
@@ -108,7 +154,7 @@ export function AttachmentsPanel({
           ) : (
             <Upload size={12} />
           )}
-          <span>Add file</span>
+          <span>Agregar</span>
         </button>
         
         <input
@@ -126,12 +172,13 @@ export function AttachmentsPanel({
       </div>
 
       {attachments.length === 0 ? (
-        <p className="text-xs text-gray-600 py-2">No attachments</p>
+        <p className="text-xs text-gray-600 py-2">Sin anexos</p>
       ) : (
         <div className="space-y-2">
           {attachments.map((attachment) => {
             const Icon = getFileIcon(attachment.mimeType);
             const isDeleting = deletingId === attachment.id;
+            const isRenaming = renamingId === attachment.id;
             
             return (
               <div
@@ -141,37 +188,99 @@ export function AttachmentsPanel({
                 <Icon size={16} className="text-gray-500 flex-shrink-0" />
                 
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-gray-300 truncate">{attachment.originalName}</p>
-                  <p className="text-xs text-gray-600">{formatFileSize(attachment.size)}</p>
+                  {isRenaming ? (
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleRename(attachment);
+                          if (e.key === 'Escape') setRenamingId(null);
+                        }}
+                        className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-0.5 text-sm text-white focus:outline-none focus:border-blue-500"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => handleRename(attachment)}
+                        className="p-1 text-green-400 hover:bg-gray-700 rounded"
+                      >
+                        <Check size={14} />
+                      </button>
+                      <button
+                        onClick={() => setRenamingId(null)}
+                        className="p-1 text-gray-400 hover:bg-gray-700 rounded"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-sm text-gray-300 truncate">{attachment.originalName}</p>
+                      <p className="text-xs text-gray-600">{formatFileSize(attachment.size)}</p>
+                    </>
+                  )}
                 </div>
                 
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <a
-                    href={`/api/attachments/${attachment.id}?download=true`}
-                    download={attachment.originalName}
-                    className="p-1.5 text-gray-500 hover:text-white hover:bg-gray-700 rounded transition-colors"
-                    title="Download"
-                  >
-                    <Download size={14} />
-                  </a>
-                  
-                  <button
-                    onClick={() => handleDelete(attachment.id)}
-                    disabled={isDeleting}
-                    className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-gray-700 rounded transition-colors disabled:opacity-50"
-                    title="Delete"
-                  >
-                    {isDeleting ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : (
-                      <Trash2 size={14} />
-                    )}
-                  </button>
-                </div>
+                {!isRenaming && (
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {/* Preview */}
+                    <button
+                      onClick={() => setViewingAttachment(attachment)}
+                      className="p-1.5 text-gray-500 hover:text-white hover:bg-gray-700 rounded transition-colors"
+                      title="Ver"
+                    >
+                      <Eye size={14} />
+                    </button>
+                    
+                    {/* Download */}
+                    <a
+                      href={`/api/attachments/${attachment.id}?download=true`}
+                      download={attachment.originalName}
+                      className="p-1.5 text-gray-500 hover:text-white hover:bg-gray-700 rounded transition-colors"
+                      title="Descargar"
+                    >
+                      <Download size={14} />
+                    </a>
+                    
+                    {/* Rename */}
+                    <button
+                      onClick={() => startRename(attachment)}
+                      className="p-1.5 text-gray-500 hover:text-white hover:bg-gray-700 rounded transition-colors"
+                      title="Renombrar"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    
+                    {/* Delete */}
+                    <button
+                      onClick={() => handleDelete(attachment.id)}
+                      disabled={isDeleting}
+                      className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-gray-700 rounded transition-colors disabled:opacity-50"
+                      title="Eliminar"
+                    >
+                      {isDeleting ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Trash2 size={14} />
+                      )}
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
+      )}
+
+      {/* Attachment viewer modal */}
+      {viewingAttachment && (
+        <AttachmentViewer
+          attachment={viewingAttachment}
+          allAttachments={attachments}
+          onClose={() => setViewingAttachment(null)}
+          onNavigate={(att) => setViewingAttachment(att)}
+        />
       )}
     </div>
   );

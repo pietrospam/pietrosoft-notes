@@ -1,13 +1,10 @@
 import { NextResponse } from 'next/server';
 import { listClients, createClient } from '@/lib/repositories/clients-repo';
-import { ensureWorkspaceDirectories } from '@/lib/storage/file-storage';
 import type { CreateClientInput } from '@/lib/types';
 
 // GET /api/clients - List all clients
 export async function GET(request: Request) {
   try {
-    await ensureWorkspaceDirectories();
-    
     const { searchParams } = new URL(request.url);
     const includeDisabled = searchParams.get('includeDisabled') === 'true';
     
@@ -25,8 +22,6 @@ export async function GET(request: Request) {
 // POST /api/clients - Create a new client
 export async function POST(request: Request) {
   try {
-    await ensureWorkspaceDirectories();
-    
     const body = await request.json() as CreateClientInput;
     
     // Validate required fields

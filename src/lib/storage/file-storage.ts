@@ -64,12 +64,11 @@ export async function readJson<T>(filePath: string, defaultValue: T): Promise<T>
 // ============================================================================
 
 /**
- * Ensures all required workspace directories exist.
+ * Ensures attachments directory exists (notes dir no longer needed - using PostgreSQL).
  */
 export async function ensureWorkspaceDirectories(): Promise<void> {
   const dirs = [
     WORKSPACE_PATH,
-    PATHS.notesDir(),
     PATHS.attachmentsDir(),
   ];
 

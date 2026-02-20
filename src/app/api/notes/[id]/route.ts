@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { getNote, updateNote, deleteNote } from '@/lib/repositories/notes-repo';
-import { ensureWorkspaceDirectories } from '@/lib/storage/file-storage';
 import type { Note, UpdateNoteInput } from '@/lib/types';
 
 interface RouteParams {
@@ -10,8 +9,6 @@ interface RouteParams {
 // GET /api/notes/:id - Get a single note
 export async function GET(request: Request, { params }: RouteParams) {
   try {
-    await ensureWorkspaceDirectories();
-    
     const note = await getNote(params.id);
     if (!note) {
       return NextResponse.json(
@@ -33,8 +30,6 @@ export async function GET(request: Request, { params }: RouteParams) {
 // PUT /api/notes/:id - Update a note
 export async function PUT(request: Request, { params }: RouteParams) {
   try {
-    await ensureWorkspaceDirectories();
-    
     const body = await request.json() as UpdateNoteInput<Note>;
     
     const note = await updateNote(params.id, body);
@@ -58,8 +53,6 @@ export async function PUT(request: Request, { params }: RouteParams) {
 // DELETE /api/notes/:id - Delete a note
 export async function DELETE(request: Request, { params }: RouteParams) {
   try {
-    await ensureWorkspaceDirectories();
-    
     const success = await deleteNote(params.id);
     if (!success) {
       return NextResponse.json(

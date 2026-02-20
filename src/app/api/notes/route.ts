@@ -1,13 +1,10 @@
 import { NextResponse } from 'next/server';
 import { listNotes, createNote } from '@/lib/repositories/notes-repo';
-import { ensureWorkspaceDirectories } from '@/lib/storage/file-storage';
 import type { Note, NoteType, CreateNoteInput } from '@/lib/types';
 
 // GET /api/notes - List all notes
 export async function GET(request: Request) {
   try {
-    await ensureWorkspaceDirectories();
-    
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type') as NoteType | null;
     const includeArchived = searchParams.get('includeArchived') === 'true';
@@ -30,8 +27,6 @@ export async function GET(request: Request) {
 // POST /api/notes - Create a new note
 export async function POST(request: Request) {
   try {
-    await ensureWorkspaceDirectories();
-    
     const body = await request.json() as CreateNoteInput<Note>;
     
     // Validate required fields
@@ -51,53 +46,13 @@ export async function POST(request: Request) {
     
     // Type-specific validations
     if (body.type === 'task') {
-      const taskBody = body as CreateNoteInput<Note> & { projectId?: string; ticketPhaseCode?: string; shortDescription?: string };
-      if (!taskBody.projectId) {
-        return NextResponse.json(
-          { error: 'projectId is required for task notes' },
-          { status: 400 }
-        );
-      }
-      if (!taskBody.ticketPhaseCode) {
-        return NextResponse.json(
-          { error: 'ticketPhaseCode is required for task notes' },
-          { status: 400 }
-        );
-      }
-      if (!taskBody.shortDescription) {
-        return NextResponse.json(
-          { error: 'shortDescription is required for task notes' },
-          { status: 400 }
-        );
-      }
+      // projectId is optional at creation - can be assigned later
+      // ticketPhaseCode and shortDescription have defaults
     }
     
     if (body.type === 'timesheet') {
-      const tsBody = body as CreateNoteInput<Note> & { taskId?: string; workDate?: string; hoursWorked?: number; description?: string };
-      if (!tsBody.taskId) {
-        return NextResponse.json(
-          { error: 'taskId is required for timesheet notes' },
-          { status: 400 }
-        );
-      }
-      if (!tsBody.workDate) {
-        return NextResponse.json(
-          { error: 'workDate is required for timesheet notes' },
-          { status: 400 }
-        );
-      }
-      if (typeof tsBody.hoursWorked !== 'number') {
-        return NextResponse.json(
-          { error: 'hoursWorked is required for timesheet notes' },
-          { status: 400 }
-        );
-      }
-      if (!tsBody.description) {
-        return NextResponse.json(
-          { error: 'description is required for timesheet notes' },
-          { status: 400 }
-        );
-      }
+      // All timesheet fields are optional at creation - can be assigned later
+      // taskId, workDate, hoursWorked, description
     }
     
     const note = await createNote(body);

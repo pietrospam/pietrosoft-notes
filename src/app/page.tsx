@@ -1,13 +1,17 @@
 'use client';
 
 import { AppProvider, useApp } from './context/AppContext';
-import { TopBar, Sidebar, NotesList, EditorPanel, ConfigPanel } from './components';
+import { TopBar, Sidebar, NotesList, EditorPanel, ConfigPanel, TimeSheetView } from './components';
 
 function MainContent() {
   const { currentView } = useApp();
 
   if (currentView === 'config') {
     return <ConfigPanel />;
+  }
+
+  if (currentView === 'timesheets') {
+    return <TimeSheetView />;
   }
 
   return (

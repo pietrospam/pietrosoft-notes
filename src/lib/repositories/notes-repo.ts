@@ -95,7 +95,7 @@ function toNote(p: PrismaNote): Note {
   const base = {
     id: p.id,
     title: p.title,
-    contentJson: null as object | null,
+    contentJson: p.contentJson as object | null,
     contentText: p.content || '',
     attachments: (p.attachments as unknown as AttachmentMeta[]) || [],
     createdAt: p.createdAt.toISOString(),
@@ -233,6 +233,7 @@ export async function createNote<T extends Note>(input: CreateNoteInput<T>): Pro
     type,
     title: input.title || '',
     content: (anyInput.contentText as string) || '',
+    contentJson: anyInput.contentJson ?? Prisma.JsonNull,
     clientId: (anyInput.clientId as string) || null,
     projectId: (anyInput.projectId as string) || null,
     archived: false,
@@ -261,6 +262,10 @@ export async function createNote<T extends Note>(input: CreateNoteInput<T>): Pro
     data.timesheetDate = tsInput.workDate ? new Date(tsInput.workDate as string) : null;
     data.timesheetHours = (tsInput.hoursWorked as number) || null;
     data.timesheetState = timesheetStateToDb((tsInput.state as TimeSheetState) || 'DRAFT');
+    // TimeSheet description is stored in the content field
+    if (tsInput.description) {
+      data.content = tsInput.description as string;
+    }
   }
 
   const created = await prisma.note.create({ data });
@@ -286,6 +291,9 @@ export async function updateNote<T extends Note>(
   }
   if ('contentText' in input) {
     data.content = anyInput.contentText as string;
+  }
+  if ('contentJson' in input) {
+    data.contentJson = anyInput.contentJson ?? Prisma.JsonNull;
   }
   if ('clientId' in input) {
     data.clientId = (anyInput.clientId as string) || null;
@@ -329,6 +337,20 @@ export async function updateNote<T extends Note>(
   }
   if ('state' in input) {
     data.timesheetState = timesheetStateToDb(anyInput.state as TimeSheetState);
+  }
+  // TimeSheet description field
+  if ('description' in input) {
+    data.content = (anyInput.description as string) || '';
+  }
+
+  // Archive field - convert archivedAt (string|undefined) to archived (boolean)
+  if ('archivedAt' in input) {
+    data.archived = anyInput.archivedAt ? true : false;
+  }
+
+  // Attachments field
+  if ('attachments' in input) {
+    data.attachments = anyInput.attachments as Prisma.InputJsonValue;
   }
 
   const updated = await prisma.note.update({ where: { id }, data });

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { getProject, updateProject, disableProject } from '@/lib/repositories/projects-repo';
-import { ensureWorkspaceDirectories } from '@/lib/storage/file-storage';
 import type { UpdateProjectInput } from '@/lib/types';
 
 interface RouteParams {
@@ -10,8 +9,6 @@ interface RouteParams {
 // GET /api/projects/:id - Get a single project
 export async function GET(request: Request, { params }: RouteParams) {
   try {
-    await ensureWorkspaceDirectories();
-    
     const project = await getProject(params.id);
     if (!project) {
       return NextResponse.json(
@@ -33,8 +30,6 @@ export async function GET(request: Request, { params }: RouteParams) {
 // PUT /api/projects/:id - Update a project
 export async function PUT(request: Request, { params }: RouteParams) {
   try {
-    await ensureWorkspaceDirectories();
-    
     const body = await request.json() as UpdateProjectInput;
     
     const project = await updateProject(params.id, body);
@@ -67,8 +62,6 @@ export async function PUT(request: Request, { params }: RouteParams) {
 // DELETE /api/projects/:id - Disable a project (soft delete)
 export async function DELETE(request: Request, { params }: RouteParams) {
   try {
-    await ensureWorkspaceDirectories();
-    
     const project = await disableProject(params.id);
     if (!project) {
       return NextResponse.json(

@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { ChevronDown, Clock, Plus } from 'lucide-react';
-import { useApp } from '../context/AppContext';
 import { QuickCreateModal } from './QuickCreateModal';
+import { TimeSheetModal } from './TimeSheetModal';
+import { Toast } from './Toast';
 import type { TaskNote, Client, Project, TaskStatus, TaskPriority } from '@/lib/types';
 
 const STATUSES: { value: TaskStatus; label: string; color: string }[] = [
@@ -27,12 +28,13 @@ interface TaskFieldsProps {
 }
 
 export function TaskFields({ note, onChange }: TaskFieldsProps) {
-  const { setSelectedNoteId, setCurrentView } = useApp();
   const [clients, setClients] = useState<Client[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>('');
   const [showCreateClient, setShowCreateClient] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
+  const [showTimeSheetModal, setShowTimeSheetModal] = useState(false);
+  const [toast, setToast] = useState<{ message: string } | null>(null);
 
   useEffect(() => {
     fetch('/api/clients').then(r => r.json()).then(setClients);
@@ -64,29 +66,12 @@ export function TaskFields({ note, onChange }: TaskFieldsProps) {
   };
 
   const handleAddTimeSheet = async () => {
-    // Create a new timesheet linked to this task
-    const today = new Date().toISOString().split('T')[0];
-    const response = await fetch('/api/notes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type: 'timesheet',
-        title: `Time: ${note.title || note.shortDescription || 'Task'}`,
-        contentJson: null,
-        taskId: note.id,
-        workDate: today,
-        hoursWorked: 0,
-        description: '',
-        state: 'DRAFT',
-      }),
-    });
-    
-    if (response.ok) {
-      const newNote = await response.json();
-      // Navigate to timesheet view and select the new note
-      setCurrentView('timesheet');
-      setSelectedNoteId(newNote.id);
+    // Check if task has been saved (not a temp ID)
+    if (note.id.startsWith('temp-')) {
+      setToast({ message: 'Guarda la tarea primero antes de registrar horas' });
+      return;
     }
+    setShowTimeSheetModal(true);
   };
 
   return (
@@ -97,7 +82,7 @@ export function TaskFields({ note, onChange }: TaskFieldsProps) {
         className="flex items-center gap-2 w-full px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
       >
         <Clock size={16} />
-        <span>Add TimeSheet Entry</span>
+        <span>Registrar Horas</span>
       </button>
 
       {/* Client & Project Selection */}
@@ -287,6 +272,25 @@ export function TaskFields({ note, onChange }: TaskFieldsProps) {
           />
         </div>
       </div>
+
+      {/* TimeSheet Modal */}
+      {showTimeSheetModal && (
+        <TimeSheetModal
+          task={note}
+          onClose={() => setShowTimeSheetModal(false)}
+          onSaved={() => {
+            setToast({ message: 'Horas registradas exitosamente' });
+          }}
+        />
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 }

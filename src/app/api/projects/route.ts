@@ -1,13 +1,10 @@
 import { NextResponse } from 'next/server';
 import { listProjects, createProject } from '@/lib/repositories/projects-repo';
-import { ensureWorkspaceDirectories } from '@/lib/storage/file-storage';
 import type { CreateProjectInput } from '@/lib/types';
 
 // GET /api/projects - List all projects
 export async function GET(request: Request) {
   try {
-    await ensureWorkspaceDirectories();
-    
     const { searchParams } = new URL(request.url);
     const includeDisabled = searchParams.get('includeDisabled') === 'true';
     const clientId = searchParams.get('clientId') || undefined;
@@ -26,8 +23,6 @@ export async function GET(request: Request) {
 // POST /api/projects - Create a new project
 export async function POST(request: Request) {
   try {
-    await ensureWorkspaceDirectories();
-    
     const body = await request.json() as CreateProjectInput;
     
     // Validate required fields

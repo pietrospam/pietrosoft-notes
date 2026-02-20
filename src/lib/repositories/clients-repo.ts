@@ -43,15 +43,29 @@ export async function getClient(id: string): Promise<Client | null> {
 }
 
 export async function createClient(input: CreateClientInput): Promise<Client> {
-  const id = `client-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-  const client = await prisma.client.create({
-    data: {
-      id,
-      name: input.name,
-      description: input.description,
-      active: input.disabled !== true, // Invert: disabled=true -> active=false
-    },
-  });
+  const clientId = `client-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  const projectId = `proj-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  
+  // Create client and default "General" project in a transaction
+  const [client] = await prisma.$transaction([
+    prisma.client.create({
+      data: {
+        id: clientId,
+        name: input.name,
+        description: input.description,
+        active: input.disabled !== true,
+      },
+    }),
+    prisma.project.create({
+      data: {
+        id: projectId,
+        clientId: clientId,
+        name: 'General',
+        description: 'Proyecto por defecto',
+      },
+    }),
+  ]);
+  
   return toClient(client);
 }
 

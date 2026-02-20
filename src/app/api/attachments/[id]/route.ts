@@ -106,3 +106,38 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: 'Failed to delete attachment' }, { status: 500 });
   }
 }
+
+export async function PATCH(request: NextRequest, { params }: Params) {
+  try {
+    const { id } = params;
+    const body = await request.json();
+    
+    // Find attachment metadata
+    const result = await findAttachment(id);
+    if (!result) {
+      return NextResponse.json({ error: 'Attachment not found' }, { status: 404 });
+    }
+    
+    const { noteId } = result;
+    
+    // Get note and update attachment name
+    const notes = await listNotes({ includeArchived: true });
+    const note = notes.find(n => n.id === noteId);
+    
+    if (note && body.originalName) {
+      const updatedAttachments = note.attachments.map(a => 
+        a.id === id ? { ...a, originalName: body.originalName } : a
+      );
+      await updateNote(noteId, { attachments: updatedAttachments });
+      
+      const updatedAttachment = updatedAttachments.find(a => a.id === id);
+      return NextResponse.json(updatedAttachment);
+    }
+    
+    return NextResponse.json({ error: 'Failed to update attachment' }, { status: 400 });
+    
+  } catch (error) {
+    console.error('Error updating attachment:', error);
+    return NextResponse.json({ error: 'Failed to update attachment' }, { status: 500 });
+  }
+}

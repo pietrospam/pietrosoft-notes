@@ -1,82 +1,168 @@
 'use client';
 
-import { useApp, ViewType } from '../context/AppContext';
+import { useApp } from '../context/AppContext';
 import { 
-  FileText, 
-  CheckSquare, 
-  Link, 
-  Clock, 
   Settings,
   Layers,
-  Archive
+  Archive,
+  Users,
+  Building2,
+  Clock
 } from 'lucide-react';
 
-const navItems: { view: ViewType; label: string; icon: React.ElementType }[] = [
-  { view: 'all', label: 'All Notes', icon: Layers },
-  { view: 'general', label: 'General', icon: FileText },
-  { view: 'task', label: 'Tasks', icon: CheckSquare },
-  { view: 'connection', label: 'Connections', icon: Link },
-  { view: 'timesheet', label: 'TimeSheet', icon: Clock },
-  { view: 'archived', label: 'Archived', icon: Archive },
-];
-
 export function Sidebar() {
-  const { currentView, setCurrentView, notes } = useApp();
+  const { 
+    currentView, 
+    setCurrentView, 
+    selectedClientId, 
+    setSelectedClientId,
+    clients, 
+    notes,
+    confirmNavigation,
+  } = useApp();
 
-  const getCount = (view: ViewType) => {
-    if (view === 'all') return notes.filter(n => !n.archivedAt).length;
-    if (view === 'archived') return notes.filter(n => n.archivedAt).length;
-    if (view === 'config') return null;
-    return notes.filter(n => n.type === view && !n.archivedAt).length;
+  const handleNavigate = (action: () => void) => {
+    confirmNavigation(action);
   };
 
+  const getCountForClient = (clientId: string | null) => {
+    // This is a simplified count - we'd need getClientForNote for accurate counts
+    // For now, just count all non-archived notes
+    if (clientId === null) {
+      return notes.filter(n => !n.archivedAt).length;
+    }
+    return null; // Don't show count for individual clients for now
+  };
+
+  const archivedCount = notes.filter(n => n.archivedAt).length;
+
   return (
-    <aside className="w-56 bg-gray-900 border-r border-gray-800 flex flex-col">
+    <aside className="w-14 hover:w-48 bg-gray-900 border-r border-gray-800 flex flex-col transition-all duration-200 group overflow-hidden">
       <div className="flex-1 py-4">
+        {/* Main navigation */}
         <nav className="space-y-1 px-2">
-          {navItems.map(({ view, label, icon: Icon }) => {
-            const isActive = currentView === view;
-            const count = getCount(view);
-            
-            return (
-              <button
-                key={view}
-                onClick={() => setCurrentView(view)}
-                className={`
-                  w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm
-                  transition-colors
-                  ${isActive 
-                    ? 'bg-blue-600 text-white' 
-                    : 'text-gray-400 hover:bg-gray-800 hover:text-white'}
-                `}
-              >
-                <Icon size={18} />
-                <span className="flex-1 text-left">{label}</span>
-                {count !== null && (
-                  <span className={`text-xs ${isActive ? 'text-blue-200' : 'text-gray-500'}`}>
-                    {count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
-        
-        <div className="my-4 mx-4 border-t border-gray-800" />
-        
-        <nav className="px-2">
+          {/* All Notes */}
           <button
-            onClick={() => setCurrentView('config')}
+            onClick={() => handleNavigate(() => {
+              setSelectedClientId(null);
+              setCurrentView('all');
+            })}
             className={`
-              w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm
-              transition-colors
+              w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm
+              transition-colors whitespace-nowrap
+              ${selectedClientId === null && currentView !== 'archived' && currentView !== 'config'
+                ? 'bg-blue-600 text-white' 
+                : 'text-gray-400 hover:bg-gray-800 hover:text-white'}
+            `}
+          >
+            <Layers size={18} className="flex-shrink-0" />
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity">Todos</span>
+            <span className={`ml-auto text-xs opacity-0 group-hover:opacity-100 transition-opacity ${
+              selectedClientId === null ? 'text-blue-200' : 'text-gray-500'
+            }`}>
+              {getCountForClient(null)}
+            </span>
+          </button>
+
+          {/* Sin Cliente */}
+          <button
+            onClick={() => handleNavigate(() => {
+              setSelectedClientId('none');
+              setCurrentView('all');
+            })}
+            className={`
+              w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm
+              transition-colors whitespace-nowrap
+              ${selectedClientId === 'none'
+                ? 'bg-blue-600 text-white' 
+                : 'text-gray-400 hover:bg-gray-800 hover:text-white'}
+            `}
+          >
+            <Users size={18} className="flex-shrink-0" />
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity">Sin Cliente</span>
+          </button>
+
+          {/* Divider */}
+          <div className="my-2 mx-1 border-t border-gray-800" />
+
+          {/* Clients */}
+          {clients.filter(c => !c.disabled).map(client => (
+            <button
+              key={client.id}
+              onClick={() => handleNavigate(() => {
+                setSelectedClientId(client.id);
+                setCurrentView('all');
+              })}
+              className={`
+                w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm
+                transition-colors whitespace-nowrap
+                ${selectedClientId === client.id
+                  ? 'bg-blue-600 text-white' 
+                  : 'text-gray-400 hover:bg-gray-800 hover:text-white'}
+              `}
+            >
+              <Building2 size={18} className="flex-shrink-0" />
+              <span className="opacity-0 group-hover:opacity-100 transition-opacity truncate">
+                {client.name}
+              </span>
+            </button>
+          ))}
+        </nav>
+      </div>
+      
+      {/* Bottom navigation */}
+      <div className="py-4 border-t border-gray-800">
+        <nav className="space-y-1 px-2">
+          {/* TimeSheets - REQ-002 */}
+          <button
+            onClick={() => handleNavigate(() => setCurrentView('timesheets'))}
+            className={`
+              w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm
+              transition-colors whitespace-nowrap
+              ${currentView === 'timesheets'
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-400 hover:bg-gray-800 hover:text-white'}
+            `}
+          >
+            <Clock size={18} className="flex-shrink-0" />
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity">TimeSheets</span>
+          </button>
+
+          {/* Archived */}
+          <button
+            onClick={() => handleNavigate(() => setCurrentView('archived'))}
+            className={`
+              w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm
+              transition-colors whitespace-nowrap
+              ${currentView === 'archived'
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-400 hover:bg-gray-800 hover:text-white'}
+            `}
+          >
+            <Archive size={18} className="flex-shrink-0" />
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity">Archivados</span>
+            {archivedCount > 0 && (
+              <span className={`ml-auto text-xs opacity-0 group-hover:opacity-100 transition-opacity ${
+                currentView === 'archived' ? 'text-blue-200' : 'text-gray-500'
+              }`}>
+                {archivedCount}
+              </span>
+            )}
+          </button>
+
+          {/* Config */}
+          <button
+            onClick={() => handleNavigate(() => setCurrentView('config'))}
+            className={`
+              w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm
+              transition-colors whitespace-nowrap
               ${currentView === 'config'
                 ? 'bg-blue-600 text-white'
                 : 'text-gray-400 hover:bg-gray-800 hover:text-white'}
             `}
           >
-            <Settings size={18} />
-            <span>Config</span>
+            <Settings size={18} className="flex-shrink-0" />
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity">Config</span>
           </button>
         </nav>
       </div>
