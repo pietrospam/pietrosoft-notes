@@ -10,12 +10,10 @@ export async function GET(request: Request) {
     
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type') as NoteType | null;
-    const includeDeleted = searchParams.get('includeDeleted') === 'true';
     const includeArchived = searchParams.get('includeArchived') === 'true';
     
     const notes = await listNotes({
       type: type || undefined,
-      includeDeleted,
       includeArchived,
     });
     

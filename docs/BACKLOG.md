@@ -4,36 +4,46 @@
 A1. Create Next.js + TypeScript project
 - AC: App builds and runs locally
 
-A2. Add docker-compose + Dockerfile (single container)
+A2. Add docker-compose + Dockerfile (app + postgres)
 - AC: `docker compose up` serves the app on localhost
-- AC: `/data` volume mounted and writable
+- AC: PostgreSQL container running and accessible
+- AC: `/data` volume mounted for attachments
 
 A3. Add workspace env config
-- AC: `WORKSPACE_PATH` controls storage location
+- AC: `DATABASE_URL` connects to PostgreSQL
+- AC: `WORKSPACE_PATH` controls attachment storage location
 
 ---
 
-## EPIC B — File-based storage engine
-B1. Define domain models (types/interfaces)
-- Client, Project, Note, TaskFields, ConnectionFields, TimeSheetFields, AttachmentMeta
-- AC: Types compile and are used across API/UI
+## EPIC B — Database Storage Engine (PostgreSQL)
+B1. Configure Prisma ORM
+- Add prisma as dependency
+- Create prisma/schema.prisma with models
+- AC: `npx prisma generate` runs without errors
 
-B2. Implement atomic JSON write helper
-- Write to temp file then rename
-- AC: No partial files on crash (best effort)
+B2. Define database schema
+- Client, Project, Note tables
+- Proper foreign key constraints
+- JSONB for TipTap content storage
+- AC: Schema matches domain models
 
-B3. Implement repositories
+B3. Implement Prisma migrations
+- Initial migration creates all tables
+- AC: `npx prisma migrate deploy` works in Docker
+
+B4. Implement repositories using Prisma
 - ClientsRepo: list/get/create/update/disable
-- ProjectsRepo: list/get/create/update/disable (validate clientId)
+- ProjectsRepo: list/get/create/update/disable (validate clientId via FK)
 - NotesRepo: list/get/create/update/softDelete/archive
-- AC: Unit-testable functions, deterministic output
+- AC: All CRUD operations use database
 
-B4. Implement ID generator (UUID)
+B5. Implement ID generator (UUID)
+- Use Prisma's uuid() default
 - AC: IDs unique and stable
 
-B5. Implement derived fields
+B6. Implement derived fields
 - contentText extraction from TipTap JSON
-- updatedAt handling
+- updatedAt auto-update via Prisma
 - AC: contentText updates on save
 
 ---

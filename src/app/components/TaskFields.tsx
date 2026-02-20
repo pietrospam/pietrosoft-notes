@@ -8,18 +8,17 @@ import type { TaskNote, Client, Project, TaskStatus, TaskPriority } from '@/lib/
 
 const STATUSES: { value: TaskStatus; label: string; color: string }[] = [
   { value: 'NONE', label: 'None', color: 'bg-gray-500' },
-  { value: 'TODO', label: 'To Do', color: 'bg-yellow-500' },
+  { value: 'PENDING', label: 'Pending', color: 'bg-yellow-500' },
   { value: 'IN_PROGRESS', label: 'In Progress', color: 'bg-blue-500' },
-  { value: 'DONE', label: 'Done', color: 'bg-green-500' },
-  { value: 'BLOCKED', label: 'Blocked', color: 'bg-red-500' },
-  { value: 'CANCELED', label: 'Canceled', color: 'bg-gray-600' },
+  { value: 'COMPLETED', label: 'Completed', color: 'bg-green-500' },
+  { value: 'CANCELLED', label: 'Cancelled', color: 'bg-gray-600' },
 ];
 
 const PRIORITIES: { value: TaskPriority; label: string; color: string }[] = [
   { value: 'LOW', label: 'Low', color: 'text-gray-400' },
   { value: 'MEDIUM', label: 'Medium', color: 'text-yellow-400' },
   { value: 'HIGH', label: 'High', color: 'text-orange-400' },
-  { value: 'URGENT', label: 'Urgent', color: 'text-red-400' },
+  { value: 'CRITICAL', label: 'Critical', color: 'text-red-400' },
 ];
 
 interface TaskFieldsProps {
@@ -78,7 +77,7 @@ export function TaskFields({ note, onChange }: TaskFieldsProps) {
         workDate: today,
         hoursWorked: 0,
         description: '',
-        state: 'PENDING',
+        state: 'DRAFT',
       }),
     });
     

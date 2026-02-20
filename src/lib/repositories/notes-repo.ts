@@ -1,196 +1,451 @@
-import * as fs from 'fs/promises';
-import { PATHS, readJson, atomicWriteJson, generateId, nowISO, listJsonFiles } from '../storage/file-storage';
-import type { Note, NoteType, CreateNoteInput, UpdateNoteInput } from '../types';
+import prisma from '../db';
+import { NoteType as PrismaNoteType, TaskStatus as PrismaTaskStatus, TaskPriority as PrismaTaskPriority, TimesheetState as PrismaTimesheetState, Prisma } from '@prisma/client';
+import type { 
+  Note, NoteType, CreateNoteInput, UpdateNoteInput,
+  GeneralNote, TaskNote, ConnectionNote, TimeSheetNote,
+  AttachmentMeta, TaskStatus, TaskPriority, TimeSheetState
+} from '../types';
 
 // ============================================================================
-// Notes Repository (file-per-note approach)
+// Type Mappers
 // ============================================================================
 
+const noteTypeToDb: Record<NoteType, PrismaNoteType> = {
+  general: PrismaNoteType.GENERAL,
+  task: PrismaNoteType.TASK,
+  connection: PrismaNoteType.CONNECTION,
+  timesheet: PrismaNoteType.TIMESHEET,
+};
+
+const noteTypeFromDb: Record<PrismaNoteType, NoteType> = {
+  [PrismaNoteType.GENERAL]: 'general',
+  [PrismaNoteType.TASK]: 'task',
+  [PrismaNoteType.CONNECTION]: 'connection',
+  [PrismaNoteType.TIMESHEET]: 'timesheet',
+};
+
+const taskStatusToDb = (status: TaskStatus): PrismaTaskStatus | null => {
+  if (status === 'NONE') return null;
+  const map: Record<Exclude<TaskStatus, 'NONE'>, PrismaTaskStatus> = {
+    PENDING: PrismaTaskStatus.PENDING,
+    IN_PROGRESS: PrismaTaskStatus.IN_PROGRESS,
+    COMPLETED: PrismaTaskStatus.COMPLETED,
+    CANCELLED: PrismaTaskStatus.CANCELLED,
+  };
+  return map[status];
+};
+
+const taskStatusFromDb = (status: PrismaTaskStatus | null): TaskStatus => {
+  if (!status) return 'NONE';
+  const map: Record<PrismaTaskStatus, TaskStatus> = {
+    [PrismaTaskStatus.PENDING]: 'PENDING',
+    [PrismaTaskStatus.IN_PROGRESS]: 'IN_PROGRESS',
+    [PrismaTaskStatus.COMPLETED]: 'COMPLETED',
+    [PrismaTaskStatus.CANCELLED]: 'CANCELLED',
+  };
+  return map[status];
+};
+
+const taskPriorityToDb = (priority: TaskPriority): PrismaTaskPriority => {
+  const map: Record<TaskPriority, PrismaTaskPriority> = {
+    LOW: PrismaTaskPriority.LOW,
+    MEDIUM: PrismaTaskPriority.MEDIUM,
+    HIGH: PrismaTaskPriority.HIGH,
+    CRITICAL: PrismaTaskPriority.CRITICAL,
+  };
+  return map[priority];
+};
+
+const taskPriorityFromDb = (priority: PrismaTaskPriority | null): TaskPriority => {
+  if (!priority) return 'MEDIUM';
+  const map: Record<PrismaTaskPriority, TaskPriority> = {
+    [PrismaTaskPriority.LOW]: 'LOW',
+    [PrismaTaskPriority.MEDIUM]: 'MEDIUM',
+    [PrismaTaskPriority.HIGH]: 'HIGH',
+    [PrismaTaskPriority.CRITICAL]: 'CRITICAL',
+  };
+  return map[priority];
+};
+
+const timesheetStateToDb = (state: TimeSheetState): PrismaTimesheetState | null => {
+  if (state === 'NONE') return null;
+  const map: Record<Exclude<TimeSheetState, 'NONE'>, PrismaTimesheetState> = {
+    DRAFT: PrismaTimesheetState.DRAFT,
+    FINAL: PrismaTimesheetState.FINAL,
+  };
+  return map[state];
+};
+
+const timesheetStateFromDb = (state: PrismaTimesheetState | null): TimeSheetState => {
+  if (!state) return 'NONE';
+  const map: Record<PrismaTimesheetState, TimeSheetState> = {
+    [PrismaTimesheetState.DRAFT]: 'DRAFT',
+    [PrismaTimesheetState.FINAL]: 'FINAL',
+  };
+  return map[state];
+};
+
 // ============================================================================
-// Helper: Extract plain text from TipTap JSON
+// Prisma to Domain Converter
 // ============================================================================
 
-function extractTextFromTipTap(json: object | null): string {
-  if (!json) return '';
-  
-  function walk(node: Record<string, unknown>): string {
-    let text = '';
-    
-    if (node.text && typeof node.text === 'string') {
-      text += node.text;
-    }
-    
-    if (node.content && Array.isArray(node.content)) {
-      for (const child of node.content) {
-        text += walk(child as Record<string, unknown>) + ' ';
-      }
-    }
-    
-    return text;
+type PrismaNote = Prisma.NoteGetPayload<object>;
+
+function toNote(p: PrismaNote): Note {
+  const base = {
+    id: p.id,
+    title: p.title,
+    contentJson: null as object | null,
+    contentText: p.content || '',
+    attachments: (p.attachments as unknown as AttachmentMeta[]) || [],
+    createdAt: p.createdAt.toISOString(),
+    updatedAt: p.updatedAt.toISOString(),
+    archivedAt: p.archived ? p.updatedAt.toISOString() : undefined,
+  };
+
+  const type = noteTypeFromDb[p.type];
+
+  switch (type) {
+    case 'general':
+      return {
+        ...base,
+        type: 'general',
+        clientId: p.clientId ?? undefined,
+        projectId: p.projectId ?? undefined,
+      } as GeneralNote;
+
+    case 'task':
+      return {
+        ...base,
+        type: 'task',
+        projectId: p.projectId || '',
+        clientId: p.clientId ?? undefined,
+        ticketPhaseCode: '',
+        shortDescription: '',
+        budgetHours: undefined,
+        status: taskStatusFromDb(p.taskStatus),
+        priority: taskPriorityFromDb(p.taskPriority),
+        dueDate: p.taskDueDate?.toISOString(),
+      } as TaskNote;
+
+    case 'connection':
+      return {
+        ...base,
+        type: 'connection',
+        clientId: p.clientId ?? undefined,
+        projectId: p.projectId ?? undefined,
+        url: p.connectionUrl ?? undefined,
+        username: undefined,
+        password: p.connectionCredentials ?? undefined,
+      } as ConnectionNote;
+
+    case 'timesheet':
+      return {
+        ...base,
+        type: 'timesheet',
+        taskId: p.timesheetTaskId || '',
+        workDate: p.timesheetDate?.toISOString().split('T')[0] || '',
+        hoursWorked: p.timesheetHours || 0,
+        description: p.content || '',
+        state: timesheetStateFromDb(p.timesheetState),
+      } as TimeSheetNote;
+
+    default:
+      return {
+        ...base,
+        type: 'general',
+      } as GeneralNote;
   }
-  
-  return walk(json as Record<string, unknown>).trim().replace(/\s+/g, ' ');
 }
 
 // ============================================================================
-// CRUD Operations
+// List Notes
 // ============================================================================
 
-export async function listNotes(options?: {
+export interface ListNotesOptions {
   type?: NoteType;
-  includeDeleted?: boolean;
+  clientId?: string;
+  projectId?: string;
   includeArchived?: boolean;
-}): Promise<Note[]> {
-  const files = await listJsonFiles(PATHS.notesDir());
-  const notes: Note[] = [];
-  
-  for (const file of files) {
-    const notePath = PATHS.note(file.replace('.json', ''));
-    const note = await readJson<Note | null>(notePath, null);
-    if (note) {
-      // Filter by type if specified
-      if (options?.type && note.type !== options.type) continue;
-      
-      // Filter deleted
-      if (!options?.includeDeleted && note.deletedAt) continue;
-      
-      // Filter archived
-      if (!options?.includeArchived && note.archivedAt) continue;
-      
-      notes.push(note);
-    }
-  }
-  
-  // Sort by updatedAt DESC
-  return notes.sort((a, b) => 
-    new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-  );
+  search?: string;
+  taskStatus?: TaskStatus;
 }
+
+export async function listNotes(options: ListNotesOptions = {}): Promise<Note[]> {
+  const { type, clientId, projectId, includeArchived = false, search, taskStatus } = options;
+
+  const where: Prisma.NoteWhereInput = {};
+
+  if (type) {
+    where.type = noteTypeToDb[type];
+  }
+  if (clientId) {
+    where.clientId = clientId;
+  }
+  if (projectId) {
+    where.projectId = projectId;
+  }
+  if (!includeArchived) {
+    where.archived = false;
+  }
+  if (search) {
+    where.OR = [
+      { title: { contains: search, mode: 'insensitive' } },
+      { content: { contains: search, mode: 'insensitive' } },
+    ];
+  }
+  if (taskStatus && taskStatus !== 'NONE') {
+    where.taskStatus = taskStatusToDb(taskStatus);
+  }
+
+  const notes = await prisma.note.findMany({
+    where,
+    orderBy: { updatedAt: 'desc' },
+  });
+
+  return notes.map(toNote);
+}
+
+// ============================================================================
+// Get Note by ID
+// ============================================================================
 
 export async function getNote(id: string): Promise<Note | null> {
-  return readJson<Note | null>(PATHS.note(id), null);
+  const note = await prisma.note.findUnique({ where: { id } });
+  return note ? toNote(note) : null;
+}
+
+// ============================================================================
+// Create Note
+// ============================================================================
+
+function generateId(): string {
+  return `note-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
 
 export async function createNote<T extends Note>(input: CreateNoteInput<T>): Promise<T> {
-  const now = nowISO();
   const id = generateId();
-  
-  const note = {
-    ...input,
+  const type = noteTypeToDb[input.type];
+  const anyInput = input as unknown as Record<string, unknown>;
+
+  const data: Prisma.NoteUncheckedCreateInput = {
     id,
-    contentText: extractTextFromTipTap(input.contentJson),
-    attachments: input.attachments || [],
-    createdAt: now,
-    updatedAt: now,
-  } as T;
-  
-  await atomicWriteJson(PATHS.note(id), note);
-  
-  return note;
-}
-
-export async function updateNote<T extends Note>(id: string, input: UpdateNoteInput<T>): Promise<T | null> {
-  const existing = await getNote(id);
-  if (!existing) return null;
-  
-  const contentText = input.contentJson 
-    ? extractTextFromTipTap(input.contentJson) 
-    : existing.contentText;
-  
-  const updated = {
-    ...existing,
-    ...input,
-    id: existing.id,
-    type: existing.type,
-    createdAt: existing.createdAt,
-    contentText,
-    updatedAt: nowISO(),
-  } as T;
-  
-  await atomicWriteJson(PATHS.note(id), updated);
-  
-  return updated;
-}
-
-export async function softDeleteNote(id: string): Promise<Note | null> {
-  const existing = await getNote(id);
-  if (!existing) return null;
-  
-  const updated = {
-    ...existing,
-    deletedAt: nowISO(),
-    updatedAt: nowISO(),
+    type,
+    title: input.title || '',
+    content: (anyInput.contentText as string) || '',
+    clientId: (anyInput.clientId as string) || null,
+    projectId: (anyInput.projectId as string) || null,
+    archived: false,
+    attachments: [],
   };
-  
-  await atomicWriteJson(PATHS.note(id), updated);
-  
-  return updated;
+
+  // Task-specific fields
+  if (input.type === 'task') {
+    const taskInput = anyInput;
+    data.taskStatus = taskStatusToDb((taskInput.status as TaskStatus) || 'PENDING');
+    data.taskPriority = taskPriorityToDb((taskInput.priority as TaskPriority) || 'MEDIUM');
+    data.taskDueDate = taskInput.dueDate ? new Date(taskInput.dueDate as string) : null;
+  }
+
+  // Connection-specific fields
+  if (input.type === 'connection') {
+    const connInput = anyInput;
+    data.connectionUrl = (connInput.url as string) || null;
+    data.connectionCredentials = (connInput.password as string) || null;
+  }
+
+  // Timesheet-specific fields
+  if (input.type === 'timesheet') {
+    const tsInput = anyInput;
+    data.timesheetTaskId = (tsInput.taskId as string) || null;
+    data.timesheetDate = tsInput.workDate ? new Date(tsInput.workDate as string) : null;
+    data.timesheetHours = (tsInput.hoursWorked as number) || null;
+    data.timesheetState = timesheetStateToDb((tsInput.state as TimeSheetState) || 'DRAFT');
+  }
+
+  const created = await prisma.note.create({ data });
+  return toNote(created) as T;
 }
 
-export async function restoreNote(id: string): Promise<Note | null> {
-  const existing = await getNote(id);
+// ============================================================================
+// Update Note
+// ============================================================================
+
+export async function updateNote<T extends Note>(
+  id: string,
+  input: UpdateNoteInput<T>
+): Promise<T | null> {
+  const existing = await prisma.note.findUnique({ where: { id } });
   if (!existing) return null;
-  
-  const updated = {
-    ...existing,
-    deletedAt: undefined,
-    updatedAt: nowISO(),
-  };
-  
-  await atomicWriteJson(PATHS.note(id), updated);
-  
-  return updated;
+
+  const anyInput = input as unknown as Record<string, unknown>;
+  const data: Prisma.NoteUncheckedUpdateInput = {};
+
+  if ('title' in input) {
+    data.title = anyInput.title as string;
+  }
+  if ('contentText' in input) {
+    data.content = anyInput.contentText as string;
+  }
+  if ('clientId' in input) {
+    data.clientId = (anyInput.clientId as string) || null;
+  }
+  if ('projectId' in input) {
+    data.projectId = (anyInput.projectId as string) || null;
+  }
+
+  // Task-specific fields
+  if ('status' in input) {
+    data.taskStatus = taskStatusToDb(anyInput.status as TaskStatus);
+  }
+  if ('priority' in input) {
+    data.taskPriority = taskPriorityToDb(anyInput.priority as TaskPriority);
+  }
+  if ('dueDate' in input) {
+    data.taskDueDate = anyInput.dueDate 
+      ? new Date(anyInput.dueDate as string) 
+      : null;
+  }
+
+  // Connection-specific fields
+  if ('url' in input) {
+    data.connectionUrl = (anyInput.url as string) || null;
+  }
+  if ('password' in input) {
+    data.connectionCredentials = (anyInput.password as string) || null;
+  }
+
+  // Timesheet-specific fields
+  if ('taskId' in input) {
+    data.timesheetTaskId = (anyInput.taskId as string) || null;
+  }
+  if ('workDate' in input) {
+    data.timesheetDate = anyInput.workDate 
+      ? new Date(anyInput.workDate as string) 
+      : null;
+  }
+  if ('hoursWorked' in input) {
+    data.timesheetHours = (anyInput.hoursWorked as number) || null;
+  }
+  if ('state' in input) {
+    data.timesheetState = timesheetStateToDb(anyInput.state as TimeSheetState);
+  }
+
+  const updated = await prisma.note.update({ where: { id }, data });
+  return toNote(updated) as T;
 }
 
-export async function archiveNote(id: string): Promise<Note | null> {
-  const existing = await getNote(id);
-  if (!existing) return null;
-  
-  const updated = {
-    ...existing,
-    archivedAt: nowISO(),
-    updatedAt: nowISO(),
-  };
-  
-  await atomicWriteJson(PATHS.note(id), updated);
-  
-  return updated;
-}
+// ============================================================================
+// Delete Note
+// ============================================================================
 
-export async function unarchiveNote(id: string): Promise<Note | null> {
-  const existing = await getNote(id);
-  if (!existing) return null;
-  
-  const updated = {
-    ...existing,
-    archivedAt: undefined,
-    updatedAt: nowISO(),
-  };
-  
-  await atomicWriteJson(PATHS.note(id), updated);
-  
-  return updated;
-}
-
-export async function hardDeleteNote(id: string): Promise<boolean> {
+export async function deleteNote(id: string): Promise<boolean> {
   try {
-    await fs.unlink(PATHS.note(id));
+    await prisma.note.delete({ where: { id } });
     return true;
   } catch {
     return false;
   }
 }
 
-export async function recordNoteOpened(id: string): Promise<Note | null> {
-  const existing = await getNote(id);
-  if (!existing) return null;
-  
-  const updated = {
-    ...existing,
-    lastOpenedAt: nowISO(),
+// ============================================================================
+// Archive / Restore
+// ============================================================================
+
+export async function archiveNote(id: string): Promise<Note | null> {
+  try {
+    const updated = await prisma.note.update({
+      where: { id },
+      data: { archived: true },
+    });
+    return toNote(updated);
+  } catch {
+    return null;
+  }
+}
+
+export async function restoreNote(id: string): Promise<Note | null> {
+  try {
+    const updated = await prisma.note.update({
+      where: { id },
+      data: { archived: false },
+    });
+    return toNote(updated);
+  } catch {
+    return null;
+  }
+}
+
+// ============================================================================
+// Attachments
+// ============================================================================
+
+export async function addAttachment(noteId: string, attachment: AttachmentMeta): Promise<Note | null> {
+  const note = await prisma.note.findUnique({ where: { id: noteId } });
+  if (!note) return null;
+
+  const attachments = (note.attachments as unknown as AttachmentMeta[]) || [];
+  attachments.push(attachment);
+
+  const updated = await prisma.note.update({
+    where: { id: noteId },
+    data: { attachments: attachments as unknown as Prisma.InputJsonValue },
+  });
+  return toNote(updated);
+}
+
+export async function removeAttachment(noteId: string, attachmentId: string): Promise<Note | null> {
+  const note = await prisma.note.findUnique({ where: { id: noteId } });
+  if (!note) return null;
+
+  const attachments = (note.attachments as unknown as AttachmentMeta[]) || [];
+  const filtered = attachments.filter(a => a.id !== attachmentId);
+
+  const updated = await prisma.note.update({
+    where: { id: noteId },
+    data: { attachments: filtered as unknown as Prisma.InputJsonValue },
+  });
+  return toNote(updated);
+}
+
+// ============================================================================
+// Timesheets Export
+// ============================================================================
+
+export interface TimesheetExportOptions {
+  clientId?: string;
+  projectId?: string;
+  from?: string;
+  to?: string;
+}
+
+export async function exportTimesheets(options: TimesheetExportOptions = {}): Promise<TimeSheetNote[]> {
+  const { clientId, projectId, from, to } = options;
+
+  const where: Prisma.NoteWhereInput = {
+    type: PrismaNoteType.TIMESHEET,
   };
-  
-  await atomicWriteJson(PATHS.note(id), updated);
-  
-  return updated;
+
+  if (clientId) {
+    where.clientId = clientId;
+  }
+  if (projectId) {
+    where.projectId = projectId;
+  }
+  if (from || to) {
+    where.timesheetDate = {};
+    if (from) {
+      where.timesheetDate.gte = new Date(from);
+    }
+    if (to) {
+      where.timesheetDate.lte = new Date(to);
+    }
+  }
+
+  const notes = await prisma.note.findMany({
+    where,
+    orderBy: { timesheetDate: 'desc' },
+  });
+
+  return notes.map(toNote) as TimeSheetNote[];
 }

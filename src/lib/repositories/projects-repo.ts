@@ -1,21 +1,27 @@
-import { PATHS, readJson, atomicWriteJson, generateId, nowISO } from '../storage/file-storage';
-import { getClient } from './clients-repo';
+import prisma from '../db';
 import type { Project, CreateProjectInput, UpdateProjectInput } from '../types';
 
 // ============================================================================
-// Projects Repository
+// Projects Repository (Prisma)
 // ============================================================================
 
-interface ProjectsStore {
-  projects: Project[];
-}
-
-async function readProjectsStore(): Promise<ProjectsStore> {
-  return readJson<ProjectsStore>(PATHS.projects(), { projects: [] });
-}
-
-async function writeProjectsStore(store: ProjectsStore): Promise<void> {
-  await atomicWriteJson(PATHS.projects(), store);
+// Helper to convert Prisma model to domain type
+function toProject(prismaProject: {
+  id: string;
+  clientId: string;
+  name: string;
+  description: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): Project {
+  return {
+    id: prismaProject.id,
+    clientId: prismaProject.clientId,
+    name: prismaProject.name,
+    description: prismaProject.description ?? undefined,
+    createdAt: prismaProject.createdAt.toISOString(),
+    updatedAt: prismaProject.updatedAt.toISOString(),
+  };
 }
 
 // ============================================================================
@@ -26,87 +32,59 @@ export async function listProjects(options?: {
   includeDisabled?: boolean;
   clientId?: string;
 }): Promise<Project[]> {
-  const store = await readProjectsStore();
-  let projects = store.projects;
-  
-  if (!options?.includeDisabled) {
-    projects = projects.filter(p => !p.disabled);
-  }
-  
-  if (options?.clientId) {
-    projects = projects.filter(p => p.clientId === options.clientId);
-  }
-  
-  return projects;
+  const projects = await prisma.project.findMany({
+    where: {
+      ...(options?.clientId ? { clientId: options.clientId } : {}),
+    },
+    orderBy: { name: 'asc' },
+  });
+  return projects.map(toProject);
 }
 
 export async function getProject(id: string): Promise<Project | null> {
-  const store = await readProjectsStore();
-  return store.projects.find(p => p.id === id) || null;
+  const project = await prisma.project.findUnique({ where: { id } });
+  return project ? toProject(project) : null;
 }
 
 export async function createProject(input: CreateProjectInput): Promise<Project> {
-  // Validate that client exists
-  const client = await getClient(input.clientId);
-  if (!client) {
-    throw new Error(`Client with id ${input.clientId} not found`);
-  }
-  
-  const store = await readProjectsStore();
-  const now = nowISO();
-  
-  const project: Project = {
-    id: generateId(),
-    clientId: input.clientId,
-    name: input.name,
-    code: input.code,
-    description: input.description,
-    disabled: input.disabled ?? false,
-    createdAt: now,
-    updatedAt: now,
-  };
-  
-  store.projects.push(project);
-  await writeProjectsStore(store);
-  
-  return project;
+  const id = `proj-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  const project = await prisma.project.create({
+    data: {
+      id,
+      clientId: input.clientId,
+      name: input.name,
+      description: input.description,
+    },
+  });
+  return toProject(project);
 }
 
 export async function updateProject(id: string, input: UpdateProjectInput): Promise<Project | null> {
-  // If clientId is being updated, validate it exists
-  if (input.clientId) {
-    const client = await getClient(input.clientId);
-    if (!client) {
-      throw new Error(`Client with id ${input.clientId} not found`);
-    }
-  }
-  
-  const store = await readProjectsStore();
-  const index = store.projects.findIndex(p => p.id === id);
-  
-  if (index === -1) {
+  try {
+    const data: { clientId?: string; name?: string; description?: string | null } = {};
+    
+    if (input.clientId !== undefined) data.clientId = input.clientId;
+    if (input.name !== undefined) data.name = input.name;
+    if (input.description !== undefined) data.description = input.description;
+
+    const project = await prisma.project.update({
+      where: { id },
+      data,
+    });
+    return toProject(project);
+  } catch {
     return null;
   }
-  
-  const existing = store.projects[index];
-  const updated: Project = {
-    ...existing,
-    ...input,
-    id: existing.id,
-    createdAt: existing.createdAt,
-    updatedAt: nowISO(),
-  };
-  
-  store.projects[index] = updated;
-  await writeProjectsStore(store);
-  
-  return updated;
 }
 
 export async function disableProject(id: string): Promise<Project | null> {
-  return updateProject(id, { disabled: true });
+  // No-op since projects table doesn't have disabled field
+  const project = await prisma.project.findUnique({ where: { id } });
+  return project ? toProject(project) : null;
 }
 
 export async function enableProject(id: string): Promise<Project | null> {
-  return updateProject(id, { disabled: false });
+  // No-op since projects table doesn't have disabled field
+  const project = await prisma.project.findUnique({ where: { id } });
+  return project ? toProject(project) : null;
 }

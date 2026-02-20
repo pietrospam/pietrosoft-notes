@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getNote, updateNote, softDeleteNote } from '@/lib/repositories/notes-repo';
+import { getNote, updateNote, deleteNote } from '@/lib/repositories/notes-repo';
 import { ensureWorkspaceDirectories } from '@/lib/storage/file-storage';
 import type { Note, UpdateNoteInput } from '@/lib/types';
 
@@ -55,20 +55,20 @@ export async function PUT(request: Request, { params }: RouteParams) {
   }
 }
 
-// DELETE /api/notes/:id - Soft delete a note
+// DELETE /api/notes/:id - Delete a note
 export async function DELETE(request: Request, { params }: RouteParams) {
   try {
     await ensureWorkspaceDirectories();
     
-    const note = await softDeleteNote(params.id);
-    if (!note) {
+    const success = await deleteNote(params.id);
+    if (!success) {
       return NextResponse.json(
         { error: 'Note not found' },
         { status: 404 }
       );
     }
     
-    return NextResponse.json(note);
+    return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting note:', error);
     return NextResponse.json(

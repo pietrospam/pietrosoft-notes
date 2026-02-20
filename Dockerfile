@@ -15,6 +15,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Generate Prisma client
+RUN npx prisma generate
+
 # Set environment variable for workspace path
 ENV WORKSPACE_PATH=/data
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -24,6 +27,9 @@ RUN npm run build
 # Production image, copy all the files and run next
 FROM base AS runner
 WORKDIR /app
+
+# Install OpenSSL for Prisma
+RUN apk add --no-cache libc6-compat openssl
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -42,6 +48,15 @@ RUN chown nextjs:nodejs .next
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# Copy Prisma files for migrations
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+
+# Copy startup script
+COPY --from=builder /app/scripts/start.sh ./start.sh
+RUN chmod +x ./start.sh
+
 # Create data directory for workspace storage
 RUN mkdir -p /data/attachments && chown -R nextjs:nodejs /data
 
@@ -52,4 +67,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "server.js"]
+CMD ["./start.sh"]

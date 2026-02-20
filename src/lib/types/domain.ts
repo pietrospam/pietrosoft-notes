@@ -56,11 +56,11 @@ export type UpdateProjectInput = Partial<Omit<Project, 'id' | 'createdAt' | 'upd
 export type NoteType = 'general' | 'task' | 'connection' | 'timesheet';
 
 // Task-specific enums
-export type TaskStatus = 'NONE' | 'TODO' | 'IN_PROGRESS' | 'DONE' | 'BLOCKED' | 'CANCELED';
-export type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+export type TaskStatus = 'NONE' | 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+export type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
 // TimeSheet-specific enum
-export type TimeSheetState = 'NONE' | 'PENDING' | 'IMPUTED';
+export type TimeSheetState = 'NONE' | 'DRAFT' | 'FINAL';
 
 // ============================================================================
 // Attachment

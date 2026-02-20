@@ -7,11 +7,10 @@ import { useApp } from '../context/AppContext';
 
 const STATUSES: { value: TaskStatus | ''; label: string }[] = [
   { value: '', label: 'All Statuses' },
-  { value: 'TODO', label: 'To Do' },
+  { value: 'PENDING', label: 'Pending' },
   { value: 'IN_PROGRESS', label: 'In Progress' },
-  { value: 'DONE', label: 'Done' },
-  { value: 'BLOCKED', label: 'Blocked' },
-  { value: 'CANCELED', label: 'Canceled' },
+  { value: 'COMPLETED', label: 'Completed' },
+  { value: 'CANCELLED', label: 'Cancelled' },
 ];
 
 export function TaskFilters() {

@@ -13,7 +13,7 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000)
 
-### Docker
+### Docker (local)
 
 ```bash
 docker compose up --build
@@ -21,7 +21,51 @@ docker compose up --build
 
 Open [http://localhost:3000](http://localhost:3000)
 
-### Load Sample Data
+### Production Deployment
+
+**Server:** `192.168.100.113`
+
+```bash
+# Deploy to production server
+rsync -avz --exclude 'node_modules' --exclude '.next' --exclude '.git' --exclude 'data' \
+  ./ root@192.168.100.113:/opt/pietrosoft-notes/
+
+# Build and start services
+ssh root@192.168.100.113 "cd /opt/pietrosoft-notes && docker-compose build --no-cache && docker-compose up -d"
+```
+
+**Services:**
+
+| Service | URL | Description |
+|---------|-----|-------------|
+| **App** | http://192.168.100.113:3001 | Main application |
+| **Adminer** | http://192.168.100.113:8080 | Database admin UI |
+| **PostgreSQL** | localhost:5432 (internal) | Database server |
+
+**Adminer Login:**
+- System: `PostgreSQL`
+- Server: `postgres`
+- Username: `postgres`
+- Password: `postgres`
+- Database: `pietrosoft_notes`
+
+**Common Commands:**
+
+```bash
+# Check logs
+ssh root@192.168.100.113 "cd /opt/pietrosoft-notes && docker-compose logs -f app"
+
+# Restart services
+ssh root@192.168.100.113 "cd /opt/pietrosoft-notes && docker-compose restart"
+
+# Stop all
+ssh root@192.168.100.113 "cd /opt/pietrosoft-notes && docker-compose down"
+
+# View container status
+ssh root@192.168.100.113 "docker ps"
+```
+
+### Load Sample Data (deprecated)
 
 ```bash
 # Local development
@@ -91,11 +135,12 @@ cp data/sample/notes/*.json data/notes/
 ## Tech Stack
 
 - **Framework:** Next.js 14 + TypeScript
+- **Database:** PostgreSQL 16 + Prisma 5 ORM
 - **Editor:** TipTap with extensions (Image, Link, Placeholder)
 - **Styling:** Tailwind CSS
 - **Icons:** Lucide React
-- **Storage:** File-based JSON (no database)
-- **Runtime:** Docker with volume mount
+- **Admin:** Adminer (database management)
+- **Runtime:** Docker Compose (multi-service)
 
 ## Data Model
 
@@ -111,7 +156,8 @@ cp data/sample/notes/*.json data/notes/
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `WORKSPACE_PATH` | `./data` | Path to workspace storage directory |
+| `DATABASE_URL` | `postgresql://postgres:postgres@postgres:5432/pietrosoft_notes` | PostgreSQL connection string |
+| `WORKSPACE_PATH` | `./data` | Path for file attachments |
 
 ## Known Limitations (Prototype)
 

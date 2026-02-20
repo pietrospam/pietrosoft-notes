@@ -105,7 +105,7 @@ export function AppProvider({ children }: AppProviderProps) {
           projectId: '', // Will need to be set
           ticketPhaseCode: 'NEW',
           shortDescription: 'New task',
-          status: 'TODO',
+          status: 'PENDING',
           priority: 'MEDIUM',
         },
         connection: { type: 'connection', title: 'New Connection', contentJson: null },
@@ -117,7 +117,7 @@ export function AppProvider({ children }: AppProviderProps) {
           workDate: new Date().toISOString().split('T')[0],
           hoursWorked: 0,
           description: '',
-          state: 'PENDING',
+          state: 'DRAFT',
         },
       };
 

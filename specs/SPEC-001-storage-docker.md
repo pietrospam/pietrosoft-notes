@@ -1,8 +1,9 @@
 # SPEC-001: Storage Engine & Docker Setup
 
-**Status:** Completed  
+**Status:** Superseded by SPEC-006 (PostgreSQL Migration)  
 **Epic:** A (Project Bootstrap) + B (File-based Storage Engine)  
 **Priority:** Critical  
+**Note:** This spec documents the original file-based implementation. See SPEC-006 for PostgreSQL migration.  
 
 ---
 

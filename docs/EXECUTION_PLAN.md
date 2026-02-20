@@ -1,8 +1,8 @@
-# Prototype Execution Plan (No-DB Localhost)
+# Prototype Execution Plan
 
 ## Phase 0 — Repo & runtime
 - Bootstrap Next.js + TS project
-- Add Dockerfile + docker-compose (single service) mounting `/data` volume
+- Add Dockerfile + docker-compose (app + postgres services)
 - Define workspace path env (`WORKSPACE_PATH=/data`)
 
 Deliverable:
@@ -10,17 +10,18 @@ Deliverable:
 
 ---
 
-## Phase 1 — Storage engine (file-based)
-- Implement a file-based repository layer:
-  - read/write clients/projects/notes
-  - atomic writes
-  - simple migrations via `meta.json` schemaVersion
+## Phase 1 — Storage engine (PostgreSQL)
+- Set up PostgreSQL in docker-compose
+- Implement Prisma schema with migrations
+- Implement repository layer using Prisma:
+  - clients, projects, notes CRUD
+  - proper foreign key constraints
 - Implement attachment storage:
-  - save binary files into `/data/attachments`
+  - metadata in DB, files in `/data/attachments`
   - stream for download/view
 
 Deliverable:
-- CRUD operations possible via API routes
+- CRUD operations possible via API routes with database persistence
 
 ---
 
@@ -100,3 +101,19 @@ Deliverable:
 - Seed sample workspace data
 - Final README
 - Known limitations documented
+
+---
+
+## Phase 10 — Database Migration (PostgreSQL)
+- Add PostgreSQL service to docker-compose
+- Install and configure Prisma ORM
+- Create database schema (prisma/schema.prisma)
+- Migrate existing file-based repositories to Prisma
+- Update API routes to use database
+- Add database migration scripts
+- Update backup/restore to include database dump
+
+Deliverable:
+- All data persisted in PostgreSQL
+- Attachments still stored on filesystem
+- Full ACID compliance for data operations

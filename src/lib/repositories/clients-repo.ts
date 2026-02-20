@@ -1,20 +1,28 @@
-import { PATHS, readJson, atomicWriteJson, generateId, nowISO } from '../storage/file-storage';
+import prisma from '../db';
 import type { Client, CreateClientInput, UpdateClientInput } from '../types';
 
 // ============================================================================
-// Clients Repository
+// Clients Repository (Prisma)
 // ============================================================================
 
-interface ClientsStore {
-  clients: Client[];
-}
-
-async function readClientsStore(): Promise<ClientsStore> {
-  return readJson<ClientsStore>(PATHS.clients(), { clients: [] });
-}
-
-async function writeClientsStore(store: ClientsStore): Promise<void> {
-  await atomicWriteJson(PATHS.clients(), store);
+// Helper to convert Prisma model to domain type
+function toClient(prismaClient: {
+  id: string;
+  name: string;
+  description: string | null;
+  active: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}): Client {
+  return {
+    id: prismaClient.id,
+    name: prismaClient.name,
+    description: prismaClient.description ?? undefined,
+    icon: 'Building2', // Default icon since DB doesn't store it
+    disabled: !prismaClient.active, // Invert: active=true -> disabled=false
+    createdAt: prismaClient.createdAt.toISOString(),
+    updatedAt: prismaClient.updatedAt.toISOString(),
+  };
 }
 
 // ============================================================================
@@ -22,59 +30,47 @@ async function writeClientsStore(store: ClientsStore): Promise<void> {
 // ============================================================================
 
 export async function listClients(includeDisabled = false): Promise<Client[]> {
-  const store = await readClientsStore();
-  if (includeDisabled) {
-    return store.clients;
-  }
-  return store.clients.filter(c => !c.disabled);
+  const clients = await prisma.client.findMany({
+    where: includeDisabled ? {} : { active: true },
+    orderBy: { name: 'asc' },
+  });
+  return clients.map(toClient);
 }
 
 export async function getClient(id: string): Promise<Client | null> {
-  const store = await readClientsStore();
-  return store.clients.find(c => c.id === id) || null;
+  const client = await prisma.client.findUnique({ where: { id } });
+  return client ? toClient(client) : null;
 }
 
 export async function createClient(input: CreateClientInput): Promise<Client> {
-  const store = await readClientsStore();
-  const now = nowISO();
-  
-  const client: Client = {
-    id: generateId(),
-    name: input.name,
-    description: input.description,
-    icon: input.icon,
-    disabled: input.disabled ?? false,
-    createdAt: now,
-    updatedAt: now,
-  };
-  
-  store.clients.push(client);
-  await writeClientsStore(store);
-  
-  return client;
+  const id = `client-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  const client = await prisma.client.create({
+    data: {
+      id,
+      name: input.name,
+      description: input.description,
+      active: input.disabled !== true, // Invert: disabled=true -> active=false
+    },
+  });
+  return toClient(client);
 }
 
 export async function updateClient(id: string, input: UpdateClientInput): Promise<Client | null> {
-  const store = await readClientsStore();
-  const index = store.clients.findIndex(c => c.id === id);
-  
-  if (index === -1) {
+  try {
+    const data: { name?: string; description?: string | null; active?: boolean } = {};
+    
+    if (input.name !== undefined) data.name = input.name;
+    if (input.description !== undefined) data.description = input.description;
+    if (input.disabled !== undefined) data.active = !input.disabled; // Invert
+
+    const client = await prisma.client.update({
+      where: { id },
+      data,
+    });
+    return toClient(client);
+  } catch {
     return null;
   }
-  
-  const existing = store.clients[index];
-  const updated: Client = {
-    ...existing,
-    ...input,
-    id: existing.id, // Preserve ID
-    createdAt: existing.createdAt, // Preserve creation time
-    updatedAt: nowISO(),
-  };
-  
-  store.clients[index] = updated;
-  await writeClientsStore(store);
-  
-  return updated;
 }
 
 export async function disableClient(id: string): Promise<Client | null> {

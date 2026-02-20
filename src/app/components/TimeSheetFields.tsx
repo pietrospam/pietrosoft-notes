@@ -6,8 +6,8 @@ import type { TimeSheetNote, TaskNote, TimeSheetState } from '@/lib/types';
 
 const STATES: { value: TimeSheetState; label: string; color: string }[] = [
   { value: 'NONE', label: 'None', color: 'bg-gray-500' },
-  { value: 'PENDING', label: 'Pending', color: 'bg-yellow-500' },
-  { value: 'IMPUTED', label: 'Imputed', color: 'bg-green-500' },
+  { value: 'DRAFT', label: 'Draft', color: 'bg-yellow-500' },
+  { value: 'FINAL', label: 'Final', color: 'bg-green-500' },
 ];
 
 interface TimeSheetFieldsProps {

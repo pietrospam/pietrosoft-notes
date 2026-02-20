@@ -14,7 +14,7 @@ async function findAttachment(attachmentId: string): Promise<{
   noteId: string; 
   attachment: AttachmentMeta 
 } | null> {
-  const notes = await listNotes({ includeDeleted: true, includeArchived: true });
+  const notes = await listNotes({ includeArchived: true });
   
   for (const note of notes) {
     const attachment = note.attachments.find(a => a.id === attachmentId);
@@ -91,7 +91,7 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     }
     
     // Get note and update attachments array
-    const notes = await listNotes({ includeDeleted: true, includeArchived: true });
+    const notes = await listNotes({ includeArchived: true });
     const note = notes.find(n => n.id === noteId);
     
     if (note) {

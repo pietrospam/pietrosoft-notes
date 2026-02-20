@@ -1,51 +1,54 @@
-# Pietrosoft Notes — Prototype Functional Context (Localhost / No-DB)
+# Pietrosoft Notes — Functional Context
 
 ## 0) Purpose of this prototype
-Build a **Proof of Concept** to validate UX, data model, and workflows before implementing a real DB.
-This prototype must run **100% on localhost**, with **no external database**.
+Build a **Proof of Concept** to validate UX, data model, and workflows.
+This prototype runs on localhost with **PostgreSQL** as the database.
 
 Primary goals:
 - Validate the core UX: sidebar → list → editor → structured panels
 - Validate domain entities: Client / Project / Task / Connection / TimeSheet
 - Validate WYSIWYG editing + image paste + attachments
 - Validate search and the required views
+- Demonstrate proper database-backed persistence
 
 Non-goals:
-- Multi-user
+- Multi-user authentication
 - Cloud sync
 - Production-grade security
 - Performance optimization beyond "feels fast"
 
 ---
 
-## 1) Key constraints (No-DB / Local-only)
-- No Postgres/MySQL/etc.
-- Persistence must be local:
-  - Preferred: **file-based storage** (JSON files) under a local workspace folder mounted as Docker volume
-  - Attachments stored on disk in that workspace folder
+## 1) Key constraints
+- PostgreSQL for structured data (clients, projects, notes metadata)
+- Attachments stored on disk in workspace folder (mounted as Docker volume)
 - Single-user, single-instance (no concurrency guarantees required)
 
 ---
 
-## 2) Recommended architecture (prototype)
-### 2.1 App stack (prototype)
+## 2) Recommended architecture
+### 2.1 App stack
 - Next.js + TypeScript (single app)
 - TipTap editor (ProseMirror)
-- Minimal API routes (local) to read/write files
-- Storage engine: file-based JSON + uploads folder
+- PostgreSQL 16 (database)
+- Prisma ORM (database access layer)
+- API routes for data operations
 
-### 2.2 Workspace layout on disk
-All data is stored under a single directory (Docker volume), e.g. `/data`.
+### 2.2 Data storage
+**PostgreSQL tables:**
+- `clients` - Client entities with icons
+- `projects` - Projects linked to clients
+- `notes` - All note types with JSONB for TipTap content
+- `attachments` - Attachment metadata (files stored on disk)
 
-Proposed structure:
-- `/data/meta.json` (workspace metadata, schema version)
-- `/data/clients.json`
-- `/data/projects.json`
-- `/data/notes/` (one JSON per note) OR `/data/notes.json` (single file)
-- `/data/attachments/` (binary files)
-- `/data/index.json` (optional derived search index)
+**File storage (Docker volume `/data`):**
+- `/data/attachments/` - Binary files for attachments and images
 
-Prototype must use **atomic writes** (write temp + rename) to avoid corruption.
+### 2.3 Docker setup
+- `app` service: Next.js application
+- `postgres` service: PostgreSQL 16
+- Shared network for inter-service communication
+- Volume for attachments and database persistence
 
 ---
 

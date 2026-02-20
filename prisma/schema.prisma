@@ -1,0 +1,108 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Client {
+  id          String    @id
+  name        String
+  description String?
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  
+  projects    Project[]
+  notes       Note[]    @relation("ClientNotes")
+
+  @@map("clients")
+}
+
+model Project {
+  id          String    @id
+  name        String
+  description String?
+  clientId    String    @map("client_id")
+  client      Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  
+  notes       Note[]    @relation("ProjectNotes")
+  
+  @@index([clientId])
+  @@map("projects")
+}
+
+model Note {
+  id                    String          @id
+  type                  NoteType
+  title                 String
+  content               String?
+  projectId             String?         @map("project_id")
+  project               Project?        @relation("ProjectNotes", fields: [projectId], references: [id], onDelete: SetNull)
+  clientId              String?         @map("client_id")
+  client                Client?         @relation("ClientNotes", fields: [clientId], references: [id], onDelete: SetNull)
+  archived              Boolean         @default(false)
+  attachments           Json?
+  
+  // Task fields
+  taskStatus            TaskStatus?     @map("task_status")
+  taskPriority          TaskPriority?   @map("task_priority")
+  taskDueDate           DateTime?       @map("task_due_date")
+  
+  // Connection fields
+  connectionUrl         String?         @map("connection_url")
+  connectionCredentials String?         @map("connection_credentials")
+  
+  // Timesheet fields
+  timesheetDate         DateTime?       @map("timesheet_date")
+  timesheetHours        Float?          @map("timesheet_hours")
+  timesheetRate         Float?          @map("timesheet_rate")
+  timesheetState        TimesheetState? @map("timesheet_state")
+  timesheetTaskId       String?         @map("timesheet_task_id")
+  timesheetTask         Note?           @relation("TaskTimesheets", fields: [timesheetTaskId], references: [id], onDelete: SetNull)
+  timesheets            Note[]          @relation("TaskTimesheets")
+  
+  createdAt             DateTime        @default(now()) @map("created_at")
+  updatedAt             DateTime        @updatedAt @map("updated_at")
+  
+  @@index([type])
+  @@index([projectId])
+  @@index([clientId])
+  @@index([archived])
+  @@index([timesheetTaskId])
+  @@map("notes")
+}
+
+enum NoteType {
+  GENERAL
+  TASK
+  CONNECTION
+  TIMESHEET
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum TimesheetState {
+  DRAFT
+  FINAL
+}
