@@ -61,12 +61,27 @@ La tabla de notas en PostgreSQL mantiene su estructura actual. El campo `type = 
 | Proyecto | Nombre del proyecto | ✓ |
 | Tarea | Código/título de la tarea | ✓ |
 | Horas | Cantidad de horas trabajadas | ✓ |
+| Estado | Badge de imputación (Borrador/Imputado) | - |
 | Descripción | Texto descriptivo (truncado) | - |
 | Acciones | Botones editar/eliminar | - |
 
 #### 4.2.2 Ordenamiento por defecto
 - Fecha ascendente (registros más antiguos primero)
 - Permitir cambiar ordenamiento haciendo clic en cabeceras
+
+#### 4.2.3 Subtotales por fecha
+- Después de los registros de cada fecha, se muestra una fila de subtotal
+- El subtotal muestra la suma de horas de ese día
+- Si el subtotal es menor a 8 horas:
+  - Se muestra un ícono de warning (triángulo amarillo)
+  - Se indica cuántas horas faltan para completar las 8
+  - El texto de horas se muestra en amarillo
+- Si el subtotal es >= 8 horas, el texto se muestra en verde
+
+#### 4.2.4 Badges de estado de imputación
+- Cada registro muestra un badge indicando su estado:
+  - **Borrador** (amarillo): El registro está pendiente de imputación
+  - **Imputado** (verde): El registro ya fue imputado/finalizado
 
 ### 4.3 Acciones disponibles
 
@@ -166,9 +181,12 @@ La tabla de notas en PostgreSQL mantiene su estructura actual. El campo `type = 
 ### 7.2 Nueva Vista TimeSheets
 - [x] Existe opción "TimeSheets" en el Sidebar
 - [x] Al seleccionar, se muestra una grilla con todos los registros
-- [x] La grilla muestra las columnas: Fecha, Cliente, Proyecto, Tarea, Horas
+- [x] La grilla muestra las columnas: Fecha, Cliente, Proyecto, Tarea, Horas, Estado
 - [x] El ordenamiento por defecto es por fecha ascendente
 - [x] Se puede cambiar el ordenamiento haciendo clic en las cabeceras
+- [x] Se muestran subtotales de horas por fecha
+- [x] Se muestra warning (amarillo) si las horas del día son < 8
+- [x] Cada registro muestra badge de estado (Borrador/Imputado)
 
 ### 7.3 Acciones en Grilla
 - [x] Botón editar abre TimeSheetModal con datos pre-cargados

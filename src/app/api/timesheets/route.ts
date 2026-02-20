@@ -15,6 +15,7 @@ export interface TimeSheetGridEntry {
   projectName: string;
   clientId: string;
   clientName: string;
+  state: string; // DRAFT or FINAL
   createdAt: string;
   updatedAt: string;
 }
@@ -86,6 +87,7 @@ export async function GET(request: Request) {
       projectName: ts.timesheetTask?.project?.name || 'Sin proyecto',
       clientId: ts.timesheetTask?.project?.clientId || '',
       clientName: ts.timesheetTask?.project?.client?.name || 'Sin cliente',
+      state: ts.timesheetState || 'DRAFT',
       createdAt: ts.createdAt.toISOString(),
       updatedAt: ts.updatedAt.toISOString(),
     }));

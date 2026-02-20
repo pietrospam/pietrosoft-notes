@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Clock, Edit2, Trash2, Download, ChevronUp, ChevronDown, AlertCircle, X, CheckSquare, Folder } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Clock, Edit2, Trash2, Download, ChevronUp, ChevronDown, AlertCircle, X, CheckSquare, Folder, AlertTriangle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { TimeSheetModal } from './TimeSheetModal';
 import { Toast } from './Toast';
@@ -19,6 +19,7 @@ interface TimeSheetGridEntry {
   projectName: string;
   clientId: string;
   clientName: string;
+  state: string; // DRAFT or FINAL
   createdAt: string;
   updatedAt: string;
 }
@@ -127,6 +128,20 @@ export function TimeSheetView() {
     return sortDirection === 'asc' ? comparison : -comparison;
   });
 
+  // Calculate subtotals by date
+  const hoursByDate = sortedTimesheets.reduce((acc, ts) => {
+    const date = ts.workDate;
+    if (!acc[date]) acc[date] = 0;
+    acc[date] += ts.hoursWorked;
+    return acc;
+  }, {} as Record<string, number>);
+
+  // Check if we need to show a subtotal row after this entry
+  const isLastEntryOfDate = (entry: TimeSheetGridEntry, index: number) => {
+    const nextEntry = sortedTimesheets[index + 1];
+    return !nextEntry || nextEntry.workDate !== entry.workDate;
+  };
+
   // Handle column header click
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -205,7 +220,7 @@ export function TimeSheetView() {
     }
 
     // CSV header
-    const headers = ['Fecha', 'Cliente', 'Proyecto', 'Tarea', 'Horas', 'Descripción'];
+    const headers = ['Fecha', 'Cliente', 'Proyecto', 'Tarea', 'Horas', 'Estado', 'Descripción'];
     
     // CSV rows
     const rows = sortedTimesheets.map(ts => [
@@ -214,11 +229,12 @@ export function TimeSheetView() {
       `"${ts.projectName.replace(/"/g, '""')}"`,
       `"${ts.taskTitle.replace(/"/g, '""')}"`,
       ts.hoursWorked.toString(),
+      ts.state === 'FINAL' ? 'Imputado' : 'Borrador',
       `"${(ts.description || '').replace(/"/g, '""').replace(/\n/g, ' ')}"`,
     ]);
 
     // Add total row
-    rows.push(['', '', '', 'TOTAL', totalHours.toFixed(1), '']);
+    rows.push(['', '', '', 'TOTAL', totalHours.toFixed(1), '', '']);
 
     // Build CSV content
     const csvContent = [
@@ -379,20 +395,21 @@ export function TimeSheetView() {
                 >
                   Horas <SortIndicator field="hoursWorked" />
                 </th>
+                <th className="px-4 py-3 font-medium text-center">Estado</th>
                 <th className="px-4 py-3 font-medium">Descripción</th>
                 <th className="px-4 py-3 font-medium text-center w-24">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800">
-              {sortedTimesheets.map(entry => (
-                <tr 
-                  key={entry.id}
-                  className="hover:bg-gray-900/50 transition-colors"
-                >
-                  <td className="px-4 py-3 text-sm text-white">
-                    {formatDate(entry.workDate)}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-300">
+              {sortedTimesheets.map((entry, index) => (
+                <React.Fragment key={entry.id}>
+                  <tr 
+                    className="hover:bg-gray-900/50 transition-colors"
+                  >
+                    <td className="px-4 py-3 text-sm text-white">
+                      {formatDate(entry.workDate)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-300">
                     {entry.clientName}
                   </td>
                   <td className="px-4 py-3 text-sm">
@@ -417,6 +434,13 @@ export function TimeSheetView() {
                   </td>
                   <td className="px-4 py-3 text-sm text-white text-right font-mono">
                     {entry.hoursWorked.toFixed(1)}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-center">
+                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                      entry.state === 'FINAL' ? 'bg-green-600 text-white' : 'bg-yellow-600 text-white'
+                    }`}>
+                      {entry.state === 'FINAL' ? 'Imputado' : 'Borrador'}
+                    </span>
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-400 max-w-[200px] truncate" title={entry.description}>
                     {entry.description || '-'}
@@ -458,18 +482,39 @@ export function TimeSheetView() {
                     </div>
                   </td>
                 </tr>
+                  {/* Subtotal row after last entry of each date */}
+                  {isLastEntryOfDate(entry, index) && (
+                    <tr className={`bg-gray-800/50 ${hoursByDate[entry.workDate] < 8 ? 'border-l-4 border-l-yellow-500' : ''}`}>
+                      <td className="px-4 py-2 text-sm font-medium text-gray-300" colSpan={4}>
+                        <div className="flex items-center gap-2">
+                          <span>Subtotal {formatDate(entry.workDate)}</span>
+                          {hoursByDate[entry.workDate] < 8 && (
+                            <span className="inline-flex items-center gap-1 text-yellow-400 text-xs">
+                              <AlertTriangle size={14} />
+                              Faltan {(8 - hoursByDate[entry.workDate]).toFixed(1)} hs
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className={`px-4 py-2 text-sm font-medium text-right font-mono ${hoursByDate[entry.workDate] < 8 ? 'text-yellow-400' : 'text-green-400'}`}>
+                        {hoursByDate[entry.workDate].toFixed(1)}
+                      </td>
+                      <td colSpan={3}></td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))}
             </tbody>
             {/* Footer with totals */}
             <tfoot className="bg-gray-900 border-t-2 border-gray-700">
               <tr className="text-sm font-medium">
                 <td className="px-4 py-3 text-white" colSpan={4}>
-                  Total
+                  Total General
                 </td>
                 <td className="px-4 py-3 text-white text-right font-mono">
                   {totalHours.toFixed(1)}
                 </td>
-                <td colSpan={2}></td>
+                <td colSpan={3}></td>
               </tr>
             </tfoot>
           </table>
