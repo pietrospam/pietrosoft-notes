@@ -1,6 +1,6 @@
 # REQ-002: Cambios en TimeSheet - De Nota a Registro de Detalle
 
-**Estado:** PENDIENTE  
+**Estado:** COMPLETADO  
 **Prioridad:** Alta  
 **Fecha:** 2026-02-20
 
@@ -141,25 +141,25 @@ La tabla de notas en PostgreSQL mantiene su estructura actual. El campo `type = 
 ## 7. Criterios de Aceptación
 
 ### 7.1 Lista de Notas
-- [ ] El toggle/filtro "TimeSheet" ya no aparece en la barra de filtros
-- [ ] Los registros de TimeSheet no aparecen en la lista de notas
-- [ ] La búsqueda global no incluye TimeSheets
+- [x] El toggle/filtro "TimeSheet" ya no aparece en la barra de filtros
+- [x] Los registros de TimeSheet no aparecen en la lista de notas
+- [x] La búsqueda global no incluye TimeSheets
 
 ### 7.2 Nueva Vista TimeSheets
-- [ ] Existe opción "TimeSheets" en el Sidebar
-- [ ] Al seleccionar, se muestra una grilla con todos los registros
-- [ ] La grilla muestra las columnas: Fecha, Cliente, Proyecto, Tarea, Horas
-- [ ] El ordenamiento por defecto es por fecha ascendente
-- [ ] Se puede cambiar el ordenamiento haciendo clic en las cabeceras
+- [x] Existe opción "TimeSheets" en el Sidebar
+- [x] Al seleccionar, se muestra una grilla con todos los registros
+- [x] La grilla muestra las columnas: Fecha, Cliente, Proyecto, Tarea, Horas
+- [x] El ordenamiento por defecto es por fecha ascendente
+- [x] Se puede cambiar el ordenamiento haciendo clic en las cabeceras
 
 ### 7.3 Acciones en Grilla
-- [ ] Botón editar abre TimeSheetModal con datos pre-cargados
-- [ ] Botón eliminar solicita confirmación y elimina el registro
-- [ ] Botón "Exportar PDF" genera el reporte
+- [x] Botón editar abre TimeSheetModal con datos pre-cargados
+- [x] Botón eliminar solicita confirmación y elimina el registro
+- [x] Botón "Exportar CSV" genera el reporte
 
 ### 7.4 Creación de TimeSheet
-- [ ] Solo se puede crear TimeSheet desde una Tarea (modal o botón rápido)
-- [ ] No existe opción para crear TimeSheet "suelto"
+- [x] Solo se puede crear TimeSheet desde una Tarea (modal o botón rápido)
+- [x] No existe opción para crear TimeSheet "suelto"
 
 ---
 

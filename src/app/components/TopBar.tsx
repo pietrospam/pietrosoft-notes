@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Search, Plus, Download, Save, FileText, CheckSquare, Link, Clock, ChevronDown, X } from 'lucide-react';
+import { Search, Plus, Save, FileText, CheckSquare, Link, ChevronDown, X } from 'lucide-react';
 import { Toast } from './Toast';
 import type { NoteType } from '@/lib/types';
 
