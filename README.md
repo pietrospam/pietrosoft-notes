@@ -1,36 +1,126 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Pietrosoft Notes — Prototype
 
-## Getting Started
+A local-first note-taking app with WYSIWYG editor, task management, time tracking, and connection credentials storage.
 
-First, run the development server:
+## Quick Start
+
+### Development (local)
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Docker
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+docker compose up --build
+```
 
-## Learn More
+Open [http://localhost:3000](http://localhost:3000)
 
-To learn more about Next.js, take a look at the following resources:
+### Load Sample Data
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+# Local development
+./scripts/load-sample-data.sh
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# Or manually copy
+cp data/sample/clients.json data/clients.json
+cp data/sample/projects.json data/projects.json
+cp data/sample/notes/*.json data/notes/
+```
 
-## Deploy on Vercel
+## Features
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- **Rich Text Editor**: TipTap-powered WYSIWYG with formatting, lists, code blocks
+- **Image Paste**: Paste screenshots directly into notes (auto-uploaded as attachments)
+- **File Attachments**: Upload and manage files per note
+- **Task Management**: Track tasks with status, priority, due dates, and budget hours
+- **Connection Storage**: Store credentials with copy buttons
+- **Time Tracking**: Log hours against tasks, export to CSV
+- **Search**: Full-text search across all notes
+- **Multi-view Navigation**: All / General / Tasks / Connections / TimeSheet views
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Project Structure
+
+```
+├── docs/                    # Project documentation
+│   ├── BACKLOG.md          # Detailed backlog with tasks
+│   ├── EXECUTION_PLAN.md   # Phase-by-phase plan
+│   └── PROTOTYPE_CONTEXT.md # Functional requirements
+├── specs/                   # Technical specifications
+│   └── SPEC-001-*.md       # Storage & Docker spec
+├── src/
+│   ├── app/                # Next.js App Router pages
+│   │   ├── api/            # REST API routes
+│   │   ├── components/     # React components
+│   │   └── context/        # App state management
+│   └── lib/
+│       ├── repositories/   # Data access layer
+│       ├── storage/        # File system utilities
+│       └── types/          # TypeScript domain types
+├── data/                   # Local workspace (git-ignored)
+│   ├── clients.json
+│   ├── projects.json
+│   ├── notes/
+│   ├── attachments/
+│   └── sample/             # Sample seed data
+├── scripts/
+│   └── load-sample-data.sh # Script to load sample data
+├── Dockerfile
+└── docker-compose.yml
+```
+
+## API Endpoints
+
+| Endpoint | Methods | Description |
+|----------|---------|-------------|
+| `/api/clients` | GET, POST | List/create clients |
+| `/api/clients/[id]` | GET, PUT, DELETE | Client CRUD |
+| `/api/projects` | GET, POST | List/create projects |
+| `/api/projects/[id]` | GET, PUT, DELETE | Project CRUD |
+| `/api/notes` | GET, POST | List/create notes |
+| `/api/notes/[id]` | GET, PUT, DELETE | Note CRUD |
+| `/api/attachments` | POST | Upload attachment |
+| `/api/attachments/[id]` | GET, DELETE | Download/delete attachment |
+| `/api/export/timesheets` | GET | Export timesheets (JSON/CSV) |
+
+## Tech Stack
+
+- **Framework:** Next.js 14 + TypeScript
+- **Editor:** TipTap with extensions (Image, Link, Placeholder)
+- **Styling:** Tailwind CSS
+- **Icons:** Lucide React
+- **Storage:** File-based JSON (no database)
+- **Runtime:** Docker with volume mount
+
+## Data Model
+
+- **Client:** Organization/customer with icon
+- **Project:** Belongs to a client
+- **Note Types:**
+  - General: Free-form notes
+  - Task: Project tasks with status/priority
+  - Connection: Credentials with copy buttons
+  - TimeSheet: Hour tracking linked to tasks
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `WORKSPACE_PATH` | `./data` | Path to workspace storage directory |
+
+## Known Limitations (Prototype)
+
+- Single user only
+- No data encryption (passwords stored in plain text)
+- Local storage only (no cloud sync)
+- No concurrent access protection
+- No authentication
+
+## License
+
+Private / Internal Use
