@@ -21,7 +21,7 @@ const typeLabels: Record<NoteType, string> = {
 };
 
 export function TopBar() {
-  const { searchQuery, setSearchQuery, createNote, currentView, isSaving, lastSaved, selectedNote, confirmNavigation } = useApp();
+  const { searchQuery, setSearchQuery, createNote, currentView, isSaving, lastSaved, selectedNote, confirmNavigation, filteredNotes, setSelectedNoteId } = useApp();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string } | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -53,6 +53,12 @@ export function TopBar() {
     if (e.key === 'Escape') {
       setSearchQuery('');
       searchInputRef.current?.blur();
+    } else if (e.key === 'Enter' && searchQuery && filteredNotes.length > 0) {
+      // Open first matching note
+      confirmNavigation(() => {
+        setSelectedNoteId(filteredNotes[0].id);
+        searchInputRef.current?.blur();
+      });
     }
   };
 
@@ -76,7 +82,7 @@ export function TopBar() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={handleSearchKeyDown}
-            placeholder="Buscar notas... (Esc para limpiar)"
+            placeholder="Buscar notas... (Enter para abrir, Esc para limpiar)"
             className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-10 pr-10 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
           />
           {searchQuery && (
