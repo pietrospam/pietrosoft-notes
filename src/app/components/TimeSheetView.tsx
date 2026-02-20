@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Clock, Edit2, Trash2, Download, ChevronUp, ChevronDown, AlertCircle } from 'lucide-react';
+import { Clock, Edit2, Trash2, Download, ChevronUp, ChevronDown, AlertCircle, X, CheckSquare, Folder } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { TimeSheetModal } from './TimeSheetModal';
 import { Toast } from './Toast';
-import type { TaskNote } from '@/lib/types';
+import type { TaskNote, Project, Client } from '@/lib/types';
 
 interface TimeSheetGridEntry {
   id: string;
@@ -21,6 +21,25 @@ interface TimeSheetGridEntry {
   clientName: string;
   createdAt: string;
   updatedAt: string;
+}
+
+// Task detail for popup
+interface TaskDetail {
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+  contentText: string;
+  projectName: string;
+  clientName: string;
+}
+
+// Project detail for popup
+interface ProjectDetail {
+  id: string;
+  name: string;
+  description: string;
+  clientName: string;
 }
 
 type SortField = 'workDate' | 'clientName' | 'projectName' | 'taskTitle' | 'hoursWorked';
@@ -46,6 +65,14 @@ export function TimeSheetView() {
   
   // Toast
   const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' } | null>(null);
+  
+  // Task detail popup
+  const [taskPopup, setTaskPopup] = useState<TaskDetail | null>(null);
+  const [loadingTask, setLoadingTask] = useState(false);
+  
+  // Project detail popup
+  const [projectPopup, setProjectPopup] = useState<ProjectDetail | null>(null);
+  const [loadingProject, setLoadingProject] = useState(false);
 
   // Fetch timesheets from API
   const fetchTimesheets = useCallback(async () => {
@@ -211,6 +238,55 @@ export function TimeSheetView() {
     setToast({ message: 'CSV exportado exitosamente', type: 'success' });
   };
 
+  // Open task detail popup
+  const handleTaskClick = async (entry: TimeSheetGridEntry) => {
+    setLoadingTask(true);
+    try {
+      const res = await fetch(`/api/notes/${entry.taskId}`);
+      if (res.ok) {
+        const task = await res.json();
+        setTaskPopup({
+          id: task.id,
+          title: task.title,
+          status: task.status || 'NONE',
+          priority: task.priority || 'MEDIUM',
+          contentText: task.contentText || '',
+          projectName: entry.projectName,
+          clientName: entry.clientName,
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching task:', err);
+      setToast({ message: 'Error al cargar tarea', type: 'error' });
+    } finally {
+      setLoadingTask(false);
+    }
+  };
+
+  // Open project detail popup
+  const handleProjectClick = async (entry: TimeSheetGridEntry) => {
+    if (!entry.projectId) return;
+    
+    setLoadingProject(true);
+    try {
+      const res = await fetch(`/api/projects/${entry.projectId}`);
+      if (res.ok) {
+        const project = await res.json();
+        setProjectPopup({
+          id: project.id,
+          name: project.name,
+          description: project.description || '',
+          clientName: entry.clientName,
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching project:', err);
+      setToast({ message: 'Error al cargar proyecto', type: 'error' });
+    } finally {
+      setLoadingProject(false);
+    }
+  };
+
   // Format date for display
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '-';
@@ -319,11 +395,23 @@ export function TimeSheetView() {
                   <td className="px-4 py-3 text-sm text-gray-300">
                     {entry.clientName}
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-300">
-                    {entry.projectName}
+                  <td className="px-4 py-3 text-sm">
+                    <button
+                      onClick={() => handleProjectClick(entry)}
+                      className="text-gray-300 hover:text-blue-400 hover:underline transition-colors cursor-pointer"
+                      title="Ver detalles del proyecto"
+                    >
+                      {entry.projectName}
+                    </button>
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-300 max-w-[200px] truncate" title={entry.taskTitle}>
-                    {entry.taskTitle}
+                  <td className="px-4 py-3 text-sm max-w-[200px] truncate" title={entry.taskTitle}>
+                    <button
+                      onClick={() => handleTaskClick(entry)}
+                      className="text-gray-300 hover:text-blue-400 hover:underline transition-colors cursor-pointer truncate max-w-full text-left"
+                      title="Ver detalles de la tarea"
+                    >
+                      {entry.taskTitle}
+                    </button>
                   </td>
                   <td className="px-4 py-3 text-sm text-white text-right font-mono">
                     {entry.hoursWorked.toFixed(1)}
@@ -401,6 +489,149 @@ export function TimeSheetView() {
             setToast({ message: 'TimeSheet actualizado exitosamente', type: 'success' });
           }}
         />
+      )}
+
+      {/* Task Detail Popup */}
+      {taskPopup && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-900 rounded-lg border border-gray-700 p-6 w-full max-w-md shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <CheckSquare size={20} className="text-blue-400" />
+                <h3 className="text-lg font-semibold text-white">Detalle de Tarea</h3>
+              </div>
+              <button
+                onClick={() => setTaskPopup(null)}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-gray-500 uppercase">Título</label>
+                <p className="text-white">{taskPopup.title}</p>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-gray-500 uppercase">Estado</label>
+                  <p className="text-gray-300">
+                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                      taskPopup.status === 'COMPLETED' ? 'bg-green-600' :
+                      taskPopup.status === 'IN_PROGRESS' ? 'bg-blue-600' :
+                      taskPopup.status === 'CANCELLED' ? 'bg-red-600' :
+                      'bg-gray-600'
+                    }`}>
+                      {taskPopup.status === 'PENDING' ? 'Pendiente' :
+                       taskPopup.status === 'IN_PROGRESS' ? 'En Progreso' :
+                       taskPopup.status === 'COMPLETED' ? 'Completado' :
+                       taskPopup.status === 'CANCELLED' ? 'Cancelado' :
+                       taskPopup.status}
+                    </span>
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 uppercase">Prioridad</label>
+                  <p className="text-gray-300">
+                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                      taskPopup.priority === 'CRITICAL' ? 'bg-red-600' :
+                      taskPopup.priority === 'HIGH' ? 'bg-orange-600' :
+                      taskPopup.priority === 'MEDIUM' ? 'bg-yellow-600' :
+                      'bg-gray-600'
+                    }`}>
+                      {taskPopup.priority === 'LOW' ? 'Baja' :
+                       taskPopup.priority === 'MEDIUM' ? 'Media' :
+                       taskPopup.priority === 'HIGH' ? 'Alta' :
+                       taskPopup.priority === 'CRITICAL' ? 'Crítica' :
+                       taskPopup.priority}
+                    </span>
+                  </p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-gray-500 uppercase">Cliente</label>
+                  <p className="text-gray-300">{taskPopup.clientName || '-'}</p>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 uppercase">Proyecto</label>
+                  <p className="text-gray-300">{taskPopup.projectName || '-'}</p>
+                </div>
+              </div>
+              
+              {taskPopup.contentText && (
+                <div>
+                  <label className="text-xs text-gray-500 uppercase">Descripción</label>
+                  <p className="text-gray-300 text-sm whitespace-pre-wrap max-h-32 overflow-y-auto">
+                    {taskPopup.contentText}
+                  </p>
+                </div>
+              )}
+            </div>
+            
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setTaskPopup(null)}
+                className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white text-sm font-medium transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Project Detail Popup */}
+      {projectPopup && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-900 rounded-lg border border-gray-700 p-6 w-full max-w-md shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Folder size={20} className="text-green-400" />
+                <h3 className="text-lg font-semibold text-white">Detalle de Proyecto</h3>
+              </div>
+              <button
+                onClick={() => setProjectPopup(null)}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-gray-500 uppercase">Nombre</label>
+                <p className="text-white">{projectPopup.name}</p>
+              </div>
+              
+              <div>
+                <label className="text-xs text-gray-500 uppercase">Cliente</label>
+                <p className="text-gray-300">{projectPopup.clientName || '-'}</p>
+              </div>
+              
+              {projectPopup.description && (
+                <div>
+                  <label className="text-xs text-gray-500 uppercase">Descripción</label>
+                  <p className="text-gray-300 text-sm whitespace-pre-wrap max-h-32 overflow-y-auto">
+                    {projectPopup.description}
+                  </p>
+                </div>
+              )}
+            </div>
+            
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setProjectPopup(null)}
+                className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white text-sm font-medium transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Toast */}

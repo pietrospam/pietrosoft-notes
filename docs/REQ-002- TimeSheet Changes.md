@@ -84,6 +84,24 @@ La tabla de notas en PostgreSQL mantiene su estructura actual. El campo `type = 
 - Genera un reporte con todos los registros visibles (respetando filtros activos)
 - Formato del CSV: (a definir en detalle posteriormente)
 
+#### 4.3.4 Ver detalle de Tarea (popup)
+- Al hacer clic en el nombre de la tarea en la grilla, se abre un popup
+- El popup muestra información relevante de la tarea:
+  - Título
+  - Estado
+  - Prioridad
+  - Cliente y Proyecto asociados
+  - Contenido/descripción
+- Botón para cerrar el popup
+
+#### 4.3.5 Ver detalle de Proyecto (popup)
+- Al hacer clic en el nombre del proyecto en la grilla, se abre un popup
+- El popup muestra información del proyecto:
+  - Nombre
+  - Cliente asociado
+  - Descripción (si tiene)
+- Botón para cerrar el popup
+
 ### 4.4 Filtros de la grilla (opcional - fase 2)
 - Filtrar por rango de fechas
 - Filtrar por cliente
@@ -156,6 +174,8 @@ La tabla de notas en PostgreSQL mantiene su estructura actual. El campo `type = 
 - [x] Botón editar abre TimeSheetModal con datos pre-cargados
 - [x] Botón eliminar solicita confirmación y elimina el registro
 - [x] Botón "Exportar CSV" genera el reporte
+- [x] Click en nombre de Tarea abre popup con detalles (título, estado, prioridad, cliente, proyecto, descripción)
+- [x] Click en nombre de Proyecto abre popup con detalles (nombre, cliente, descripción)
 
 ### 7.4 Creación de TimeSheet
 - [x] Solo se puede crear TimeSheet desde una Tarea (modal o botón rápido)
