@@ -5,7 +5,7 @@ import { Clock, Edit2, Trash2, Download, ChevronUp, ChevronDown, AlertCircle, X,
 import { useApp } from '../context/AppContext';
 import { TimeSheetModal } from './TimeSheetModal';
 import { Toast } from './Toast';
-import type { TaskNote, Project, Client } from '@/lib/types';
+import type { TaskNote } from '@/lib/types';
 
 interface TimeSheetGridEntry {
   id: string;
@@ -398,7 +398,8 @@ export function TimeSheetView() {
                   <td className="px-4 py-3 text-sm">
                     <button
                       onClick={() => handleProjectClick(entry)}
-                      className="text-gray-300 hover:text-blue-400 hover:underline transition-colors cursor-pointer"
+                      disabled={loadingProject}
+                      className="text-gray-300 hover:text-blue-400 hover:underline transition-colors cursor-pointer disabled:cursor-wait inline-flex items-center gap-1"
                       title="Ver detalles del proyecto"
                     >
                       {entry.projectName}
@@ -407,7 +408,8 @@ export function TimeSheetView() {
                   <td className="px-4 py-3 text-sm max-w-[200px] truncate" title={entry.taskTitle}>
                     <button
                       onClick={() => handleTaskClick(entry)}
-                      className="text-gray-300 hover:text-blue-400 hover:underline transition-colors cursor-pointer truncate max-w-full text-left"
+                      disabled={loadingTask}
+                      className="text-gray-300 hover:text-blue-400 hover:underline transition-colors cursor-pointer truncate max-w-full text-left disabled:cursor-wait inline-flex items-center gap-1"
                       title="Ver detalles de la tarea"
                     >
                       {entry.taskTitle}
