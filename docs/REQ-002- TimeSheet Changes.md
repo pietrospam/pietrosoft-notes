@@ -149,12 +149,17 @@ La tabla de notas en PostgreSQL mantiene su estructura actual. El campo `type = 
 - Solo las columnas de **Horas** y **Estado** se vuelven editables
 - Múltiples filas pueden estar en modo edición simultáneamente
 - Una fila permanece editable hasta que el usuario guarde o descarte explícitamente
+- Al hacer doble click, el campo de horas se selecciona automáticamente para facilitar la edición
 
 #### 4.6.2 Campos editables
 - **Horas**: Input de texto simple (sin flechas de incremento/decremento)
-- **Estado**: Badge clickeable que alterna entre Borrador → Imputado → Borrador infinitamente
+- **Estado**: Badge clickeable que alterna entre Borrador → Imputado → Borrador (click simple, sin necesidad de doble click)
 
-#### 4.6.3 Acciones en modo edición
+#### 4.6.3 Atajos de teclado en edición
+- **ENTER**: Guarda los cambios de la fila
+- **ESC**: Cancela la edición sin guardar
+
+#### 4.6.4 Acciones en modo edición
 - El ícono de lápiz (✏️) cambia a ícono de guardar (💾) y cancelar (X)
 - Al presionar guardar:
   - Se persisten los cambios via API
@@ -177,23 +182,37 @@ La tabla de notas en PostgreSQL mantiene su estructura actual. El campo `type = 
 
 ### 4.8 Filtros permanentes y Calendario
 
-#### 4.8.1 Selector de mes (siempre visible)
-- Se muestra siempre en la parte superior de la vista
-- Por defecto selecciona el mes actual
-- Al cambiar el mes, se filtran los registros de ese mes
-- El calendario también se actualiza para mostrar el mes seleccionado
+#### 4.8.1 Selectores de período (siempre visibles)
+- **Selector de mes**: Dropdown con los 12 meses del año (Enero a Diciembre)
+- **Selector de año**: Dropdown separado a la derecha del mes, inicializa con el año actual
+- Por defecto selecciona el mes y año actuales
+- Al cambiar mes o año, se filtran los registros de ese período
+- El calendario también se actualiza automáticamente
 
-#### 4.8.2 Calendario visual de horas
-- Se muestra junto a los filtros en la parte superior
+#### 4.8.2 Calendario visual de horas (compacto)
+- Se muestra a la **izquierda** del selector de mes, en la misma línea
+- Diseño compacto para ocupar menos espacio vertical
 - La semana comienza en **Lunes**
-- Muestra todos los días del mes seleccionado
-- Colores según horas imputadas:
-  | Horas del día | Color |
-  |---------------|-------|
+- Muestra todos los días del mes seleccionado en formato mini-calendario
+- **Indicador visual**: Círculo alrededor del número del día (no rectángulo)
+  | Horas del día | Color del círculo |
+  |---------------|-------------------|
   | >= 8 (configurable) | Verde |
   | > 0 y < 8 | Amarillo |
-  | 0 | Sin color (default) |
+  | 0 | Sin círculo (default) |
 - Permite visualizar rápidamente el estado de imputación del mes
+
+### 4.9 Orden de columnas en la grilla
+
+Las columnas se muestran en el siguiente orden:
+| # | Columna | Descripción |
+|---|---------|-------------|
+| 1 | Fecha | Día de la imputación (formato: "Lun, 20/02") |
+| 2 | Código Proyecto | Código corto del proyecto |
+| 3 | Proyecto | Nombre del proyecto |
+| 4 | Ticket/Fase | Código del ticket o fase de la tarea |
+| 5 | Horas | Horas imputadas (editable) |
+| 6 | Descripción + Acciones | Descripción de la tarea, estado badge y acciones |
 
 ---
 
@@ -228,18 +247,21 @@ La tabla de notas en PostgreSQL mantiene su estructura actual. El campo `type = 
 
 ### 6.2 Vista de TimeSheets (grilla)
 ```
-┌──────────────────────────────────────────────────────────────────────────────────────────┐
-│  ⏱️ TimeSheets  (25 registros)              [🔍 Filtros]  [📄 CSV]  [📑 PDF]            │
-├──────────────────────────────────────────────────────────────────────────────────────────┤
-│  Fecha ▲            │ Cliente    │ Proyecto     │ Tarea        │ Horas │ Estado  │ Acc  │
-├─────────────────────┼────────────┼──────────────┼──────────────┼───────┼─────────┼──────┤
-│  Jueves, 18/02      │ Acme Corp  │ Website      │ Homepage     │  4.5  │ Borrad. │ [✏]🗑│ ← Color A
-│  Jueves, 18/02      │ Acme Corp  │ Website      │ API Backend  │  3.5  │ Borrad. │ [✏]🗑│ ← Color A
-│  Viernes, 19/02     │ Acme Corp  │ Website      │ API Backend  │  8.0  │ Imputad │ [✏]🗑│ ← Color B
-│  Sábado, 20/02      │ TechStart  │ Mobile App   │ Login UI     │  3.0  │ Borrad. │ [💾]🗑│ ← Color A (editando)
-│  Sábado, 20/02      │ Acme Corp  │ Website      │ Homepage     │  2.5  │ Borrad. │ [✏]🗑│ ← Color A
-└─────────────────────┴────────────┴──────────────┴──────────────┴───────┴─────────┴──────┘
-                                                               Total: 21.5 horas
+┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│  ⏱️ TimeSheets (25)  [📅 Lu Ma Mi Ju Vi Sa Do]  Mes:[Febrero▼] Año:[2026▼]  [📄CSV] [📑PDF]     │
+│                       1  2 ③ ④ ⑤  6  7                                                          │
+│                      ⑧ ⑨ ⑩ ⑪ ⑫ 13 14        ③=verde(>=8h) ⑤=amarillo(<8h)                    │
+├──────────────────────────────────────────────────────────────────────────────────────────────────┤
+│  [Más filtros ▼]  Desde: [____]  Hasta: [____]  Cliente: [Todos ▼]  Proyecto: [Todos ▼]        │
+├──────────────────────────────────────────────────────────────────────────────────────────────────┤
+│  Fecha     │ Cód.Proy │ Proyecto   │ Ticket/Fase │ Horas │ Descripción + Estado + Acciones      │
+├────────────┼──────────┼────────────┼─────────────┼───────┼──────────────────────────────────────┤
+│ Jue, 18/02 │ WEB-001  │ Website    │ TICK-123    │  4.5  │ Desarrollo homepage [Borrad.] 💾 X 🗑│
+│ Jue, 18/02 │ WEB-001  │ Website    │ TICK-124    │  3.5  │ API Backend         [Imputad] 💾 X 🗑│
+│ Vie, 19/02 │ WEB-001  │ Website    │ TICK-124    │  8.0  │ API Backend          Imputad      🗑│
+│ Sáb, 20/02 │ MOB-002  │ Mobile App │ TICK-200    │  3.0  │ Login UI             Borrad.      🗑│
+└────────────┴──────────┴────────────┴─────────────┴───────┴──────────────────────────────────────┘
+                                                     Total: 19.0 horas
 ```
 
 ---
@@ -268,14 +290,17 @@ La tabla de notas en PostgreSQL mantiene su estructura actual. El campo `type = 
 
 ### 7.4 Edición Inline
 - [x] Doble click en fila activa modo edición
-- [x] Horas se convierte en input numérico editable
-- [x] Estado se convierte en selector dropdown
-- [x] Ícono de lápiz cambia a ícono de guardar
+- [ ] **Múltiples filas** pueden estar en modo edición simultáneamente
+- [ ] Horas se convierte en input de texto (sin flechas increment/decrement)
+- [ ] Badge de estado actúa como **toggle** (click cambia Borrador → Imputado → Borrador)
+- [x] Se muestran íconos de guardar y cancelar en modo edición
 - [x] Al guardar, se persisten cambios y vuelve a modo lectura
-- [x] Click fuera o Escape cancela la edición
+- [ ] Click en otra fila NO cancela la edición de filas previas
+- [x] Escape cancela la edición de la fila activa
 
 ### 7.5 Filtros de la grilla
-- [x] Botón "Filtros" para mostrar/ocultar barra de filtros
+- [x] Botón "Filtros" para mostrar/ocultar barra de filtros adicionales
+- [ ] **Selector de mes siempre visible** (default: mes actual)
 - [x] Filtro por rango de fechas (desde/hasta)
 - [x] Filtro por cliente (dropdown con clientes disponibles)
 - [x] Filtro por proyecto (dropdown con proyectos disponibles)
@@ -283,7 +308,16 @@ La tabla de notas en PostgreSQL mantiene su estructura actual. El campo `type = 
 - [x] Contador de registros muestra "X de Y" cuando hay filtros aplicados
 - [x] Estado vacío específico cuando los filtros no retornan resultados
 
-### 7.6 Exportación
+### 7.6 Calendario Visual
+- [ ] Calendario se muestra en la parte superior de la vista
+- [ ] La semana comienza en **Lunes**
+- [ ] Muestra todos los días del mes seleccionado
+- [ ] Días con >= 8 horas (configurable) se muestran en **verde**
+- [ ] Días con > 0 y < 8 horas se muestran en **amarillo**
+- [ ] Días sin imputaciones no tienen color especial
+- [ ] El calendario se actualiza al cambiar el mes seleccionado
+
+### 7.7 Exportación
 - [x] Botón "CSV" genera reporte en formato CSV
 - [x] Botón "PDF" abre ventana de impresión con vista formateada
 - [x] Exportación respeta los filtros aplicados
@@ -291,14 +325,18 @@ La tabla de notas en PostgreSQL mantiene su estructura actual. El campo `type = 
 - [x] PDF incluye información de filtros activos en el header
 - [x] PDF incluye total general
 
-### 7.7 Acciones en Grilla
+### 7.8 Acciones en Grilla
 - [x] Botón eliminar solicita confirmación y elimina el registro
 - [x] Click en nombre de Tarea abre popup con detalles (título, estado, prioridad, cliente, proyecto, descripción)
 - [x] Click en nombre de Proyecto abre popup con detalles (nombre, cliente, descripción)
 
-### 7.8 Creación de TimeSheet
+### 7.9 Creación de TimeSheet
 - [x] Solo se puede crear TimeSheet desde una Tarea (modal o botón rápido)
 - [x] No existe opción para crear TimeSheet "suelto"
+
+### 7.10 Estilos de la Grilla
+- [ ] Filas compactas con padding reducido (información más densa)
+- [x] Colores alternados por día para agrupar visualmente registros del mismo día
 
 ---
 

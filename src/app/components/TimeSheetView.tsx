@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Clock, Trash2, Download, ChevronUp, ChevronDown, AlertCircle, X, CheckSquare, Folder, FileText, Filter, XCircle, Save } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Toast } from './Toast';
@@ -54,11 +54,9 @@ export function TimeSheetView() {
   const [sortField, setSortField] = useState<SortField>('workDate');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   
-  // Inline editing
-  const [editingRowId, setEditingRowId] = useState<string | null>(null);
-  const [editingHours, setEditingHours] = useState<number>(0);
-  const [editingState, setEditingState] = useState<string>('DRAFT');
-  const [saving, setSaving] = useState(false);
+  // Inline editing - support multiple rows
+  const [editingRows, setEditingRows] = useState<Map<string, { hours: number; state: string; description: string }>>(new Map());
+  const [savingRowId, setSavingRowId] = useState<string | null>(null);
   
   // Delete confirmation
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -81,6 +79,13 @@ export function TimeSheetView() {
   const [filterClient, setFilterClient] = useState<string>('');
   const [filterProject, setFilterProject] = useState<string>('');
   const [showFilters, setShowFilters] = useState(false);
+
+  // Month and Year selectors (always visible, separated)
+  const [selectedMonth, setSelectedMonth] = useState(() => (new Date().getMonth() + 1));
+  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
+
+  // Refs for auto-selecting hours input
+  const hoursInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
 
   // Unique clients and projects for filter dropdowns
   const uniqueClients = useMemo(() => {
@@ -131,8 +136,15 @@ export function TimeSheetView() {
 
   // Get total hours
   // Filter timesheets
+  const selectedMonthStr = `${selectedYear}-${selectedMonth.toString().padStart(2, '0')}`;
+  
   const filteredTimesheets = useMemo(() => {
     return timesheets.filter(ts => {
+      // Month filter (always active)
+      if (selectedMonthStr) {
+        const tsMonth = ts.workDate.slice(0, 7); // YYYY-MM
+        if (tsMonth !== selectedMonthStr) return false;
+      }
       // Date from filter
       if (filterDateFrom && ts.workDate < filterDateFrom) return false;
       // Date to filter
@@ -143,7 +155,7 @@ export function TimeSheetView() {
       if (filterProject && ts.projectName !== filterProject) return false;
       return true;
     });
-  }, [timesheets, filterDateFrom, filterDateTo, filterClient, filterProject]);
+  }, [timesheets, selectedMonthStr, filterDateFrom, filterDateTo, filterClient, filterProject]);
 
   const totalHours = filteredTimesheets.reduce((sum, ts) => sum + ts.hoursWorked, 0);
 
@@ -439,25 +451,122 @@ export function TimeSheetView() {
     }
   };
 
-  // Inline editing handlers
+  // Inline editing handlers (multiple rows)
   const handleRowDoubleClick = (entry: TimeSheetGridEntry) => {
-    if (editingRowId === entry.id) return; // Already editing
-    setEditingRowId(entry.id);
-    setEditingHours(entry.hoursWorked);
-    setEditingState(entry.state);
+    if (editingRows.has(entry.id)) return; // Already editing
+    setEditingRows(prev => {
+      const newMap = new Map(prev);
+      newMap.set(entry.id, { hours: entry.hoursWorked, state: entry.state, description: entry.description || '' });
+      return newMap;
+    });
+    // Auto-select hours input after a short delay
+    setTimeout(() => {
+      const input = hoursInputRefs.current.get(entry.id);
+      if (input) {
+        input.select();
+      }
+    }, 50);
   };
 
-  const handleSaveInlineEdit = async () => {
-    if (!editingRowId) return;
+  // Update hours for a specific row
+  const handleEditHoursChange = (id: string, value: string) => {
+    const numValue = parseFloat(value) || 0;
+    setEditingRows(prev => {
+      const newMap = new Map(prev);
+      const current = newMap.get(id);
+      if (current) {
+        newMap.set(id, { ...current, hours: numValue });
+      }
+      return newMap;
+    });
+  };
+
+  // Update description for a specific row
+  const handleEditDescriptionChange = (id: string, value: string) => {
+    setEditingRows(prev => {
+      const newMap = new Map(prev);
+      const current = newMap.get(id);
+      if (current) {
+        newMap.set(id, { ...current, description: value });
+      }
+      return newMap;
+    });
+  };
+
+  // Toggle state for a specific row (DRAFT -> FINAL -> DRAFT) - works with simple click
+  const handleToggleState = async (id: string) => {
+    // Get the current state from either editingRows or the original entry
+    const editData = editingRows.get(id);
+    const entry = timesheets.find(ts => ts.id === id);
+    if (!entry) return;
     
-    setSaving(true);
+    const currentState = editData?.state ?? entry.state;
+    const newState = currentState === 'DRAFT' ? 'FINAL' : 'DRAFT';
+    
+    // If editing, update editing state only (will be saved on Save click)
+    if (editingRows.has(id)) {
+      setEditingRows(prev => {
+        const newMap = new Map(prev);
+        const current = newMap.get(id);
+        if (current) {
+          newMap.set(id, { ...current, state: newState });
+        }
+        return newMap;
+      });
+    } else {
+      // Direct save if not editing
+      setSavingRowId(id);
+      try {
+        const res = await fetch(`/api/notes/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            hoursWorked: entry.hoursWorked,
+            state: newState,
+            description: entry.description,
+          }),
+        });
+        
+        if (res.ok) {
+          setToast({ message: 'Estado actualizado', type: 'success' });
+          await fetchTimesheets();
+          await refreshNotes();
+        } else {
+          throw new Error('Failed to update');
+        }
+      } catch (err) {
+        console.error('Error updating state:', err);
+        setToast({ message: 'Error al actualizar estado', type: 'error' });
+      } finally {
+        setSavingRowId(null);
+      }
+    }
+  };
+
+  // Handle keyboard events for inline editing
+  const handleKeyDown = (e: React.KeyboardEvent, id: string) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSaveInlineEdit(id);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      handleCancelEdit(id);
+    }
+  };
+
+  const handleSaveInlineEdit = async (id: string) => {
+    const editData = editingRows.get(id);
+    if (!editData) return;
+    
+    setSavingRowId(id);
     try {
-      const res = await fetch(`/api/notes/${editingRowId}`, {
+      const res = await fetch(`/api/notes/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          hoursWorked: editingHours,
-          timesheetState: editingState,
+          hoursWorked: editData.hours,
+          state: editData.state,
+          description: editData.description,
         }),
       });
       
@@ -465,7 +574,11 @@ export function TimeSheetView() {
         setToast({ message: 'TimeSheet actualizado', type: 'success' });
         await fetchTimesheets();
         await refreshNotes();
-        setEditingRowId(null);
+        setEditingRows(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(id);
+          return newMap;
+        });
       } else {
         throw new Error('Failed to update');
       }
@@ -473,14 +586,16 @@ export function TimeSheetView() {
       console.error('Error updating timesheet:', err);
       setToast({ message: 'Error al actualizar', type: 'error' });
     } finally {
-      setSaving(false);
+      setSavingRowId(null);
     }
   };
 
-  const handleCancelEdit = () => {
-    setEditingRowId(null);
-    setEditingHours(0);
-    setEditingState('DRAFT');
+  const handleCancelEdit = (id: string) => {
+    setEditingRows(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(id);
+      return newMap;
+    });
   };
 
   // Get day color index (alternating colors by date)
@@ -493,20 +608,132 @@ export function TimeSheetView() {
     return colorMap;
   }, [sortedTimesheets]);
 
+  // Calculate hours by date for calendar
+  const hoursByDate = useMemo(() => {
+    const hoursMap: Record<string, number> = {};
+    timesheets.forEach(ts => {
+      // Only count if in selected month
+      if (ts.workDate.slice(0, 7) === selectedMonthStr) {
+        hoursMap[ts.workDate] = (hoursMap[ts.workDate] || 0) + ts.hoursWorked;
+      }
+    });
+    return hoursMap;
+  }, [timesheets, selectedMonthStr]);
+
+  // Get daily hours target from localStorage
+  const getDailyHoursTarget = () => {
+    if (typeof window === 'undefined') return 8;
+    const stored = localStorage.getItem('timesheet-daily-hours');
+    return stored ? parseFloat(stored) : 8;
+  };
+
+  // Generate calendar days for selected month
+  const calendarData = useMemo(() => {
+    const year = selectedYear;
+    const month = selectedMonth;
+    const firstDay = new Date(year, month - 1, 1);
+    const lastDay = new Date(year, month, 0);
+    const totalDays = lastDay.getDate();
+    
+    // Get day of week for first day (0 = Sunday, convert to Monday = 0)
+    let startDayOfWeek = firstDay.getDay();
+    startDayOfWeek = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1; // Monday = 0
+    
+    const dailyTarget = getDailyHoursTarget();
+    const days: Array<{ day: number | null; hours: number; color: 'green' | 'yellow' | 'none' }> = [];
+    
+    // Add empty cells for days before first of month
+    for (let i = 0; i < startDayOfWeek; i++) {
+      days.push({ day: null, hours: 0, color: 'none' });
+    }
+    
+    // Add all days of the month
+    for (let day = 1; day <= totalDays; day++) {
+      const dateStr = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+      const hours = hoursByDate[dateStr] || 0;
+      let color: 'green' | 'yellow' | 'none' = 'none';
+      if (hours >= dailyTarget) {
+        color = 'green';
+      } else if (hours > 0) {
+        color = 'yellow';
+      }
+      days.push({ day, hours, color });
+    }
+    
+    return days;
+  }, [selectedYear, selectedMonth, hoursByDate]);
+
+  // Month names for selector
+  const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+  // Year options (current year +/- 2 years)
+  const yearOptions = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    return [currentYear - 2, currentYear - 1, currentYear, currentYear + 1, currentYear + 2];
+  }, []);
+
   return (
     <div className="flex-1 flex flex-col bg-gray-950 overflow-hidden">
-      {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
+      {/* Header with calendar and selectors */}
+      <div className="px-6 py-3 border-b border-gray-800 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Clock size={24} className="text-orange-400" />
           <h1 className="text-xl font-semibold text-white">TimeSheets</h1>
-          <span className="text-sm text-gray-500">
-            ({hasActiveFilters ? `${filteredTimesheets.length} de ${timesheets.length}` : timesheets.length} registros)
-          </span>
+          <span className="text-sm text-gray-500">({filteredTimesheets.length})</span>
         </div>
         
         <div className="flex items-center gap-4">
-          {/* Filter toggle */}
+          {/* Compact Calendar inline */}
+          <div className="flex items-center gap-1 bg-gray-900/50 px-2 py-1 rounded-lg">
+            <div className="grid grid-cols-7 gap-0.5 text-[10px]">
+              {/* Day headers */}
+              {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map(d => (
+                <div key={d} className="w-5 h-4 flex items-center justify-center text-gray-500">{d}</div>
+              ))}
+              {/* Calendar days with circles */}
+              {calendarData.map((cell, idx) => (
+                <div 
+                  key={idx}
+                  className="w-5 h-5 flex items-center justify-center"
+                  title={cell.day && cell.hours > 0 ? `${cell.hours.toFixed(1)}h` : undefined}
+                >
+                  {cell.day && (
+                    <span className={`w-4 h-4 flex items-center justify-center rounded-full text-[9px] ${
+                      cell.color === 'green' ? 'bg-green-600 text-white font-bold' :
+                      cell.color === 'yellow' ? 'bg-yellow-500 text-white font-bold' :
+                      'text-gray-400'
+                    }`}>
+                      {cell.day}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          {/* Month selector */}
+          <select
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+            className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
+          >
+            {monthNames.map((name, idx) => (
+              <option key={idx + 1} value={idx + 1}>{name}</option>
+            ))}
+          </select>
+          
+          {/* Year selector */}
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+            className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
+          >
+            {yearOptions.map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+          
+          {/* More filters toggle */}
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
@@ -516,7 +743,6 @@ export function TimeSheetView() {
             }`}
           >
             <Filter size={16} />
-            Filtros
             {hasActiveFilters && (
               <span className="bg-white text-orange-600 text-xs rounded-full px-1.5 py-0.5 font-bold">!</span>
             )}
@@ -525,19 +751,17 @@ export function TimeSheetView() {
           <button
             onClick={handleExportCSV}
             disabled={filteredTimesheets.length === 0}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 hover:bg-green-500 disabled:bg-gray-700 disabled:text-gray-500 text-white text-sm font-medium transition-colors"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 disabled:bg-gray-700 disabled:text-gray-500 text-white text-sm font-medium transition-colors"
           >
             <Download size={16} />
-            CSV
           </button>
           
           <button
             onClick={handleExportPDF}
             disabled={filteredTimesheets.length === 0}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white text-sm font-medium transition-colors"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white text-sm font-medium transition-colors"
           >
             <FileText size={16} />
-            PDF
           </button>
         </div>
       </div>
@@ -647,45 +871,41 @@ export function TimeSheetView() {
             <thead className="bg-gray-900 sticky top-0">
               <tr className="text-left text-sm text-gray-400">
                 <th 
-                  className="px-4 py-3 font-medium cursor-pointer hover:text-white transition-colors"
+                  className="px-3 py-2 font-medium cursor-pointer hover:text-white transition-colors"
                   onClick={() => handleSort('workDate')}
                 >
                   Fecha <SortIndicator field="workDate" />
                 </th>
                 <th 
-                  className="px-4 py-3 font-medium cursor-pointer hover:text-white transition-colors"
-                  onClick={() => handleSort('clientName')}
-                >
-                  Cliente <SortIndicator field="clientName" />
-                </th>
-                <th 
-                  className="px-4 py-3 font-medium cursor-pointer hover:text-white transition-colors"
+                  className="px-3 py-2 font-medium cursor-pointer hover:text-white transition-colors"
                   onClick={() => handleSort('projectName')}
                 >
                   Proyecto <SortIndicator field="projectName" />
                 </th>
                 <th 
-                  className="px-4 py-3 font-medium cursor-pointer hover:text-white transition-colors"
+                  className="px-3 py-2 font-medium cursor-pointer hover:text-white transition-colors"
                   onClick={() => handleSort('taskTitle')}
                 >
-                  Tarea <SortIndicator field="taskTitle" />
+                  Ticket/Fase <SortIndicator field="taskTitle" />
                 </th>
                 <th 
-                  className="px-4 py-3 font-medium text-right cursor-pointer hover:text-white transition-colors"
+                  className="px-3 py-2 font-medium text-right cursor-pointer hover:text-white transition-colors"
                   onClick={() => handleSort('hoursWorked')}
                 >
                   Horas <SortIndicator field="hoursWorked" />
                 </th>
-                <th className="px-4 py-3 font-medium text-center">Estado</th>
-                <th className="px-4 py-3 font-medium">Descripción</th>
-                <th className="px-4 py-3 font-medium text-center w-24">Acciones</th>
+                <th className="px-3 py-2 font-medium">Descripción</th>
+                <th className="px-3 py-2 font-medium text-center">Estado</th>
+                <th className="px-3 py-2 font-medium text-center w-24">Acc</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800">
               {sortedTimesheets.map((entry) => {
-                const isEditing = editingRowId === entry.id;
+                const editData = editingRows.get(entry.id);
+                const isEditing = !!editData;
                 const colorIdx = getDayColorIndex[entry.workDate] || 0;
                 const bgClass = colorIdx === 0 ? 'bg-gray-950' : 'bg-gray-900/60';
+                const currentState = editData?.state ?? entry.state;
                 
                 return (
                   <tr 
@@ -693,118 +913,126 @@ export function TimeSheetView() {
                     onDoubleClick={() => handleRowDoubleClick(entry)}
                     className={`${bgClass} hover:bg-gray-800/70 transition-colors ${isEditing ? 'ring-1 ring-orange-500' : ''}`}
                   >
-                    <td className="px-4 py-3 text-sm text-white">
+                    {/* Fecha */}
+                    <td className="px-3 py-1.5 text-sm text-white whitespace-nowrap">
                       {formatDate(entry.workDate)}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-300">
-                      {entry.clientName}
-                    </td>
-                    <td className="px-4 py-3 text-sm">
+                    {/* Proyecto */}
+                    <td className="px-3 py-1.5 text-sm">
                       <button
                         onClick={() => handleProjectClick(entry)}
                         disabled={loadingProject}
-                        className="text-gray-300 hover:text-blue-400 hover:underline transition-colors cursor-pointer disabled:cursor-wait inline-flex items-center gap-1"
+                        className="text-gray-300 hover:text-blue-400 hover:underline transition-colors cursor-pointer disabled:cursor-wait"
                         title="Ver detalles del proyecto"
                       >
                         {entry.projectName}
                       </button>
                     </td>
-                    <td className="px-4 py-3 text-sm max-w-[200px] truncate" title={entry.taskTitle}>
+                    {/* Ticket/Fase */}
+                    <td className="px-3 py-1.5 text-sm">
                       <button
                         onClick={() => handleTaskClick(entry)}
                         disabled={loadingTask}
-                        className="text-gray-300 hover:text-blue-400 hover:underline transition-colors cursor-pointer truncate max-w-full text-left disabled:cursor-wait inline-flex items-center gap-1"
+                        className="text-gray-300 hover:text-blue-400 hover:underline transition-colors cursor-pointer disabled:cursor-wait"
                         title="Ver detalles de la tarea"
                       >
-                        {entry.taskTitle}
+                        {entry.taskCode || entry.taskTitle.substring(0, 12)}
                       </button>
                     </td>
-                    <td className="px-4 py-3 text-sm text-white text-right font-mono">
+                    {/* Horas */}
+                    <td className="px-3 py-1.5 text-sm text-white text-right font-mono">
                       {isEditing ? (
                         <input
-                          type="number"
-                          min={0.5}
-                          max={24}
-                          step={0.5}
-                          value={editingHours}
-                          onChange={(e) => setEditingHours(parseFloat(e.target.value) || 0)}
-                          className="bg-gray-800 border border-orange-500 rounded px-2 py-1 text-sm text-white w-20 text-right focus:outline-none focus:ring-1 focus:ring-orange-500"
+                          ref={(el) => { if (el) hoursInputRefs.current.set(entry.id, el); }}
+                          type="text"
+                          inputMode="decimal"
+                          value={editData?.hours ?? entry.hoursWorked}
+                          onChange={(e) => handleEditHoursChange(entry.id, e.target.value)}
+                          onKeyDown={(e) => handleKeyDown(e, entry.id)}
+                          className="bg-gray-800 border border-orange-500 rounded px-2 py-0.5 text-sm text-white w-16 text-right focus:outline-none focus:ring-1 focus:ring-orange-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           onClick={(e) => e.stopPropagation()}
                         />
                       ) : (
                         entry.hoursWorked.toFixed(1)
                       )}
                     </td>
-                    <td className="px-4 py-3 text-sm text-center">
+                    {/* Descripción (del registro timesheet) */}
+                    <td className="px-3 py-1.5 text-sm text-gray-400 max-w-[200px]" title={entry.description || ''}>
                       {isEditing ? (
-                        <select
-                          value={editingState}
-                          onChange={(e) => setEditingState(e.target.value)}
+                        <input
+                          type="text"
+                          value={editData?.description ?? entry.description ?? ''}
+                          onChange={(e) => handleEditDescriptionChange(entry.id, e.target.value)}
+                          onKeyDown={(e) => handleKeyDown(e, entry.id)}
+                          className="bg-gray-800 border border-orange-500 rounded px-2 py-0.5 text-sm text-white w-full focus:outline-none focus:ring-1 focus:ring-orange-500"
                           onClick={(e) => e.stopPropagation()}
-                          className="bg-gray-800 border border-orange-500 rounded px-2 py-1 text-sm text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
-                        >
-                          <option value="DRAFT">Borrador</option>
-                          <option value="FINAL">Imputado</option>
-                        </select>
+                          placeholder="Descripción..."
+                        />
                       ) : (
-                        <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                          entry.state === 'FINAL' ? 'bg-green-600 text-white' : 'bg-yellow-600 text-white'
-                        }`}>
-                          {entry.state === 'FINAL' ? 'Imputado' : 'Borrador'}
-                        </span>
+                        <span className="truncate block">{entry.description || '-'}</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-400 max-w-[200px] truncate" title={entry.description}>
-                      {entry.description || '-'}
+                    {/* Estado - clickeable para cambiar */}
+                    <td className="px-3 py-1.5 text-sm text-center">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleToggleState(entry.id); }}
+                        disabled={savingRowId === entry.id}
+                        className={`inline-block px-2 py-0.5 rounded text-xs font-medium cursor-pointer transition-colors ${
+                          currentState === 'FINAL' 
+                            ? 'bg-green-600 hover:bg-green-500 text-white' 
+                            : 'bg-yellow-600 hover:bg-yellow-500 text-white'
+                        } ${savingRowId === entry.id ? 'opacity-50' : ''}`}
+                        title="Click para cambiar estado"
+                      >
+                        {currentState === 'FINAL' ? 'Imputado' : 'Borrador'}
+                      </button>
                     </td>
-                    <td className="px-4 py-3">
+                    {/* Acciones */}
+                    <td className="px-3 py-1.5">
                       <div className="flex items-center justify-center gap-1">
                         {isEditing ? (
                           <>
                             <button
-                              onClick={handleSaveInlineEdit}
-                              disabled={saving}
-                              className="p-1.5 rounded hover:bg-gray-700 text-orange-400 hover:text-orange-300 transition-colors"
-                              title="Guardar"
+                              onClick={(e) => { e.stopPropagation(); handleSaveInlineEdit(entry.id); }}
+                              disabled={savingRowId === entry.id}
+                              className="p-1 rounded hover:bg-gray-700 text-orange-400 hover:text-orange-300 transition-colors"
+                              title="Guardar (Enter)"
                             >
-                              {saving ? <span className="animate-spin">⏳</span> : <Save size={16} />}
+                              {savingRowId === entry.id ? <span className="animate-spin">⏳</span> : <Save size={14} />}
                             </button>
                             <button
-                              onClick={handleCancelEdit}
-                              className="p-1.5 rounded hover:bg-gray-700 text-gray-400 hover:text-gray-300 transition-colors"
-                              title="Cancelar"
+                              onClick={(e) => { e.stopPropagation(); handleCancelEdit(entry.id); }}
+                              className="p-1 rounded hover:bg-gray-700 text-gray-400 hover:text-gray-300 transition-colors"
+                              title="Cancelar (Esc)"
                             >
-                              <X size={16} />
+                              <X size={14} />
                             </button>
                           </>
+                        ) : null}
+                        {deleteConfirm === entry.id ? (
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleDelete(entry.id)}
+                              disabled={deleting}
+                              className="px-2 py-0.5 rounded bg-red-600 hover:bg-red-500 text-white text-xs font-medium disabled:opacity-50"
+                            >
+                              {deleting ? '...' : 'Sí'}
+                            </button>
+                            <button
+                              onClick={() => setDeleteConfirm(null)}
+                              className="px-2 py-0.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs font-medium"
+                            >
+                              No
+                            </button>
+                          </div>
                         ) : (
-                          <>
-                            {deleteConfirm === entry.id ? (
-                              <div className="flex items-center gap-1">
-                                <button
-                                  onClick={() => handleDelete(entry.id)}
-                                  disabled={deleting}
-                                  className="px-2 py-1 rounded bg-red-600 hover:bg-red-500 text-white text-xs font-medium disabled:opacity-50"
-                                >
-                                  {deleting ? '...' : 'Sí'}
-                                </button>
-                                <button
-                                  onClick={() => setDeleteConfirm(null)}
-                                  className="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs font-medium"
-                                >
-                                  No
-                                </button>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => setDeleteConfirm(entry.id)}
-                                className="p-1.5 rounded hover:bg-gray-700 text-gray-400 hover:text-red-400 transition-colors"
-                                title="Eliminar"
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            )}
-                          </>
+                          <button
+                            onClick={() => setDeleteConfirm(entry.id)}
+                            className="p-1 rounded hover:bg-gray-700 text-gray-400 hover:text-red-400 transition-colors"
+                            title="Eliminar"
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         )}
                       </div>
                     </td>
@@ -815,10 +1043,10 @@ export function TimeSheetView() {
             {/* Footer with totals */}
             <tfoot className="bg-gray-900 border-t-2 border-gray-700">
               <tr className="text-sm font-medium">
-                <td className="px-4 py-3 text-white" colSpan={4}>
+                <td className="px-3 py-2 text-white" colSpan={3}>
                   Total General
                 </td>
-                <td className="px-4 py-3 text-white text-right font-mono">
+                <td className="px-3 py-2 text-white text-right font-mono">
                   {totalHours.toFixed(1)}
                 </td>
                 <td colSpan={3}></td>
