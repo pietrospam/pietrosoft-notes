@@ -117,11 +117,62 @@ La tabla de notas en PostgreSQL mantiene su estructura actual. El campo `type = 
   - Descripción (si tiene)
 - Botón para cerrar el popup
 
-### 4.4 Filtros de la grilla (opcional - fase 2)
-- Filtrar por rango de fechas
-- Filtrar por cliente
-- Filtrar por proyecto
-- Filtrar por tarea
+### 4.5 Configuración de la Vista
+
+#### 4.5.1 Formato de fecha en grilla (fijo)
+- La grilla de TimeSheets usa formato fijo: **"Lunes, 20/06"** (día de semana + fecha corta)
+- Este formato es exclusivo para visualización en pantalla
+- No es configurable por el usuario
+
+#### 4.5.2 Formato de fecha para exportación (configurable)
+- Se configura desde **Configuración → Preferencias**
+- Valor por defecto: DD/MM/YYYY
+- Opciones disponibles:
+  | Valor | Ejemplo |
+  |-------|---------|
+  | DD/MM/YYYY | 20/02/2026 |
+  | YYYY-MM-DD | 2026-02-20 |
+  | DD-MM-YYYY | 20-02-2026 |
+- Aplica a exportación CSV y PDF
+- La preferencia se guarda en localStorage (`timesheet-export-date-format`)
+
+#### 4.5.3 Horas diarias objetivo (configurable)
+- Se configura desde **Configuración → Preferencias**
+- Input numérico, valores permitidos: 1 a 24 en incrementos de 0.5
+- Valor por defecto: 8
+- La preferencia se guarda en localStorage (`timesheet-daily-hours`)
+
+### 4.6 Edición Inline en Grilla
+
+#### 4.6.1 Activación
+- Doble click sobre una fila activa el modo de edición inline
+- Solo las columnas de **Horas** y **Estado** se vuelven editables
+
+#### 4.6.2 Campos editables
+- **Horas**: Input numérico con step 0.5
+- **Estado**: Selector dropdown con opciones Borrador/Imputado
+
+#### 4.6.3 Acciones en modo edición
+- El ícono de lápiz (✏️) cambia a ícono de guardar (💾)
+- Al presionar guardar:
+  - Se persisten los cambios via API
+  - La fila vuelve a estado de solo lectura
+  - Se muestra toast de confirmación
+
+#### 4.6.4 Cancelación
+- Click fuera de la fila o presionar Escape cancela la edición
+- Los valores vuelven a su estado original sin guardar
+
+### 4.7 Estilos visuales de la grilla
+
+#### 4.7.1 Eliminación de subtotales
+- Ya no se muestran filas de subtotal por fecha
+- El total general se mantiene en el footer de la tabla
+
+#### 4.7.2 Colores alternados por día
+- Las filas del mismo día comparten el mismo color de fondo
+- Los días se alternan entre dos colores para diferenciar visualmente
+- Ejemplo: Día 1 → gris oscuro, Día 2 → gris medio, Día 3 → gris oscuro, etc.
 
 ---
 
@@ -156,17 +207,18 @@ La tabla de notas en PostgreSQL mantiene su estructura actual. El campo `type = 
 
 ### 6.2 Vista de TimeSheets (grilla)
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  ⏱️ TimeSheets                                    [📄 Exportar CSV]        │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  Fecha ▲    │ Cliente    │ Proyecto     │ Tarea        │ Horas │ Acciones │
-├─────────────┼────────────┼──────────────┼──────────────┼───────┼──────────┤
-│  2026-02-18 │ Acme Corp  │ Website      │ Homepage     │  4.5  │ [✏][🗑] │
-│  2026-02-19 │ Acme Corp  │ Website      │ API Backend  │  8.0  │ [✏][🗑] │
-│  2026-02-20 │ TechStart  │ Mobile App   │ Login UI     │  3.0  │ [✏][🗑] │
-│  2026-02-20 │ Acme Corp  │ Website      │ Homepage     │  2.5  │ [✏][🗑] │
-└─────────────┴────────────┴──────────────┴──────────────┴───────┴──────────┘
-                                                          Total: 18.0 horas
+┌──────────────────────────────────────────────────────────────────────────────────────────┐
+│  ⏱️ TimeSheets  (25 registros)              [🔍 Filtros]  [📄 CSV]  [📑 PDF]            │
+├──────────────────────────────────────────────────────────────────────────────────────────┤
+│  Fecha ▲            │ Cliente    │ Proyecto     │ Tarea        │ Horas │ Estado  │ Acc  │
+├─────────────────────┼────────────┼──────────────┼──────────────┼───────┼─────────┼──────┤
+│  Jueves, 18/02      │ Acme Corp  │ Website      │ Homepage     │  4.5  │ Borrad. │ [✏]🗑│ ← Color A
+│  Jueves, 18/02      │ Acme Corp  │ Website      │ API Backend  │  3.5  │ Borrad. │ [✏]🗑│ ← Color A
+│  Viernes, 19/02     │ Acme Corp  │ Website      │ API Backend  │  8.0  │ Imputad │ [✏]🗑│ ← Color B
+│  Sábado, 20/02      │ TechStart  │ Mobile App   │ Login UI     │  3.0  │ Borrad. │ [💾]🗑│ ← Color A (editando)
+│  Sábado, 20/02      │ Acme Corp  │ Website      │ Homepage     │  2.5  │ Borrad. │ [✏]🗑│ ← Color A
+└─────────────────────┴────────────┴──────────────┴──────────────┴───────┴─────────┴──────┘
+                                                               Total: 21.5 horas
 ```
 
 ---
@@ -184,18 +236,46 @@ La tabla de notas en PostgreSQL mantiene su estructura actual. El campo `type = 
 - [x] La grilla muestra las columnas: Fecha, Cliente, Proyecto, Tarea, Horas, Estado
 - [x] El ordenamiento por defecto es por fecha ascendente
 - [x] Se puede cambiar el ordenamiento haciendo clic en las cabeceras
-- [x] Se muestran subtotales de horas por fecha
-- [x] Se muestra warning (amarillo) si las horas del día son < 8
+- [x] Colores alternados por día para distinguir registros del mismo día
 - [x] Cada registro muestra badge de estado (Borrador/Imputado)
 
-### 7.3 Acciones en Grilla
-- [x] Botón editar abre TimeSheetModal con datos pre-cargados
+### 7.3 Configuración (en Preferencias)
+- [x] Formato de fecha para exportación configurable (default: DD/MM/YYYY)
+- [x] Input numérico para configurar horas diarias objetivo (default: 8)
+- [x] Las preferencias se guardan en localStorage y persisten entre sesiones
+- [x] El formato de fecha en grilla es fijo: "Lunes, 20/06"
+
+### 7.4 Edición Inline
+- [x] Doble click en fila activa modo edición
+- [x] Horas se convierte en input numérico editable
+- [x] Estado se convierte en selector dropdown
+- [x] Ícono de lápiz cambia a ícono de guardar
+- [x] Al guardar, se persisten cambios y vuelve a modo lectura
+- [x] Click fuera o Escape cancela la edición
+
+### 7.5 Filtros de la grilla
+- [x] Botón "Filtros" para mostrar/ocultar barra de filtros
+- [x] Filtro por rango de fechas (desde/hasta)
+- [x] Filtro por cliente (dropdown con clientes disponibles)
+- [x] Filtro por proyecto (dropdown con proyectos disponibles)
+- [x] Botón "Limpiar filtros" visible cuando hay filtros activos
+- [x] Contador de registros muestra "X de Y" cuando hay filtros aplicados
+- [x] Estado vacío específico cuando los filtros no retornan resultados
+
+### 7.6 Exportación
+- [x] Botón "CSV" genera reporte en formato CSV
+- [x] Botón "PDF" abre ventana de impresión con vista formateada
+- [x] Exportación respeta los filtros aplicados
+- [x] Exportación usa formato de fecha configurable
+- [x] PDF incluye información de filtros activos en el header
+- [x] PDF incluye total general
+
+### 7.7 Acciones en Grilla
 - [x] Botón eliminar solicita confirmación y elimina el registro
-- [x] Botón "Exportar CSV" genera el reporte
 - [x] Click en nombre de Tarea abre popup con detalles (título, estado, prioridad, cliente, proyecto, descripción)
 - [x] Click en nombre de Proyecto abre popup con detalles (nombre, cliente, descripción)
 
-### 7.4 Creación de TimeSheet
+### 7.8 Creación de TimeSheet
 - [x] Solo se puede crear TimeSheet desde una Tarea (modal o botón rápido)
 - [x] No existe opción para crear TimeSheet "suelto"
 
@@ -208,26 +288,34 @@ La tabla de notas en PostgreSQL mantiene su estructura actual. El campo `type = 
 | `NotesList.tsx` | Remover filtro TimeSheet, excluir de lista |
 | `Sidebar.tsx` | Agregar opción "TimeSheets" |
 | `AppContext.tsx` | Excluir TimeSheets de `filteredNotes` |
-| `TimeSheetView.tsx` | **Nuevo:** Vista con grilla de TimeSheets |
-| `TimeSheetGrid.tsx` | **Nuevo:** Componente de grilla |
+| `TimeSheetView.tsx` | Vista con grilla, edición inline, colores por día |
+| `ConfigPanel.tsx` | Agregar configuración de TimeSheets en Preferencias |
 | `notes-repo.ts` | Agregar query específica para listar TimeSheets con joins |
 | `/api/notes/route.ts` | Excluir TimeSheets de listado general |
-| `/api/timesheets/route.ts` | **Nuevo:** Endpoint específico para TimeSheets |
+| `/api/timesheets/route.ts` | Endpoint específico para TimeSheets |
 
 ---
 
 ## 9. Fases de Implementación
 
-### Fase 1 - Cambios básicos
-1. Remover filtro TimeSheet de NotesList
-2. Excluir TimeSheets del listado de notas
-3. Crear vista básica de TimeSheets con grilla
-4. Implementar edición y eliminación desde grilla
+### Fase 1 - Cambios básicos ✅
+1. ✅ Remover filtro TimeSheet de NotesList
+2. ✅ Excluir TimeSheets del listado de notas
+3. ✅ Crear vista básica de TimeSheets con grilla
+4. ✅ Implementar edición y eliminación desde grilla
 
-### Fase 2 - Mejoras
-1. Agregar filtros a la grilla (fechas, cliente, proyecto)
-2. Implementar exportación a PDF
-3. Agregar totalización de horas
+### Fase 2 - Mejoras ✅
+1. ✅ Agregar filtros a la grilla (fechas, cliente, proyecto)
+2. ✅ Implementar exportación a PDF (via print dialog)
+3. ✅ Agregar totalización de horas
+
+### Fase 3 - Refinamientos ✅
+1. ✅ Mover configuración a sección Preferencias
+2. ✅ Formato fijo "Lunes, 20/06" para grilla
+3. ✅ Formato configurable para exportación (default DD/MM/YYYY)
+4. ✅ Edición inline con doble click (horas + estado)
+5. ✅ Eliminar subtotales
+6. ✅ Colores alternados por día
 
 ---
 

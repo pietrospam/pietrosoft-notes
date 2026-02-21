@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useRef } from 'react';
-import { Building2, FolderKanban, Database, Download, Upload, Loader2, Settings, Save } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Building2, FolderKanban, Database, Download, Upload, Loader2, Settings, Save, Clock } from 'lucide-react';
 import { ClientsManager } from './ClientsManager';
 import { ProjectsManager } from './ProjectsManager';
 import { useApp } from '../context/AppContext';
@@ -147,6 +147,28 @@ function BackupManager() {
 
 function PreferencesManager() {
   const { autoSaveEnabled, toggleAutoSave } = useApp();
+  
+  // TimeSheet preferences
+  const [dailyHoursTarget, setDailyHoursTarget] = useState<number>(8);
+  const [exportDateFormat, setExportDateFormat] = useState<string>('DD/MM/YYYY');
+  
+  // Load from localStorage on mount
+  useEffect(() => {
+    const savedHours = localStorage.getItem('timesheet-daily-hours');
+    const savedFormat = localStorage.getItem('timesheet-export-date-format');
+    if (savedHours) setDailyHoursTarget(parseFloat(savedHours));
+    if (savedFormat) setExportDateFormat(savedFormat);
+  }, []);
+  
+  const handleDailyHoursChange = (hours: number) => {
+    setDailyHoursTarget(hours);
+    localStorage.setItem('timesheet-daily-hours', hours.toString());
+  };
+  
+  const handleExportFormatChange = (format: string) => {
+    setExportDateFormat(format);
+    localStorage.setItem('timesheet-export-date-format', format);
+  };
 
   return (
     <div className="p-6 max-w-2xl">
@@ -186,6 +208,55 @@ function PreferencesManager() {
             ) : (
               <span className="text-yellow-400">⚠ Deberás guardar manualmente con el botón de guardar</span>
             )}
+          </div>
+        </div>
+        
+        {/* TimeSheet Settings */}
+        <div className="bg-gray-900 rounded-lg p-4 border border-gray-800">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-orange-500/20 rounded-lg">
+              <Clock size={20} className="text-orange-400" />
+            </div>
+            <div>
+              <h3 className="text-lg font-medium text-white">TimeSheets</h3>
+              <p className="text-gray-400 text-sm">Configuración de la vista de TimeSheets</p>
+            </div>
+          </div>
+          
+          <div className="space-y-4 ml-11">
+            {/* Daily hours target */}
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-sm text-white">Horas diarias objetivo</label>
+                <p className="text-xs text-gray-500">Horas esperadas por día de trabajo</p>
+              </div>
+              <input
+                type="number"
+                min={1}
+                max={24}
+                step={0.5}
+                value={dailyHoursTarget}
+                onChange={(e) => handleDailyHoursChange(parseFloat(e.target.value) || 8)}
+                className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-white w-20 focus:outline-none focus:ring-1 focus:ring-orange-500"
+              />
+            </div>
+            
+            {/* Export date format */}
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-sm text-white">Formato de fecha para exportación</label>
+                <p className="text-xs text-gray-500">Usado en CSV y PDF</p>
+              </div>
+              <select
+                value={exportDateFormat}
+                onChange={(e) => handleExportFormatChange(e.target.value)}
+                className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
+              >
+                <option value="DD/MM/YYYY">DD/MM/YYYY (20/02/2026)</option>
+                <option value="YYYY-MM-DD">YYYY-MM-DD (2026-02-20)</option>
+                <option value="DD-MM-YYYY">DD-MM-YYYY (20-02-2026)</option>
+              </select>
+            </div>
           </div>
         </div>
 
