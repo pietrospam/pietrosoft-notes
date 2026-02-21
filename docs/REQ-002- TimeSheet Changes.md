@@ -183,23 +183,28 @@ La tabla de notas en PostgreSQL mantiene su estructura actual. El campo `type = 
 ### 4.8 Filtros permanentes y Calendario
 
 #### 4.8.1 Selectores de período (siempre visibles)
+- **Selector de año**: Dropdown con años (actual ±2 años)
 - **Selector de mes**: Dropdown con los 12 meses del año (Enero a Diciembre)
-- **Selector de año**: Dropdown separado a la derecha del mes, inicializa con el año actual
+- **Orden en pantalla**: Año → Mes → Calendario (centrados horizontalmente)
 - Por defecto selecciona el mes y año actuales
 - Al cambiar mes o año, se filtran los registros de ese período
 - El calendario también se actualiza automáticamente
 
-#### 4.8.2 Calendario visual de horas (compacto)
-- Se muestra a la **izquierda** del selector de mes, en la misma línea
-- Diseño compacto para ocupar menos espacio vertical
+#### 4.8.2 Calendario visual de horas (horizontal)
+- **Layout horizontal**: Todos los días del mes en una sola línea
+- Los días se muestran uno al lado del otro (1, 2, 3, ... 31)
+- **Separador visual**: Línea vertical gris entre cada semana
+- **Headers de días**: Fila superior con L, M, X, J, V, S, D repetido para cada semana
+  - Días de semana (L-V): Color **azul**
+  - Fin de semana (S, D): Color **naranja**
+- **Fondo de fines de semana**: Sábado y domingo con fondo gris oscuro (`bg-gray-800`)
 - La semana comienza en **Lunes**
-- Muestra todos los días del mes seleccionado en formato mini-calendario
-- **Indicador visual**: Círculo alrededor del número del día (no rectángulo)
+- **Indicador visual**: Círculo alrededor del número del día
   | Horas del día | Color del círculo |
   |---------------|-------------------|
   | >= 8 (configurable) | Verde |
   | > 0 y < 8 | Amarillo |
-  | 0 | Sin círculo (default) |
+  | 0 | Sin círculo (solo número) |
 - Permite visualizar rápidamente el estado de imputación del mes
 
 ### 4.9 Orden de columnas en la grilla
@@ -208,24 +213,68 @@ Las columnas se muestran en el siguiente orden:
 | # | Columna | Descripción |
 |---|---------|-------------|
 | 1 | Fecha | Día de la imputación (formato: "Lun, 20/02") |
-| 2 | Código Proyecto | Código corto del proyecto |
-| 3 | Proyecto | Nombre del proyecto |
-| 4 | Ticket/Fase | Código del ticket o fase de la tarea |
-| 5 | Horas | Horas imputadas (editable) |
-| 6 | Descripción + Acciones | Descripción de la tarea, estado badge y acciones |
+| 2 | Proyecto | Nombre del proyecto |
+| 3 | Ticket/Fase | Código del ticket o fase de la tarea |
+| 4 | Horas | Horas imputadas (editable inline) |
+| 5 | Descripción | Descripción del registro timesheet (editable inline) |
+| 6 | Estado | Badge clickeable (Borrador/Imputado) |
+| 7 | Acciones | Botones guardar/cancelar/eliminar |
+
+### 4.10 Edición Inline en Grilla
+
+#### 4.10.1 Activación
+- Doble click sobre una fila activa el modo de edición inline
+- Al activar, el campo de horas se selecciona automáticamente
+
+#### 4.10.2 Campos editables
+- **Fecha**: Input tipo date para cambiar la fecha del registro
+- **Horas**: Input de texto (sin flechas increment/decrement)
+- **Descripción**: Input de texto para la descripción del registro
+- **Estado**: Badge clickeable que alterna Borrador ↔ Imputado (funciona tanto en modo edición como en modo normal)
+
+#### 4.10.3 Atajos de teclado
+- **ENTER**: Guarda los cambios de la fila
+- **ESC**: Cancela la edición sin guardar
 
 ---
 
 ## 5. Flujo de Creación de TimeSheet
 
-### 5.1 Único punto de entrada
-- Los TimeSheets **solo** se crean desde el contexto de una Tarea
-- Mantener el botón "Registrar Horas" en `TaskFields`
-- Mantener el botón de reloj (⏱️) en las cards de tareas en `NotesList`
+### 5.1 Puntos de entrada
+- **Desde una Tarea**: Botón "Registrar Horas" en `TaskFields` o ícono reloj (⏱️) en cards
+- **Desde la vista TimeSheets**: Botón "+" en la barra de acciones (esquina derecha)
 
-### 5.2 Modal de TimeSheet
-- Sin cambios en `TimeSheetModal`
-- Ya requiere una tarea como parámetro obligatorio
+### 5.2 Creación desde vista TimeSheets (búsqueda rápida)
+
+#### 5.2.1 Modal de búsqueda
+- Click en botón "+" abre modal con buscador
+- Input de búsqueda que filtra por: cliente, proyecto, código de ticket/fase, título de tarea
+- Debajo del input se muestran las coincidencias como "cards"
+
+#### 5.2.2 Cards de resultados
+Cada card muestra:
+- **Principal (destacado)**: Código ticket/fase + título de la tarea
+- **Secundario (más pequeño)**: Cliente → Proyecto
+- Máximo 8-10 resultados visibles (scroll si hay más)
+
+#### 5.2.3 Navegación por teclado
+- **↑ / ↓**: Navegar entre cards de resultados
+- **ENTER**: Seleccionar la tarea resaltada
+- **ESC**: Cerrar el modal sin crear
+
+#### 5.2.4 Creación directa
+Al presionar ENTER sobre una tarea:
+1. Se cierra el modal
+2. Se crea un registro de TimeSheet con fecha de hoy
+3. El nuevo registro aparece en la grilla en modo edición
+4. El cursor se posiciona en el input de horas (auto-seleccionado)
+5. La descripción se pre-llena con el título de la tarea
+5. Completar fecha, horas y descripción
+6. Guardar
+
+### 5.3 Modal de TimeSheet
+- Requiere una tarea como parámetro obligatorio
+- Permite seleccionar fecha, horas y descripción
 
 ---
 
@@ -276,7 +325,7 @@ Las columnas se muestran en el siguiente orden:
 ### 7.2 Nueva Vista TimeSheets
 - [x] Existe opción "TimeSheets" en el Sidebar
 - [x] Al seleccionar, se muestra una grilla con todos los registros
-- [x] La grilla muestra las columnas: Fecha, Cliente, Proyecto, Tarea, Horas, Estado
+- [x] La grilla muestra las columnas: Fecha, Proyecto, Ticket/Fase, Horas, Descripción, Estado, Acciones
 - [x] El ordenamiento por defecto es por fecha ascendente
 - [x] Se puede cambiar el ordenamiento haciendo clic en las cabeceras
 - [x] Colores alternados por día para distinguir registros del mismo día
@@ -290,17 +339,22 @@ Las columnas se muestran en el siguiente orden:
 
 ### 7.4 Edición Inline
 - [x] Doble click en fila activa modo edición
-- [ ] **Múltiples filas** pueden estar en modo edición simultáneamente
-- [ ] Horas se convierte en input de texto (sin flechas increment/decrement)
-- [ ] Badge de estado actúa como **toggle** (click cambia Borrador → Imputado → Borrador)
+- [x] Múltiples filas pueden estar en modo edición simultáneamente
+- [x] **Fecha** editable inline (input tipo date)
+- [x] Horas se convierte en input de texto (sin flechas increment/decrement)
+- [x] **Descripción** editable inline (campo del registro timesheet)
+- [x] Badge de estado actúa como **toggle** (click cambia Borrador ↔ Imputado)
 - [x] Se muestran íconos de guardar y cancelar en modo edición
-- [x] Al guardar, se persisten cambios y vuelve a modo lectura
-- [ ] Click en otra fila NO cancela la edición de filas previas
-- [x] Escape cancela la edición de la fila activa
+- [x] Al guardar, se persisten cambios (fecha, horas, descripción, estado) y vuelve a modo lectura
+- [x] Click en otra fila NO cancela la edición de filas previas
+- [x] ENTER guarda los cambios
+- [x] ESC cancela la edición de la fila activa
+- [x] Campo de horas se auto-selecciona al activar edición
 
 ### 7.5 Filtros de la grilla
 - [x] Botón "Filtros" para mostrar/ocultar barra de filtros adicionales
-- [ ] **Selector de mes siempre visible** (default: mes actual)
+- [x] Selector de año siempre visible (default: año actual)
+- [x] Selector de mes siempre visible (default: mes actual)
 - [x] Filtro por rango de fechas (desde/hasta)
 - [x] Filtro por cliente (dropdown con clientes disponibles)
 - [x] Filtro por proyecto (dropdown con proyectos disponibles)
@@ -308,14 +362,18 @@ Las columnas se muestran en el siguiente orden:
 - [x] Contador de registros muestra "X de Y" cuando hay filtros aplicados
 - [x] Estado vacío específico cuando los filtros no retornan resultados
 
-### 7.6 Calendario Visual
-- [ ] Calendario se muestra en la parte superior de la vista
-- [ ] La semana comienza en **Lunes**
-- [ ] Muestra todos los días del mes seleccionado
-- [ ] Días con >= 8 horas (configurable) se muestran en **verde**
-- [ ] Días con > 0 y < 8 horas se muestran en **amarillo**
-- [ ] Días sin imputaciones no tienen color especial
-- [ ] El calendario se actualiza al cambiar el mes seleccionado
+### 7.6 Calendario Visual (horizontal)
+- [x] Calendario se muestra en la parte superior de la vista (centrado)
+- [x] Todos los días en una sola línea horizontal
+- [x] Separador vertical entre semanas
+- [x] Headers de días (L M X J V S D) en fila superior
+- [x] Headers L-V en azul, S-D en naranja
+- [x] Fondo oscuro para sábado y domingo
+- [x] La semana comienza en **Lunes**
+- [x] Días con >= 8 horas (configurable) se muestran en **verde** (círculo)
+- [x] Días con > 0 y < 8 horas se muestran en **amarillo** (círculo)
+- [x] Días sin imputaciones muestran solo el número
+- [x] El calendario se actualiza al cambiar el mes/año seleccionado
 
 ### 7.7 Exportación
 - [x] Botón "CSV" genera reporte en formato CSV
@@ -330,12 +388,22 @@ Las columnas se muestran en el siguiente orden:
 - [x] Click en nombre de Tarea abre popup con detalles (título, estado, prioridad, cliente, proyecto, descripción)
 - [x] Click en nombre de Proyecto abre popup con detalles (nombre, cliente, descripción)
 
-### 7.9 Creación de TimeSheet
-- [x] Solo se puede crear TimeSheet desde una Tarea (modal o botón rápido)
-- [x] No existe opción para crear TimeSheet "suelto"
+### 7.9 Creación de TimeSheet (búsqueda rápida)
+- [x] Botón "+" en la barra de acciones (junto a exportación)
+- [x] Modal con buscador que filtra por cliente/proyecto/ticket/tarea
+- [x] Resultados mostrados como cards con:
+  - Código ticket/fase destacado + título de tarea
+  - Cliente → Proyecto en tamaño reducido
+- [x] Navegación por teclado: ↑↓ para moverse, Enter para seleccionar, Esc para cerrar
+- [x] Al seleccionar tarea:
+  - Se crea registro con fecha de hoy
+  - Se agrega a la grilla en modo edición
+  - Cursor posicionado en input de horas
+  - Descripción pre-llenada con título de tarea
+- [x] También se puede crear desde una Tarea (modal o botón rápido existente)
 
 ### 7.10 Estilos de la Grilla
-- [ ] Filas compactas con padding reducido (información más densa)
+- [x] Filas compactas con padding reducido (información más densa)
 - [x] Colores alternados por día para agrupar visualmente registros del mismo día
 
 ---
@@ -375,6 +443,17 @@ Las columnas se muestran en el siguiente orden:
 4. ✅ Edición inline con doble click (horas + estado)
 5. ✅ Eliminar subtotales
 6. ✅ Colores alternados por día
+
+### Fase 4 - UX Avanzada ✅
+1. ✅ Calendario horizontal con todos los días en una línea
+2. ✅ Separadores verticales entre semanas
+3. ✅ Headers de días (L M X J V S D) con colores diferenciados
+4. ✅ Fondo oscuro para fines de semana (S, D)
+5. ✅ Selectores de año/mes/calendario centrados horizontalmente
+6. ✅ Campo descripción editable inline
+7. ✅ Toggle de estado (Borrador ↔ Imputado) funcional
+8. ✅ Botón "+" para crear TimeSheet desde la vista
+9. ✅ Modal de selección proyecto → tarea antes de crear
 
 ---
 

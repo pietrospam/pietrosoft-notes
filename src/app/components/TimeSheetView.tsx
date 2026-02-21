@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Clock, Trash2, Download, ChevronUp, ChevronDown, AlertCircle, X, CheckSquare, Folder, FileText, Filter, XCircle, Save } from 'lucide-react';
+import { Clock, Trash2, Download, ChevronUp, ChevronDown, AlertCircle, X, CheckSquare, Folder, FileText, Filter, XCircle, Save, Plus } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Toast } from './Toast';
+import type { TaskNote, Project } from '@/lib/types';
 
 interface TimeSheetGridEntry {
   id: string;
@@ -55,7 +56,7 @@ export function TimeSheetView() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   
   // Inline editing - support multiple rows
-  const [editingRows, setEditingRows] = useState<Map<string, { hours: number; state: string; description: string }>>(new Map());
+  const [editingRows, setEditingRows] = useState<Map<string, { hours: number; state: string; description: string; workDate: string }>>(new Map());
   const [savingRowId, setSavingRowId] = useState<string | null>(null);
   
   // Delete confirmation
@@ -68,6 +69,14 @@ export function TimeSheetView() {
   // Task detail popup
   const [taskPopup, setTaskPopup] = useState<TaskDetail | null>(null);
   const [loadingTask, setLoadingTask] = useState(false);
+  
+  // Create TimeSheet modal state - search based
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [taskSearchQuery, setTaskSearchQuery] = useState('');
+  const [taskSearchResults, setTaskSearchResults] = useState<Array<TaskNote & { clientName: string; projectName: string }>>([]);
+  const [selectedSearchIndex, setSelectedSearchIndex] = useState(0);
+  const [allTasksWithContext, setAllTasksWithContext] = useState<Array<TaskNote & { clientName: string; projectName: string }>>([]);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   
   // Project detail popup
   const [projectPopup, setProjectPopup] = useState<ProjectDetail | null>(null);
@@ -418,6 +427,135 @@ export function TimeSheetView() {
     }
   };
 
+  // Open create TimeSheet modal - load all tasks with client/project info
+  const handleOpenCreateModal = async () => {
+    try {
+      // Fetch all tasks
+      const tasksRes = await fetch('/api/notes?type=task');
+      if (!tasksRes.ok) return;
+      const tasks: TaskNote[] = await tasksRes.json();
+      
+      // Fetch all projects and clients for context
+      const [projectsRes, clientsRes] = await Promise.all([
+        fetch('/api/projects'),
+        fetch('/api/clients')
+      ]);
+      const projects: Project[] = projectsRes.ok ? await projectsRes.json() : [];
+      const clients: Array<{ id: string; name: string }> = clientsRes.ok ? await clientsRes.json() : [];
+      
+      // Build lookup maps
+      const projectMap = new Map(projects.map(p => [p.id, p]));
+      const clientMap = new Map(clients.map(c => [c.id, c.name]));
+      
+      // Enrich tasks with client and project names
+      const tasksWithContext = tasks.map(task => {
+        const project = projectMap.get(task.projectId);
+        const clientName = project?.clientId ? clientMap.get(project.clientId) || 'Sin Cliente' : 'Sin Cliente';
+        const projectName = project?.name || 'Sin Proyecto';
+        return { ...task, clientName, projectName };
+      });
+      
+      setAllTasksWithContext(tasksWithContext);
+      setTaskSearchResults(tasksWithContext.slice(0, 10));
+      setTaskSearchQuery('');
+      setSelectedSearchIndex(0);
+      setShowCreateModal(true);
+      
+      // Focus search input after modal opens
+      setTimeout(() => searchInputRef.current?.focus(), 100);
+    } catch (err) {
+      console.error('Error loading tasks:', err);
+      setToast({ message: 'Error al cargar tareas', type: 'error' });
+    }
+  };
+
+  // Filter tasks based on search query
+  const handleTaskSearch = (query: string) => {
+    setTaskSearchQuery(query);
+    setSelectedSearchIndex(0);
+    
+    if (!query.trim()) {
+      setTaskSearchResults(allTasksWithContext.slice(0, 10));
+      return;
+    }
+    
+    const lowerQuery = query.toLowerCase();
+    const filtered = allTasksWithContext.filter(task => 
+      task.title.toLowerCase().includes(lowerQuery) ||
+      (task.ticketPhaseCode?.toLowerCase().includes(lowerQuery)) ||
+      task.clientName.toLowerCase().includes(lowerQuery) ||
+      task.projectName.toLowerCase().includes(lowerQuery)
+    );
+    setTaskSearchResults(filtered.slice(0, 10));
+  };
+
+  // Handle keyboard navigation in search results
+  const handleSearchKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSelectedSearchIndex(prev => Math.min(prev + 1, taskSearchResults.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSelectedSearchIndex(prev => Math.max(prev - 1, 0));
+    } else if (e.key === 'Enter' && taskSearchResults.length > 0) {
+      e.preventDefault();
+      handleQuickCreateTimesheet(taskSearchResults[selectedSearchIndex]);
+    } else if (e.key === 'Escape') {
+      setShowCreateModal(false);
+    }
+  };
+
+  // Create timesheet directly and add to grid in edit mode
+  const handleQuickCreateTimesheet = async (task: TaskNote & { clientName: string; projectName: string }) => {
+    const today = new Date().toISOString().split('T')[0];
+    
+    try {
+      const res = await fetch('/api/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'timesheet',
+          title: `TimeSheet - ${task.title}`,
+          taskId: task.id,
+          workDate: today,
+          hoursWorked: 0,
+          description: task.title,
+          state: 'DRAFT',
+        }),
+      });
+      
+      if (res.ok) {
+        const newTimesheet = await res.json();
+        setShowCreateModal(false);
+        await fetchTimesheets();
+        
+        // Put the new entry in edit mode and focus hours input
+        setTimeout(() => {
+          setEditingRows(prev => {
+            const newMap = new Map(prev);
+            newMap.set(newTimesheet.id, { hours: 0, state: 'DRAFT', description: task.title, workDate: today });
+            return newMap;
+          });
+          // Focus hours input after state update
+          setTimeout(() => {
+            const input = hoursInputRefs.current.get(newTimesheet.id);
+            if (input) {
+              input.focus();
+              input.select();
+            }
+          }, 100);
+        }, 200);
+        
+        setToast({ message: 'TimeSheet creado - ingresa las horas', type: 'success' });
+      } else {
+        throw new Error('Failed to create timesheet');
+      }
+    } catch (err) {
+      console.error('Error creating timesheet:', err);
+      setToast({ message: 'Error al crear TimeSheet', type: 'error' });
+    }
+  };
+
   // Format date for display in grid - fixed format "Lunes, 20/06"
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '-';
@@ -456,7 +594,7 @@ export function TimeSheetView() {
     if (editingRows.has(entry.id)) return; // Already editing
     setEditingRows(prev => {
       const newMap = new Map(prev);
-      newMap.set(entry.id, { hours: entry.hoursWorked, state: entry.state, description: entry.description || '' });
+      newMap.set(entry.id, { hours: entry.hoursWorked, state: entry.state, description: entry.description || '', workDate: entry.workDate });
       return newMap;
     });
     // Auto-select hours input after a short delay
@@ -488,6 +626,18 @@ export function TimeSheetView() {
       const current = newMap.get(id);
       if (current) {
         newMap.set(id, { ...current, description: value });
+      }
+      return newMap;
+    });
+  };
+
+  // Update work date for a specific row
+  const handleEditDateChange = (id: string, value: string) => {
+    setEditingRows(prev => {
+      const newMap = new Map(prev);
+      const current = newMap.get(id);
+      if (current) {
+        newMap.set(id, { ...current, workDate: value });
       }
       return newMap;
     });
@@ -567,6 +717,7 @@ export function TimeSheetView() {
           hoursWorked: editData.hours,
           state: editData.state,
           description: editData.description,
+          workDate: editData.workDate,
         }),
       });
       
@@ -627,8 +778,8 @@ export function TimeSheetView() {
     return stored ? parseFloat(stored) : 8;
   };
 
-  // Generate calendar days for selected month
-  const calendarData = useMemo(() => {
+  // Generate calendar days grouped by weeks for horizontal display
+  const calendarWeeks = useMemo(() => {
     const year = selectedYear;
     const month = selectedMonth;
     const firstDay = new Date(year, month - 1, 1);
@@ -640,11 +791,12 @@ export function TimeSheetView() {
     startDayOfWeek = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1; // Monday = 0
     
     const dailyTarget = getDailyHoursTarget();
-    const days: Array<{ day: number | null; hours: number; color: 'green' | 'yellow' | 'none' }> = [];
+    const allDays: Array<{ day: number | null; hours: number; color: 'green' | 'yellow' | 'none'; isWeekend: boolean }> = [];
     
     // Add empty cells for days before first of month
     for (let i = 0; i < startDayOfWeek; i++) {
-      days.push({ day: null, hours: 0, color: 'none' });
+      const isWeekend = i >= 5; // Saturday (5) or Sunday (6)
+      allDays.push({ day: null, hours: 0, color: 'none', isWeekend });
     }
     
     // Add all days of the month
@@ -657,10 +809,19 @@ export function TimeSheetView() {
       } else if (hours > 0) {
         color = 'yellow';
       }
-      days.push({ day, hours, color });
+      // Calculate day of week (0=Mon, 5=Sat, 6=Sun)
+      const dayOfWeek = (startDayOfWeek + day - 1) % 7;
+      const isWeekend = dayOfWeek >= 5;
+      allDays.push({ day, hours, color, isWeekend });
     }
     
-    return days;
+    // Group into weeks (arrays of 7 days)
+    const weeks: Array<typeof allDays> = [];
+    for (let i = 0; i < allDays.length; i += 7) {
+      weeks.push(allDays.slice(i, i + 7));
+    }
+    
+    return weeks;
   }, [selectedYear, selectedMonth, hoursByDate]);
 
   // Month names for selector
@@ -675,41 +836,25 @@ export function TimeSheetView() {
   return (
     <div className="flex-1 flex flex-col bg-gray-950 overflow-hidden">
       {/* Header with calendar and selectors */}
-      <div className="px-6 py-3 border-b border-gray-800 flex items-center justify-between gap-4">
+      <div className="px-6 py-3 border-b border-gray-800 flex items-center gap-4">
         <div className="flex items-center gap-3">
           <Clock size={24} className="text-orange-400" />
           <h1 className="text-xl font-semibold text-white">TimeSheets</h1>
           <span className="text-sm text-gray-500">({filteredTimesheets.length})</span>
         </div>
         
-        <div className="flex items-center gap-4">
-          {/* Compact Calendar inline */}
-          <div className="flex items-center gap-1 bg-gray-900/50 px-2 py-1 rounded-lg">
-            <div className="grid grid-cols-7 gap-0.5 text-[10px]">
-              {/* Day headers */}
-              {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map(d => (
-                <div key={d} className="w-5 h-4 flex items-center justify-center text-gray-500">{d}</div>
-              ))}
-              {/* Calendar days with circles */}
-              {calendarData.map((cell, idx) => (
-                <div 
-                  key={idx}
-                  className="w-5 h-5 flex items-center justify-center"
-                  title={cell.day && cell.hours > 0 ? `${cell.hours.toFixed(1)}h` : undefined}
-                >
-                  {cell.day && (
-                    <span className={`w-4 h-4 flex items-center justify-center rounded-full text-[9px] ${
-                      cell.color === 'green' ? 'bg-green-600 text-white font-bold' :
-                      cell.color === 'yellow' ? 'bg-yellow-500 text-white font-bold' :
-                      'text-gray-400'
-                    }`}>
-                      {cell.day}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
+        {/* Center section: Year, Month, Calendar */}
+        <div className="flex-1 flex items-center justify-center gap-4">
+          {/* Year selector */}
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+            className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
+          >
+            {yearOptions.map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
           
           {/* Month selector */}
           <select
@@ -722,17 +867,58 @@ export function TimeSheetView() {
             ))}
           </select>
           
-          {/* Year selector */}
-          <select
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-            className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
-          >
-            {yearOptions.map(y => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
-          
+          {/* Compact Calendar - all days in one horizontal line with day headers */}
+          <div className="flex flex-col bg-gray-900/50 px-2 py-1.5 rounded-lg overflow-x-auto">
+            {/* Day headers row */}
+            <div className="flex items-center gap-0.5 mb-0.5">
+              {calendarWeeks.map((week, weekIdx) => (
+                <div key={weekIdx} className="flex items-center">
+                  {weekIdx > 0 && <div className="w-px h-3 mx-1" />}
+                  {week.map((_, dayIdx) => (
+                    <div 
+                      key={dayIdx}
+                      className={`w-5 h-3 flex items-center justify-center text-[8px] ${
+                        dayIdx >= 5 ? 'text-orange-400' : 'text-blue-400'
+                      }`}
+                    >
+                      {['L', 'M', 'X', 'J', 'V', 'S', 'D'][dayIdx]}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+            {/* Days row */}
+            <div className="flex items-center gap-0.5">
+              {calendarWeeks.map((week, weekIdx) => (
+                <div key={weekIdx} className="flex items-center">
+                  {weekIdx > 0 && <div className="w-px h-5 bg-gray-600 mx-1" />}
+                  {week.map((cell, dayIdx) => (
+                    <div 
+                      key={dayIdx}
+                      className={`w-5 h-5 flex items-center justify-center rounded-sm ${
+                        cell.isWeekend ? 'bg-gray-800' : ''
+                      }`}
+                      title={cell.day && cell.hours > 0 ? `${cell.hours.toFixed(1)}h` : undefined}
+                    >
+                      {cell.day && (
+                        <span className={`w-4 h-4 flex items-center justify-center rounded-full text-[9px] ${
+                          cell.color === 'green' ? 'bg-green-600 text-white font-bold' :
+                          cell.color === 'yellow' ? 'bg-yellow-500 text-white font-bold' :
+                          cell.isWeekend ? 'text-gray-500' : 'text-gray-400'
+                        }`}>
+                          {cell.day}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        
+        {/* Right section: Action buttons */}
+        <div className="flex items-center gap-2">
           {/* More filters toggle */}
           <button
             onClick={() => setShowFilters(!showFilters)}
@@ -762,6 +948,14 @@ export function TimeSheetView() {
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white text-sm font-medium transition-colors"
           >
             <FileText size={16} />
+          </button>
+          
+          <button
+            onClick={handleOpenCreateModal}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-sm font-medium transition-colors"
+            title="Crear registro de TimeSheet"
+          >
+            <Plus size={16} />
           </button>
         </div>
       </div>
@@ -915,7 +1109,18 @@ export function TimeSheetView() {
                   >
                     {/* Fecha */}
                     <td className="px-3 py-1.5 text-sm text-white whitespace-nowrap">
-                      {formatDate(entry.workDate)}
+                      {isEditing ? (
+                        <input
+                          type="date"
+                          value={editData?.workDate ?? entry.workDate}
+                          onChange={(e) => handleEditDateChange(entry.id, e.target.value)}
+                          onKeyDown={(e) => handleKeyDown(e, entry.id)}
+                          className="bg-gray-800 border border-orange-500 rounded px-2 py-0.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      ) : (
+                        formatDate(entry.workDate)
+                      )}
                     </td>
                     {/* Proyecto */}
                     <td className="px-3 py-1.5 text-sm">
@@ -1193,6 +1398,89 @@ export function TimeSheetView() {
                 className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white text-sm font-medium transition-colors"
               >
                 Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create TimeSheet Modal - Search Based */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-900 rounded-lg border border-gray-700 p-6 w-full max-w-lg shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                <Plus size={20} className="text-orange-400" />
+                Crear TimeSheet
+              </h3>
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="p-1 rounded hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            {/* Search Input */}
+            <div className="mb-4">
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={taskSearchQuery}
+                onChange={(e) => handleTaskSearch(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
+                placeholder="Buscar por cliente, proyecto, ticket o tarea..."
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                autoFocus
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Usa ↑↓ para navegar, Enter para seleccionar, Esc para cerrar
+              </p>
+            </div>
+            
+            {/* Task Cards Results */}
+            <div className="max-h-80 overflow-y-auto space-y-2">
+              {taskSearchResults.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-4 italic">
+                  No se encontraron tareas
+                </p>
+              ) : (
+                taskSearchResults.map((task, idx) => (
+                  <button
+                    key={task.id}
+                    onClick={() => handleQuickCreateTimesheet(task)}
+                    className={`w-full text-left p-3 rounded-lg border transition-colors ${
+                      idx === selectedSearchIndex
+                        ? 'bg-orange-600/20 border-orange-500'
+                        : 'bg-gray-800 border-gray-700 hover:bg-gray-750 hover:border-gray-600'
+                    }`}
+                  >
+                    {/* Primary: Ticket/Phase + Title */}
+                    <div className="flex items-start gap-2">
+                      {task.ticketPhaseCode && (
+                        <span className="shrink-0 px-2 py-0.5 bg-blue-600/30 text-blue-400 text-xs font-mono rounded">
+                          {task.ticketPhaseCode}
+                        </span>
+                      )}
+                      <span className="text-white font-medium text-sm line-clamp-2">
+                        {task.title}
+                      </span>
+                    </div>
+                    {/* Secondary: Client → Project */}
+                    <div className="mt-1.5 text-xs text-gray-500">
+                      {task.clientName} → {task.projectName}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+            
+            <div className="mt-4 pt-4 border-t border-gray-700 flex justify-end">
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white text-sm font-medium transition-colors"
+              >
+                Cancelar
               </button>
             </div>
           </div>
