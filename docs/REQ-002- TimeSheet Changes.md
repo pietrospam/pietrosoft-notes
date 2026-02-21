@@ -147,32 +147,53 @@ La tabla de notas en PostgreSQL mantiene su estructura actual. El campo `type = 
 #### 4.6.1 Activación
 - Doble click sobre una fila activa el modo de edición inline
 - Solo las columnas de **Horas** y **Estado** se vuelven editables
+- Múltiples filas pueden estar en modo edición simultáneamente
+- Una fila permanece editable hasta que el usuario guarde o descarte explícitamente
 
 #### 4.6.2 Campos editables
-- **Horas**: Input numérico con step 0.5
-- **Estado**: Selector dropdown con opciones Borrador/Imputado
+- **Horas**: Input de texto simple (sin flechas de incremento/decremento)
+- **Estado**: Badge clickeable que alterna entre Borrador → Imputado → Borrador infinitamente
 
 #### 4.6.3 Acciones en modo edición
-- El ícono de lápiz (✏️) cambia a ícono de guardar (💾)
+- El ícono de lápiz (✏️) cambia a ícono de guardar (💾) y cancelar (X)
 - Al presionar guardar:
   - Se persisten los cambios via API
   - La fila vuelve a estado de solo lectura
   - Se muestra toast de confirmación
-
-#### 4.6.4 Cancelación
-- Click fuera de la fila o presionar Escape cancela la edición
-- Los valores vuelven a su estado original sin guardar
+- Al presionar cancelar:
+  - Los valores vuelven a su estado original sin guardar
+  - La fila vuelve a estado de solo lectura
 
 ### 4.7 Estilos visuales de la grilla
 
-#### 4.7.1 Eliminación de subtotales
-- Ya no se muestran filas de subtotal por fecha
-- El total general se mantiene en el footer de la tabla
+#### 4.7.1 Filas compactas
+- Reducir padding vertical entre filas para mostrar más información
+- Espaciado optimizado para visualización de muchos registros
 
 #### 4.7.2 Colores alternados por día
 - Las filas del mismo día comparten el mismo color de fondo
 - Los días se alternan entre dos colores para diferenciar visualmente
 - Ejemplo: Día 1 → gris oscuro, Día 2 → gris medio, Día 3 → gris oscuro, etc.
+
+### 4.8 Filtros permanentes y Calendario
+
+#### 4.8.1 Selector de mes (siempre visible)
+- Se muestra siempre en la parte superior de la vista
+- Por defecto selecciona el mes actual
+- Al cambiar el mes, se filtran los registros de ese mes
+- El calendario también se actualiza para mostrar el mes seleccionado
+
+#### 4.8.2 Calendario visual de horas
+- Se muestra junto a los filtros en la parte superior
+- La semana comienza en **Lunes**
+- Muestra todos los días del mes seleccionado
+- Colores según horas imputadas:
+  | Horas del día | Color |
+  |---------------|-------|
+  | >= 8 (configurable) | Verde |
+  | > 0 y < 8 | Amarillo |
+  | 0 | Sin color (default) |
+- Permite visualizar rápidamente el estado de imputación del mes
 
 ---
 
