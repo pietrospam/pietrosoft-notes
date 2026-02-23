@@ -9,7 +9,7 @@ import { TimeSheetFields } from './TimeSheetFields';
 import { AttachmentsPanel } from './AttachmentsPanel';
 import { Toast } from './Toast';
 import { UnsavedChangesModal } from './UnsavedChangesModal';
-import { Trash2, Save, Archive, ArchiveRestore, RotateCcw, Circle } from 'lucide-react';
+import { Trash2, Save, Archive, ArchiveRestore, RotateCcw, Circle, Pencil } from 'lucide-react';
 import type { Note, TaskNote, ConnectionNote, TimeSheetNote, AttachmentMeta } from '@/lib/types';
 
 export function EditorPanel() {
@@ -34,7 +34,9 @@ export function EditorPanel() {
   
   const [title, setTitle] = useState('');
   const [toast, setToast] = useState<{ message: string; action?: { label: string; onClick: () => void } } | null>(null);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
   const selectedNoteId = selectedNote?.id;
+  const titleInputRef = useRef<HTMLInputElement>(null);
   
   // Track pending changes
   const pendingChangesRef = useRef<Partial<Note>>({});
@@ -55,6 +57,19 @@ export function EditorPanel() {
       // For new notes, keep isDirty true so save button is enabled
     }
   }, [selectedNoteId, selectedNote, setLastSaved, setIsDirty]);
+
+  // Auto-select title text when creating a new note
+  useEffect(() => {
+    if (isNewNote && titleInputRef.current) {
+      // Small timeout to ensure the input is rendered and focused
+      const timer = setTimeout(() => {
+        titleInputRef.current?.focus();
+        titleInputRef.current?.select();
+        setIsEditingTitle(true);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isNewNote, selectedNoteId]);
 
   // Cleanup auto-save timer on unmount
   useEffect(() => {
@@ -264,13 +279,34 @@ export function EditorPanel() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
         {/* Title */}
-        <input
-          type="text"
-          value={title}
-          onChange={(e) => handleTitleChange(e.target.value)}
-          placeholder="Note title..."
-          className="w-full text-2xl font-bold bg-transparent border-none outline-none text-white placeholder-gray-600 mb-4"
-        />
+        <div className="flex items-center gap-2 mb-4 group">
+          <input
+            ref={titleInputRef}
+            type="text"
+            value={title}
+            onChange={(e) => handleTitleChange(e.target.value)}
+            onFocus={() => setIsEditingTitle(true)}
+            onBlur={() => setIsEditingTitle(false)}
+            placeholder="Título de la nota..."
+            className={`flex-1 text-2xl font-bold bg-transparent border-b-2 outline-none text-white placeholder-gray-600 py-1 transition-colors ${
+              isEditingTitle 
+                ? 'border-blue-500' 
+                : 'border-transparent hover:border-gray-700'
+            }`}
+          />
+          {!isNewNote && !isEditingTitle && (
+            <button
+              onClick={() => {
+                titleInputRef.current?.focus();
+                titleInputRef.current?.select();
+              }}
+              className="p-1.5 text-gray-600 hover:text-gray-400 hover:bg-gray-800 rounded transition-colors opacity-0 group-hover:opacity-100"
+              title="Editar título"
+            >
+              <Pencil size={16} />
+            </button>
+          )}
+        </div>
 
         {/* Editor */}
         <TipTapEditor

@@ -81,3 +81,19 @@ RESOLUCION : Se actualizó el metadata en layout.tsx para mostrar "Bitácora" co
 ESTADO : RESUELTO
 DESCRIPCION : Cuando agrego un timesheet desde el popup dentro de una tarea, la descripción aparentemente no se guarda. Al volver a abrir el popup para editar un timesheet existente (mismo día), no recupera la descripción que había ingresado anteriormente.
 RESOLUCION : El campo `description` de timesheet se almacena en el campo `content` de la base de datos. Se agregó el mapeo en notes-repo.ts tanto en `createNote` como en `updateNote` para guardar `description` → `content`. 
+
+
+## Issue 12: Comportamiento extraño al editar el título de una nota nueva
+ESTADO : RESUELTO
+DESCRIPCION : Cuando se crea una nota nueva, el título por defecto (ej: "Nueva Nota", "Nueva Tarea") queda visible y parece texto estático en lugar de un campo editable. No es obvio que se puede hacer click para modificarlo. El campo de título no tiene indicación visual de que es editable.
+SOLUCION PROPUESTA: 
+1. Agregar un ícono de "lápiz" junto al título que indique que es editable
+2. Cuando la nota es nueva (isNewNote), seleccionar automáticamente el texto del título para facilitar la edición
+3. Mejorar el feedback visual del campo de título (mostrar borde o fondo al hacer hover/focus)
+
+RESOLUCION : Se implementó en EditorPanel.tsx:
+1. Se agregó ícono de lápiz (Pencil de lucide-react) que aparece al hacer hover sobre el título en notas existentes
+2. Cuando se crea una nota nueva (isNewNote), se auto-selecciona el texto del título para facilitar la edición inmediata
+3. Se mejoró el feedback visual: borde inferior azul cuando está en foco, borde gris al hover, transparente en estado normal
+4. Se agregó placeholder en español "Título de la nota..."
+
