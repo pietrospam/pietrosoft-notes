@@ -3,10 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "bash scripts/sync-attachments.sh && next dev",
+    "dev:nosync": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "sync": "bash scripts/sync-attachments.sh",
+    "web": "bash scripts/redeploy.sh"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

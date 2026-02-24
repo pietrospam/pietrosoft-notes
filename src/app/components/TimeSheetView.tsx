@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Clock, Trash2, Download, ChevronUp, ChevronDown, AlertCircle, X, CheckSquare, Folder, FileText, Filter, XCircle, Save, Plus } from 'lucide-react';
+import { Clock, Trash2, Download, ChevronUp, ChevronDown, AlertCircle, X, Folder, FileText, Filter, XCircle, Save, Plus } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Toast } from './Toast';
+import { TaskEditorModal } from './TaskEditorModal';
 import type { TaskNote, Project } from '@/lib/types';
 
 interface TimeSheetGridEntry {
@@ -66,9 +67,17 @@ export function TimeSheetView() {
   // Toast
   const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' } | null>(null);
   
-  // Task detail popup
+  // Task detail popup (tooltip style)
   const [taskPopup, setTaskPopup] = useState<TaskDetail | null>(null);
+  const [taskPopupPosition, setTaskPopupPosition] = useState<{ x: number; y: number } | null>(null);
   const [loadingTask, setLoadingTask] = useState(false);
+  
+  // Task editor modal (full edit)
+  const [editTaskId, setEditTaskId] = useState<string | null>(null);
+  
+  // Hover timeout for task popup
+  const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const taskPopupRef = useRef<HTMLDivElement>(null);
   
   // Create TimeSheet modal state - search based
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -380,27 +389,61 @@ export function TimeSheetView() {
 
   // Open task detail popup
   const handleTaskClick = async (entry: TimeSheetGridEntry) => {
-    setLoadingTask(true);
-    try {
-      const res = await fetch(`/api/notes/${entry.taskId}`);
-      if (res.ok) {
-        const task = await res.json();
-        setTaskPopup({
-          id: task.id,
-          title: task.title,
-          status: task.status || 'NONE',
-          priority: task.priority || 'MEDIUM',
-          contentText: task.contentText || '',
-          projectName: entry.projectName,
-          clientName: entry.clientName,
-        });
-      }
-    } catch (err) {
-      console.error('Error fetching task:', err);
-      setToast({ message: 'Error al cargar tarea', type: 'error' });
-    } finally {
-      setLoadingTask(false);
+    // Clear any hover timeout
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
     }
+    setTaskPopup(null);
+    
+    // Open task in full editor modal
+    setEditTaskId(entry.taskId);
+  };
+
+  // Show task popup on hover (after 1 second)
+  const handleTaskHoverStart = async (entry: TimeSheetGridEntry, event: React.MouseEvent) => {
+    // Store position for popup
+    const rect = (event.target as HTMLElement).getBoundingClientRect();
+    setTaskPopupPosition({ x: rect.left, y: rect.bottom + 8 });
+    
+    // Clear any existing timeout
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+    }
+    
+    // Set timeout to show popup after 1 second
+    hoverTimeoutRef.current = setTimeout(async () => {
+      setLoadingTask(true);
+      try {
+        const res = await fetch(`/api/notes/${entry.taskId}`);
+        if (res.ok) {
+          const task = await res.json();
+          setTaskPopup({
+            id: task.id,
+            title: task.title,
+            status: task.status || 'NONE',
+            priority: task.priority || 'MEDIUM',
+            contentText: task.contentText || '',
+            projectName: entry.projectName,
+            clientName: entry.clientName,
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching task:', err);
+      } finally {
+        setLoadingTask(false);
+      }
+    }, 1000);
+  };
+
+  // Cancel hover timeout and close popup immediately
+  const handleTaskHoverEnd = () => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+    setTaskPopup(null);
+    setTaskPopupPosition(null);
   };
 
   // Open project detail popup
@@ -1137,9 +1180,11 @@ export function TimeSheetView() {
                     <td className="px-3 py-1.5 text-sm">
                       <button
                         onClick={() => handleTaskClick(entry)}
+                        onMouseEnter={(e) => handleTaskHoverStart(entry, e)}
+                        onMouseLeave={handleTaskHoverEnd}
                         disabled={loadingTask}
                         className="text-gray-300 hover:text-blue-400 hover:underline transition-colors cursor-pointer disabled:cursor-wait"
-                        title="Ver detalles de la tarea"
+                        title="Click para editar | Hover 1s para info"
                       >
                         {entry.taskCode || entry.taskTitle.substring(0, 12)}
                       </button>
@@ -1261,96 +1306,62 @@ export function TimeSheetView() {
         </div>
       )}
 
-      {/* Task Detail Popup */}
-      {taskPopup && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-gray-900 rounded-lg border border-gray-700 p-6 w-full max-w-md shadow-xl">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <CheckSquare size={20} className="text-blue-400" />
-                <h3 className="text-lg font-semibold text-white">Detalle de Tarea</h3>
-              </div>
-              <button
-                onClick={() => setTaskPopup(null)}
-                className="text-gray-400 hover:text-white transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs text-gray-500 uppercase">Título</label>
-                <p className="text-white">{taskPopup.title}</p>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-gray-500 uppercase">Estado</label>
-                  <p className="text-gray-300">
-                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                      taskPopup.status === 'COMPLETED' ? 'bg-green-600' :
-                      taskPopup.status === 'IN_PROGRESS' ? 'bg-blue-600' :
-                      taskPopup.status === 'CANCELLED' ? 'bg-red-600' :
-                      'bg-gray-600'
-                    }`}>
-                      {taskPopup.status === 'PENDING' ? 'Pendiente' :
-                       taskPopup.status === 'IN_PROGRESS' ? 'En Progreso' :
-                       taskPopup.status === 'COMPLETED' ? 'Completado' :
-                       taskPopup.status === 'CANCELLED' ? 'Cancelado' :
-                       taskPopup.status}
-                    </span>
-                  </p>
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500 uppercase">Prioridad</label>
-                  <p className="text-gray-300">
-                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                      taskPopup.priority === 'CRITICAL' ? 'bg-red-600' :
-                      taskPopup.priority === 'HIGH' ? 'bg-orange-600' :
-                      taskPopup.priority === 'MEDIUM' ? 'bg-yellow-600' :
-                      'bg-gray-600'
-                    }`}>
-                      {taskPopup.priority === 'LOW' ? 'Baja' :
-                       taskPopup.priority === 'MEDIUM' ? 'Media' :
-                       taskPopup.priority === 'HIGH' ? 'Alta' :
-                       taskPopup.priority === 'CRITICAL' ? 'Crítica' :
-                       taskPopup.priority}
-                    </span>
-                  </p>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-gray-500 uppercase">Cliente</label>
-                  <p className="text-gray-300">{taskPopup.clientName || '-'}</p>
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500 uppercase">Proyecto</label>
-                  <p className="text-gray-300">{taskPopup.projectName || '-'}</p>
-                </div>
-              </div>
-              
-              {taskPopup.contentText && (
-                <div>
-                  <label className="text-xs text-gray-500 uppercase">Descripción</label>
-                  <p className="text-gray-300 text-sm whitespace-pre-wrap max-h-32 overflow-y-auto">
-                    {taskPopup.contentText}
-                  </p>
-                </div>
-              )}
-            </div>
-            
-            <div className="mt-6 flex justify-end">
-              <button
-                onClick={() => setTaskPopup(null)}
-                className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white text-sm font-medium transition-colors"
-              >
-                Cerrar
-              </button>
-            </div>
+      {/* Task Detail Tooltip (appears on hover) */}
+      {taskPopup && taskPopupPosition && (
+        <div
+          ref={taskPopupRef}
+          className="fixed z-50 bg-gray-900 rounded-lg border border-gray-700 shadow-xl p-3 max-w-xl"
+          style={{
+            left: Math.min(taskPopupPosition.x, window.innerWidth - 500),
+            top: taskPopupPosition.y,
+          }}
+          onMouseEnter={() => {
+            // Keep popup open if mouse enters it
+            if (hoverTimeoutRef.current) {
+              clearTimeout(hoverTimeoutRef.current);
+            }
+          }}
+          onMouseLeave={handleTaskHoverEnd}
+        >
+          {/* Header row: Title + badges */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-white font-medium truncate max-w-[200px]" title={taskPopup.title}>
+              {taskPopup.title}
+            </span>
+            <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+              taskPopup.status === 'COMPLETED' ? 'bg-green-600' :
+              taskPopup.status === 'IN_PROGRESS' ? 'bg-blue-600' :
+              taskPopup.status === 'CANCELLED' ? 'bg-red-600' :
+              'bg-gray-600'
+            }`}>
+              {taskPopup.status === 'PENDING' ? 'Pendiente' :
+               taskPopup.status === 'IN_PROGRESS' ? 'En Progreso' :
+               taskPopup.status === 'COMPLETED' ? 'Completado' :
+               taskPopup.status === 'CANCELLED' ? 'Cancelado' :
+               taskPopup.status}
+            </span>
+            <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+              taskPopup.priority === 'CRITICAL' ? 'bg-red-600' :
+              taskPopup.priority === 'HIGH' ? 'bg-orange-600' :
+              taskPopup.priority === 'MEDIUM' ? 'bg-yellow-600' :
+              'bg-gray-600'
+            }`}>
+              {taskPopup.priority === 'LOW' ? 'Baja' :
+               taskPopup.priority === 'MEDIUM' ? 'Media' :
+               taskPopup.priority === 'HIGH' ? 'Alta' :
+               taskPopup.priority === 'CRITICAL' ? 'Crítica' :
+               taskPopup.priority}
+            </span>
+            <span className="text-gray-400 text-xs">
+              {taskPopup.clientName || '-'} / {taskPopup.projectName || '-'}
+            </span>
           </div>
+          {/* Description if exists */}
+          {taskPopup.contentText && (
+            <p className="text-gray-400 text-xs mt-2 line-clamp-2">
+              {taskPopup.contentText}
+            </p>
+          )}
         </div>
       )}
 
@@ -1492,6 +1503,18 @@ export function TimeSheetView() {
         <Toast
           message={toast.message}
           onClose={() => setToast(null)}
+        />
+      )}
+
+      {/* Task Editor Modal */}
+      {editTaskId && (
+        <TaskEditorModal
+          taskId={editTaskId}
+          onClose={() => setEditTaskId(null)}
+          onSaved={() => {
+            // Refresh timesheets to reflect any task changes
+            refreshNotes();
+          }}
         />
       )}
     </div>

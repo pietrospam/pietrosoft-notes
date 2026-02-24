@@ -97,3 +97,63 @@ RESOLUCION : Se implementó en EditorPanel.tsx:
 3. Se mejoró el feedback visual: borde inferior azul cuando está en foco, borde gris al hover, transparente en estado normal
 4. Se agregó placeholder en español "Título de la nota..."
 
+
+## Issue 13: No se puede editar el nombre de una nota nueva (backspace no funciona)
+ESTADO : RESUELTO
+DESCRIPCION : Al crear una nota nueva, el texto "Nueva Nota" se selecciona automáticamente pero al presionar backspace no se borra el texto. Cualquier tecla presionada no modifica el título de la nota.
+CAUSA : El useEffect que sincroniza el estado local del título con selectedNote tenía como dependencia el objeto `selectedNote`. Como `selectedNote` se deriva del array de notas del estado global, cada vez que algo cambiaba en el contexto (cualquier cambio de estado), React creaba una nueva referencia del objeto aunque el contenido fuera el mismo. Esto disparaba el useEffect que ejecutaba `setTitle(selectedNote.title)`, sobrescribiendo cualquier cambio que el usuario intentara hacer.
+RESOLUCION : Se agregó un ref (`prevNoteIdRef`) para trackear el ID de la nota anterior. Ahora el useEffect solo resetea el título cuando realmente cambia de nota (el ID es diferente), no simplemente cuando cambia la referencia del objeto. Esto permite que el usuario edite el título sin que sea sobrescrito por el useEffect.
+
+
+## Issue 14: Enter en título debe mover foco al body, Ctrl+Enter para salto de línea
+ESTADO : RESUELTO
+DESCRIPCION : Cuando se está editando el título de una nota/tarea:
+- Al presionar Enter, debe mover el foco al body (editor TipTap)
+- Para generar un salto de línea en el título, se debe usar Ctrl+Enter
+SOLUCION PROPUESTA: Agregar un handler onKeyDown en el input del título que:
+1. Si es Enter solo (sin Ctrl), prevenir default y hacer focus al editor TipTap
+2. Si es Ctrl+Enter, permitir el comportamiento normal (salto de línea si aplica, aunque en input type="text" no aplica)
+RESOLUCION : Se implementó:
+1. Se modificó TipTapEditor para usar forwardRef y exponer un método `focus()` via useImperativeHandle
+2. Se agregó una ref al editor en EditorPanel
+3. Se agregó handler `handleTitleKeyDown` que al presionar Enter (sin Ctrl) hace focus al editor TipTap
+4. Ctrl+Enter no tiene efecto especial ya que input type="text" no soporta saltos de línea
+
+
+## Issue 15: Auto-save no respeta configuración de usuario
+ESTADO : RESUELTO
+DESCRIPCION : Teniendo el auto-guardado desactivado en la configuración, la aplicación sigue guardando automáticamente las notas en los modales (TaskEditorModal y BaseEditorModal).
+CAUSA : Los componentes TaskEditorModal.tsx y BaseEditorModal.tsx tenían implementación de scheduleAutoSave() pero no consultaban el valor de autoSaveEnabled del contexto. Solo EditorPanel.tsx verificaba correctamente este flag.
+RESOLUCION : Se corrigieron ambos componentes:
+1. Se agregó `autoSaveEnabled` al destructuring de `useApp()` en ambos modales
+2. Se agregó la verificación `if (!autoSaveEnabled) return;` al inicio de scheduleAutoSave()
+3. Se agregó `autoSaveEnabled` como dependencia del useCallback
+
+
+## Issue 16: No hay confirmación al salir con cambios sin guardar en modales
+ESTADO : RESUELTO
+DESCRIPCION : Si hay cambios sin guardar en una nota, tarea o conexión e intento salir/cerrar el modal, se guarda automáticamente sin preguntar al usuario. Debería mostrar un modal con opciones: Cancelar, Descartar cambios, o Guardar y salir.
+CAUSA : Los componentes TaskEditorModal y BaseEditorModal hacían auto-save automático al cerrar si había cambios pendientes, sin dar al usuario la opción de descartar.
+RESOLUCION : Se modificaron ambos componentes:
+1. Se agregó estado `showUnsavedModal` para controlar la visibilidad del modal de confirmación
+2. Se cambió `handleClose()` para mostrar el modal si hay cambios sin guardar
+3. Se agregaron handlers `handleDiscardAndClose()` y `handleSaveAndClose()`
+4. Se agregó el componente `UnsavedChangesModal` (ya existente) al JSX de ambos modales
+5. El modal ofrece 3 opciones: Descartar (cierra sin guardar), Cancelar (vuelve al editor), Guardar (guarda y cierra)
+
+OBSERVACION: Al seleccionar otra nota desde la lista, tampoco mostraba el modal y se perdían los cambios.
+RESOLUCION ADICIONAL: Se modificó NotesList.tsx para usar `confirmNavigation()` en `handleSelectNote()`:
+1. Se agregó `confirmNavigation` al destructuring de `useApp()`
+2. Se modificó `handleSelectNote` para verificar cambios sin guardar antes de cambiar de nota
+3. Si hay cambios sin guardar, se muestra el modal existente de UnsavedChangesModal (manejado por AppContext)
+
+OBSERVACION 2: El fix de NotesList no funciona. Se puede seleccionar otra nota sin que aparezca el modal y se pierden los cambios.
+CAUSA RAÍZ: La app ya no usa EditorPanel para editar notas inline. Usa TaskEditorModal, NoteEditorModal y ConnectionEditorModal en modo `inline=true`. Estos modales tienen su propio estado `isDirty` LOCAL que nunca se sincronizaba con el `state.isDirty` GLOBAL de AppContext. Por eso `confirmNavigation` siempre veía `isDirty: false`.
+RESOLUCION FINAL: Se modificaron BaseEditorModal.tsx y TaskEditorModal.tsx para sincronizar el estado `isDirty` local con el contexto global cuando están en modo inline:
+1. Se renombró `setIsDirty` a `setIsDirtyLocal` para el estado local
+2. Se agregó `setGlobalIsDirty` del contexto (renombrado de `setIsDirty`)
+3. Se creó una nueva función `setIsDirty` wrapper que:
+   - Actualiza el estado local siempre
+   - Actualiza el estado global solo si `inline=true`
+4. Ahora cuando el usuario edita en modo inline, el estado dirty se propaga al contexto global y `confirmNavigation` lo detecta correctamente
+ESTADO: RESUELTO

@@ -2,8 +2,11 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { FileText, CheckSquare, Link, Clock, Plus, X } from 'lucide-react';
+import { FileText, CheckSquare, Link, Clock, Plus, X, Star } from 'lucide-react';
 import { TimeSheetModal } from './TimeSheetModal';
+import { TaskEditorModal } from './TaskEditorModal';
+import { NoteEditorModal } from './NoteEditorModal';
+import { ConnectionEditorModal } from './ConnectionEditorModal';
 import { Toast } from './Toast';
 import type { NoteType, TaskNote } from '@/lib/types';
 
@@ -57,16 +60,19 @@ export function NotesList() {
   const { 
     filteredNotes, 
     selectedNoteId, 
-    setSelectedNoteId, 
+    setSelectedNoteId,
     isLoading, 
     currentView,
     activeTypeFilters,
     toggleTypeFilter,
-    confirmNavigation,
     selectedClientId,
     setSelectedClientId,
     clients,
-    createNote,
+    refreshNotes,
+    editorModal,
+    openEditorModal,
+    closeEditorModal,
+    confirmNavigation,
   } = useApp();
   
   const listRef = useRef<HTMLDivElement>(null);
@@ -96,23 +102,20 @@ export function NotesList() {
     }
   }, [showCreateDropdown]);
 
-  // Handle creating a note
+  // Handle creating a note - opens popup modal
   const handleCreateNote = useCallback(async (type: NoteType, clientId?: string) => {
     // If a specific client was provided (from selector), select it first
     if (clientId) {
       setSelectedClientId(clientId);
-      // Small delay to let state update
-      await new Promise(r => setTimeout(r, 50));
     }
     
-    confirmNavigation(async () => {
-      await createNote(type);
-    });
+    // Open modal in create mode (popup)
+    openEditorModal(type);
     
     setShowCreateDropdown(false);
     setShowClientSelector(false);
     setPendingNoteType(null);
-  }, [confirmNavigation, createNote, setSelectedClientId]);
+  }, [openEditorModal, setSelectedClientId]);
 
   // Handle type selection from dropdown
   const handleTypeSelect = useCallback((type: NoteType) => {
@@ -135,15 +138,20 @@ export function NotesList() {
     }
   }, [pendingNoteType, handleCreateNote]);
 
-  // Handle note selection with dirty check
+  // Handle note selection - check for unsaved changes first
   const handleSelectNote = useCallback((noteId: string) => {
+    // Don't do anything if selecting the same note
     if (noteId === selectedNoteId) return;
-    confirmNavigation(() => setSelectedNoteId(noteId));
-  }, [selectedNoteId, confirmNavigation, setSelectedNoteId]);
+    
+    confirmNavigation(() => {
+      setSelectedNoteId(noteId);
+    });
+  }, [setSelectedNoteId, selectedNoteId, confirmNavigation]);
 
   // Keyboard navigation
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (currentView === 'config') return;
+    if (editorModal.isOpen) return; // Don't navigate when modal is open
     
     // Only handle if not typing in an input/textarea
     const target = e.target as HTMLElement;
@@ -174,7 +182,7 @@ export function NotesList() {
         }
       }
     }
-  }, [filteredNotes, selectedNoteId, handleSelectNote, currentView]);
+  }, [filteredNotes, selectedNoteId, handleSelectNote, currentView, editorModal.isOpen]);
 
   useEffect(() => {
     document.addEventListener('keydown', handleKeyDown);
@@ -329,6 +337,10 @@ export function NotesList() {
                       <h3 className="text-sm font-medium text-white truncate flex-1">
                         {note.title || 'Sin título'}
                       </h3>
+                      {/* REQ-006: Favorite indicator */}
+                      {note.isFavorite && (
+                        <Star size={14} className="text-yellow-400 fill-current flex-shrink-0" />
+                      )}
                       {/* Quick TimeSheet button for tasks */}
                       {isSavedTask && (
                         <button
@@ -355,6 +367,29 @@ export function NotesList() {
             );
           })}
         </div>
+      )}
+
+      {/* Editor Modals - Only for CREATE mode (popups) */}
+      {editorModal.isOpen && editorModal.mode === 'create' && editorModal.noteType === 'task' && (
+        <TaskEditorModal
+          taskId={undefined}
+          onClose={closeEditorModal}
+          onSaved={() => refreshNotes()}
+        />
+      )}
+      {editorModal.isOpen && editorModal.mode === 'create' && editorModal.noteType === 'general' && (
+        <NoteEditorModal
+          noteId={undefined}
+          onClose={closeEditorModal}
+          onSaved={() => refreshNotes()}
+        />
+      )}
+      {editorModal.isOpen && editorModal.mode === 'create' && editorModal.noteType === 'connection' && (
+        <ConnectionEditorModal
+          noteId={undefined}
+          onClose={closeEditorModal}
+          onSaved={() => refreshNotes()}
+        />
       )}
 
       {/* TimeSheet Modal for quick access */}

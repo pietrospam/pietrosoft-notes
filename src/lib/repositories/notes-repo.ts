@@ -89,18 +89,32 @@ const timesheetStateFromDb = (state: PrismaTimesheetState | null): TimeSheetStat
 // Prisma to Domain Converter
 // ============================================================================
 
-type PrismaNote = Prisma.NoteGetPayload<object>;
+type PrismaNote = Prisma.NoteGetPayload<{ include: { attachmentFiles: true } }>;
 
 function toNote(p: PrismaNote): Note {
+  // REQ-007: Prefer attachments from DB, fall back to JSON field for migration
+  const dbAttachments: AttachmentMeta[] = (p.attachmentFiles || []).map(a => ({
+    id: a.id,
+    filename: a.filename,
+    originalName: a.originalName,
+    mimeType: a.mimeType,
+    size: a.size,
+    createdAt: a.createdAt.toISOString(),
+  }));
+  
+  const jsonAttachments = (p.attachments as unknown as AttachmentMeta[]) || [];
+  const attachments = dbAttachments.length > 0 ? dbAttachments : jsonAttachments;
+  
   const base = {
     id: p.id,
     title: p.title,
     contentJson: p.contentJson as object | null,
     contentText: p.content || '',
-    attachments: (p.attachments as unknown as AttachmentMeta[]) || [],
+    attachments,
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
     archivedAt: p.archived ? p.updatedAt.toISOString() : undefined,
+    isFavorite: p.isFavorite ?? false,
   };
 
   const type = noteTypeFromDb[p.type];
@@ -120,9 +134,9 @@ function toNote(p: PrismaNote): Note {
         type: 'task',
         projectId: p.projectId || '',
         clientId: p.clientId ?? undefined,
-        ticketPhaseCode: '',
-        shortDescription: '',
-        budgetHours: undefined,
+        ticketPhaseCode: p.taskTicketPhaseCode || '',
+        shortDescription: p.taskShortDescription || '',
+        budgetHours: p.taskBudgetHours ?? undefined,
         status: taskStatusFromDb(p.taskStatus),
         priority: taskPriorityFromDb(p.taskPriority),
         dueDate: p.taskDueDate?.toISOString(),
@@ -201,6 +215,7 @@ export async function listNotes(options: ListNotesOptions = {}): Promise<Note[]>
   const notes = await prisma.note.findMany({
     where,
     orderBy: { updatedAt: 'desc' },
+    include: { attachmentFiles: true }, // REQ-007
   });
 
   return notes.map(toNote);
@@ -211,7 +226,10 @@ export async function listNotes(options: ListNotesOptions = {}): Promise<Note[]>
 // ============================================================================
 
 export async function getNote(id: string): Promise<Note | null> {
-  const note = await prisma.note.findUnique({ where: { id } });
+  const note = await prisma.note.findUnique({ 
+    where: { id },
+    include: { attachmentFiles: true }, // REQ-007
+  });
   return note ? toNote(note) : null;
 }
 
@@ -246,6 +264,9 @@ export async function createNote<T extends Note>(input: CreateNoteInput<T>): Pro
     data.taskStatus = taskStatusToDb((taskInput.status as TaskStatus) || 'PENDING');
     data.taskPriority = taskPriorityToDb((taskInput.priority as TaskPriority) || 'MEDIUM');
     data.taskDueDate = taskInput.dueDate ? new Date(taskInput.dueDate as string) : null;
+    data.taskTicketPhaseCode = (taskInput.ticketPhaseCode as string) || null;
+    data.taskShortDescription = (taskInput.shortDescription as string) || null;
+    data.taskBudgetHours = (taskInput.budgetHours as number) || null;
   }
 
   // Connection-specific fields
@@ -268,7 +289,10 @@ export async function createNote<T extends Note>(input: CreateNoteInput<T>): Pro
     }
   }
 
-  const created = await prisma.note.create({ data });
+  const created = await prisma.note.create({ 
+    data,
+    include: { attachmentFiles: true }, // REQ-007
+  });
   return toNote(created) as T;
 }
 
@@ -314,6 +338,15 @@ export async function updateNote<T extends Note>(
       ? new Date(anyInput.dueDate as string) 
       : null;
   }
+  if ('ticketPhaseCode' in input) {
+    data.taskTicketPhaseCode = (anyInput.ticketPhaseCode as string) || null;
+  }
+  if ('shortDescription' in input) {
+    data.taskShortDescription = (anyInput.shortDescription as string) || null;
+  }
+  if ('budgetHours' in input) {
+    data.taskBudgetHours = (anyInput.budgetHours as number) || null;
+  }
 
   // Connection-specific fields
   if ('url' in input) {
@@ -353,7 +386,16 @@ export async function updateNote<T extends Note>(
     data.attachments = anyInput.attachments as Prisma.InputJsonValue;
   }
 
-  const updated = await prisma.note.update({ where: { id }, data });
+  // REQ-006: Favorites field
+  if ('isFavorite' in input) {
+    data.isFavorite = anyInput.isFavorite as boolean;
+  }
+
+  const updated = await prisma.note.update({ 
+    where: { id }, 
+    data,
+    include: { attachmentFiles: true }, // REQ-007
+  });
   return toNote(updated) as T;
 }
 
@@ -379,6 +421,7 @@ export async function archiveNote(id: string): Promise<Note | null> {
     const updated = await prisma.note.update({
       where: { id },
       data: { archived: true },
+      include: { attachmentFiles: true }, // REQ-007
     });
     return toNote(updated);
   } catch {
@@ -391,6 +434,7 @@ export async function restoreNote(id: string): Promise<Note | null> {
     const updated = await prisma.note.update({
       where: { id },
       data: { archived: false },
+      include: { attachmentFiles: true }, // REQ-007
     });
     return toNote(updated);
   } catch {
@@ -399,7 +443,8 @@ export async function restoreNote(id: string): Promise<Note | null> {
 }
 
 // ============================================================================
-// Attachments
+// Attachments (DEPRECATED - REQ-007 uses attachments table directly)
+// These functions work on the JSON field for backward compatibility
 // ============================================================================
 
 export async function addAttachment(noteId: string, attachment: AttachmentMeta): Promise<Note | null> {
@@ -412,6 +457,7 @@ export async function addAttachment(noteId: string, attachment: AttachmentMeta):
   const updated = await prisma.note.update({
     where: { id: noteId },
     data: { attachments: attachments as unknown as Prisma.InputJsonValue },
+    include: { attachmentFiles: true }, // REQ-007
   });
   return toNote(updated);
 }
@@ -426,6 +472,7 @@ export async function removeAttachment(noteId: string, attachmentId: string): Pr
   const updated = await prisma.note.update({
     where: { id: noteId },
     data: { attachments: filtered as unknown as Prisma.InputJsonValue },
+    include: { attachmentFiles: true }, // REQ-007
   });
   return toNote(updated);
 }
@@ -467,6 +514,7 @@ export async function exportTimesheets(options: TimesheetExportOptions = {}): Pr
   const notes = await prisma.note.findMany({
     where,
     orderBy: { timesheetDate: 'desc' },
+    include: { attachmentFiles: true }, // REQ-007
   });
 
   return notes.map(toNote) as TimeSheetNote[];

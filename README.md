@@ -25,6 +25,24 @@ Open [http://localhost:3000](http://localhost:3000)
 
 **Server:** `192.168.100.113`
 
+#### Quick Redeploy (Recommended)
+
+```bash
+npm run web
+```
+
+Este comando ejecuta el script `scripts/redeploy.sh` que automatiza todo el proceso de deploy:
+
+1. **Sync** - Sincroniza los archivos locales al servidor via rsync
+2. **Build** - Reconstruye la imagen Docker (sin cache)
+3. **Deploy** - Reinicia los contenedores con `docker compose up -d`
+4. **Migrate** - Ejecuta las migraciones de Prisma automáticamente
+5. **Status** - Muestra el estado final de los contenedores
+
+La app queda disponible en `http://192.168.100.113:3001`
+
+#### Manual Deployment
+
 ```bash
 # Deploy to production server
 rsync -avz --exclude 'node_modules' --exclude '.next' --exclude '.git' --exclude 'data' \

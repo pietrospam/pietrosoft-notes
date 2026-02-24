@@ -7,7 +7,7 @@ import type { Note, NoteType, Client, Project } from '@/lib/types';
 // Types
 // ============================================================================
 
-export type ViewType = 'all' | 'general' | 'task' | 'connection' | 'timesheets' | 'archived' | 'config';
+export type ViewType = 'all' | 'general' | 'task' | 'connection' | 'timesheets' | 'archived' | 'config' | 'favorites'; // REQ-006: Added favorites
 
 export interface TaskFilters {
   status: string;
@@ -40,6 +40,13 @@ interface AppState {
   lastSaved: Date | null;
   taskFilters: TaskFilters;
   timeSheetFilters: TimeSheetFilters;
+  // Editor modal state
+  editorModal: {
+    isOpen: boolean;
+    mode: 'create' | 'edit';
+    noteType: NoteType | null;
+    noteId: string | null;
+  };
 }
 
 interface AppContextValue extends AppState {
@@ -54,6 +61,7 @@ interface AppContextValue extends AppState {
   setLastSaved: (date: Date | null) => void;
   setIsDirty: (dirty: boolean) => void;
   setIsNewNote: (isNew: boolean) => void;
+  setPendingChanges: (changes: Partial<Note>) => void; // Sync pending changes from inline editors
   toggleAutoSave: () => void;
   confirmNavigation: (action: () => void) => boolean; // Returns true if can proceed immediately
   saveCurrentNote: () => Promise<void>;
@@ -66,9 +74,14 @@ interface AppContextValue extends AppState {
   createNote: (type: NoteType) => Promise<Note | null>;
   updateNote: (id: string, data: Partial<Note>) => Promise<Note | null>;
   deleteNote: (id: string) => Promise<boolean>;
+  toggleFavorite: (id: string) => Promise<boolean>; // REQ-006: Toggle favorite status
   selectedNote: Note | null;
   filteredNotes: Note[];
+  favoritesCount: number; // REQ-006: Count of favorites
   getClientForNote: (note: Note) => Client | null;
+  // Editor modal actions
+  openEditorModal: (type: NoteType, noteId?: string) => void;
+  closeEditorModal: () => void;
 }
 
 // ============================================================================
@@ -113,6 +126,12 @@ export function AppProvider({ children }: AppProviderProps) {
     lastSaved: null,
     taskFilters: { status: '', clientId: '', projectId: '' },
     timeSheetFilters: { startDate: '', endDate: '', clientId: '' },
+    editorModal: {
+      isOpen: false,
+      mode: 'create',
+      noteType: null,
+      noteId: null,
+    },
   });
 
   // Load auto-save preference from localStorage on mount
@@ -194,6 +213,7 @@ export function AppProvider({ children }: AppProviderProps) {
           contentJson: null,
           attachments: [],
           clientId,
+          isFavorite: false, // REQ-006
           createdAt: now,
           updatedAt: now,
         } as Note,
@@ -209,6 +229,7 @@ export function AppProvider({ children }: AppProviderProps) {
           shortDescription: 'Nueva tarea',
           status: 'PENDING',
           priority: 'MEDIUM',
+          isFavorite: false, // REQ-006
           createdAt: now,
           updatedAt: now,
         } as Note,
@@ -220,6 +241,7 @@ export function AppProvider({ children }: AppProviderProps) {
           contentJson: null,
           attachments: [],
           clientId,
+          isFavorite: false, // REQ-006
           createdAt: now,
           updatedAt: now,
         } as Note,
@@ -235,6 +257,7 @@ export function AppProvider({ children }: AppProviderProps) {
           hoursWorked: 0,
           description: '',
           state: 'DRAFT',
+          isFavorite: false, // REQ-006
           createdAt: now,
           updatedAt: now,
         } as Note,
@@ -365,6 +388,53 @@ export function AppProvider({ children }: AppProviderProps) {
       console.error('Failed to delete note:', error);
     }
     return false;
+  }, []);
+
+  // REQ-006: Toggle favorite status with optimistic update
+  const toggleFavorite = useCallback(async (id: string): Promise<boolean> => {
+    const note = notesRef.current.find(n => n.id === id);
+    if (!note) return false;
+
+    const newValue = !note.isFavorite;
+    
+    // Optimistic update
+    setState(s => ({
+      ...s,
+      notes: s.notes.map(n => n.id === id ? { ...n, isFavorite: newValue } : n),
+    }));
+
+    try {
+      const response = await fetch(`/api/notes/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isFavorite: newValue }),
+      });
+      
+      if (response.ok) {
+        // Refresh notes to get consistent state
+        const notesRes = await fetch('/api/notes');
+        if (notesRes.ok) {
+          const notes = await notesRes.json();
+          setState(s => ({ ...s, notes }));
+        }
+        return true;
+      } else {
+        // Revert on failure
+        setState(s => ({
+          ...s,
+          notes: s.notes.map(n => n.id === id ? { ...n, isFavorite: !newValue } : n),
+        }));
+        return false;
+      }
+    } catch (error) {
+      console.error('Failed to toggle favorite:', error);
+      // Revert on error
+      setState(s => ({
+        ...s,
+        notes: s.notes.map(n => n.id === id ? { ...n, isFavorite: !newValue } : n),
+      }));
+      return false;
+    }
   }, []);
 
   // Save current note (flush pending changes)
@@ -542,6 +612,11 @@ export function AppProvider({ children }: AppProviderProps) {
       return !!note.archivedAt;
     }
     
+    // REQ-006: Favorites view shows only favorites (non-archived)
+    if (state.currentView === 'favorites') {
+      return !!note.isFavorite && !note.archivedAt;
+    }
+    
     // Other views exclude archived notes by default
     if (note.archivedAt) return false;
     
@@ -565,6 +640,11 @@ export function AppProvider({ children }: AppProviderProps) {
     return true;
   });
 
+  // REQ-006: Count favorites (non-archived non-timesheets)
+  const favoritesCount = state.notes.filter(n => 
+    n.isFavorite && !n.archivedAt && n.type !== 'timesheet'
+  ).length;
+
   const value: AppContextValue = {
     ...state,
     setCurrentView: (view) => setState(s => ({ ...s, currentView: view, selectedNoteId: null, isNewNote: false })),
@@ -586,6 +666,7 @@ export function AppProvider({ children }: AppProviderProps) {
     setIsSaving: (saving) => setState(s => ({ ...s, isSaving: saving })),
     setLastSaved: (date) => setState(s => ({ ...s, lastSaved: date })),
     setIsDirty: (dirty) => setState(s => ({ ...s, isDirty: dirty })),
+    setPendingChanges: (changes) => { pendingChangesRef.current = changes; },
     setIsNewNote: (isNew) => setState(s => ({ ...s, isNewNote: isNew })),
     toggleAutoSave,
     confirmNavigation,
@@ -598,10 +679,31 @@ export function AppProvider({ children }: AppProviderProps) {
     createNote,
     updateNote,
     deleteNote,
+    toggleFavorite, // REQ-006
     persistNewNote,
     selectedNote,
     filteredNotes,
+    favoritesCount, // REQ-006
     getClientForNote,
+    // Editor modal actions
+    openEditorModal: (type, noteId) => setState(s => ({
+      ...s,
+      editorModal: {
+        isOpen: true,
+        mode: noteId ? 'edit' : 'create',
+        noteType: type,
+        noteId: noteId || null,
+      },
+    })),
+    closeEditorModal: () => setState(s => ({
+      ...s,
+      editorModal: {
+        isOpen: false,
+        mode: 'create',
+        noteType: null,
+        noteId: null,
+      },
+    })),
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

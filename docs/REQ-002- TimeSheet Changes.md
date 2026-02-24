@@ -457,10 +457,44 @@ Al presionar ENTER sobre una tarea:
 
 ---
 
-## 10. Notas Adicionales
+## 10. Popup de Ticket/Fase mejorado
+
+### 10.1 Comportamiento de Hover
+- Al posicionar el puntero del mouse sobre el valor de Ticket/Fase y mantenerlo por 1 segundo, se muestra el tooltip de información
+- El tooltip muestra la información de forma compacta y horizontal (título + badges de estado/prioridad + cliente/proyecto)
+- Si el mouse sale antes del segundo, no se muestra el tooltip
+- Si el tooltip está visible y el mouse sale, el tooltip se cierra inmediatamente
+- NO hay botón "Cerrar" - se cierra automáticamente al salir el mouse
+
+### 10.2 Comportamiento de Click
+- Al hacer click en Ticket/Fase, se abre la nota/tarea en un modal de edición completa
+- El modal permite editar todos los campos de la tarea (título, contenido, estado, prioridad, etc.)
+- El modal NO cierra la vista de TimeSheet, permitiendo continuar la gestión
+- Al cerrar el modal, los cambios se persisten automáticamente
+
+### 10.3 Modal de Edición - Funcionalidades
+- **Maximizar**: Botón para expandir el modal a pantalla completa
+- **Orden de campos**: Título → Detalles de tarea (campos) → Descripción (body) → Anexos
+- **Anexos**: Panel completo de attachments integrado
+
+### 10.4 Criterios de Aceptación
+- [x] Hover 1 segundo muestra tooltip de información (estilo horizontal compacto)
+- [x] Tooltip se cierra al salir el mouse (sin botón cerrar)
+- [x] Click abre modal de edición completa
+- [x] Modal de edición incluye todos los campos de tarea
+- [x] Modal de edición guarda cambios al cerrar
+- [x] La vista de TimeSheet permanece abierta durante la edición
+- [x] Botón maximizar/restaurar en el modal
+- [x] Orden correcto: Título → Campos → Body → Anexos
+- [x] Panel de anexos funcional en el modal
+
+---
+
+## 11. Notas Adicionales
 
 _Espacio para aclaraciones durante la implementación._
 
 - El campo `type = 'TIMESHEET'` se mantiene en BD para compatibilidad
 - Los TimeSheets existentes seguirán funcionando, solo cambia cómo se visualizan
 - El TimeSheetModal no requiere cambios
+

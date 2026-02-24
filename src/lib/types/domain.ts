@@ -86,6 +86,7 @@ export interface NoteBase extends Timestamps {
   contentJson: object | null; // TipTap JSON
   contentText: string; // Derived plain text for search
   attachments: AttachmentMeta[];
+  isFavorite: boolean; // REQ-006: Favorites
 }
 
 // ============================================================================

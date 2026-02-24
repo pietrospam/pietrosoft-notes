@@ -7,7 +7,8 @@ import {
   Archive,
   Users,
   Building2,
-  Clock
+  Clock,
+  Star
 } from 'lucide-react';
 
 export function Sidebar() {
@@ -18,6 +19,7 @@ export function Sidebar() {
     setSelectedClientId,
     clients, 
     notes,
+    favoritesCount, // REQ-006
     confirmNavigation,
   } = useApp();
 
@@ -41,6 +43,31 @@ export function Sidebar() {
       <div className="flex-1 py-4">
         {/* Main navigation */}
         <nav className="space-y-1 px-2">
+          {/* REQ-006: Favoritos */}
+          <button
+            onClick={() => handleNavigate(() => {
+              setSelectedClientId(null);
+              setCurrentView('favorites');
+            })}
+            className={`
+              w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm
+              transition-colors whitespace-nowrap
+              ${currentView === 'favorites'
+                ? 'bg-yellow-600 text-white' 
+                : 'text-gray-400 hover:bg-gray-800 hover:text-white'}
+            `}
+          >
+            <Star size={18} className={`flex-shrink-0 ${currentView === 'favorites' ? 'fill-current' : ''}`} />
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity">Favoritos</span>
+            {favoritesCount > 0 && (
+              <span className={`ml-auto text-xs opacity-0 group-hover:opacity-100 transition-opacity ${
+                currentView === 'favorites' ? 'text-yellow-200' : 'text-gray-500'
+              }`}>
+                {favoritesCount}
+              </span>
+            )}
+          </button>
+
           {/* All Notes */}
           <button
             onClick={() => handleNavigate(() => {
@@ -50,36 +77,18 @@ export function Sidebar() {
             className={`
               w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm
               transition-colors whitespace-nowrap
-              ${selectedClientId === null && currentView !== 'archived' && currentView !== 'config'
+              ${selectedClientId === null && currentView === 'all'
                 ? 'bg-blue-600 text-white' 
                 : 'text-gray-400 hover:bg-gray-800 hover:text-white'}
             `}
           >
             <Layers size={18} className="flex-shrink-0" />
-            <span className="opacity-0 group-hover:opacity-100 transition-opacity">Todos</span>
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity">Todas</span>
             <span className={`ml-auto text-xs opacity-0 group-hover:opacity-100 transition-opacity ${
-              selectedClientId === null ? 'text-blue-200' : 'text-gray-500'
+              selectedClientId === null && currentView === 'all' ? 'text-blue-200' : 'text-gray-500'
             }`}>
               {getCountForClient(null)}
             </span>
-          </button>
-
-          {/* Sin Cliente */}
-          <button
-            onClick={() => handleNavigate(() => {
-              setSelectedClientId('none');
-              setCurrentView('all');
-            })}
-            className={`
-              w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm
-              transition-colors whitespace-nowrap
-              ${selectedClientId === 'none'
-                ? 'bg-blue-600 text-white' 
-                : 'text-gray-400 hover:bg-gray-800 hover:text-white'}
-            `}
-          >
-            <Users size={18} className="flex-shrink-0" />
-            <span className="opacity-0 group-hover:opacity-100 transition-opacity">Sin Cliente</span>
           </button>
 
           {/* Divider */}
@@ -107,6 +116,27 @@ export function Sidebar() {
               </span>
             </button>
           ))}
+
+          {/* Divider */}
+          <div className="my-2 mx-1 border-t border-gray-800" />
+
+          {/* Sin Cliente */}
+          <button
+            onClick={() => handleNavigate(() => {
+              setSelectedClientId('none');
+              setCurrentView('all');
+            })}
+            className={`
+              w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm
+              transition-colors whitespace-nowrap
+              ${selectedClientId === 'none'
+                ? 'bg-blue-600 text-white' 
+                : 'text-gray-400 hover:bg-gray-800 hover:text-white'}
+            `}
+          >
+            <Users size={18} className="flex-shrink-0" />
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity">Sin Cliente</span>
+          </button>
         </nav>
       </div>
       

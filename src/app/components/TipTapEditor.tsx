@@ -5,7 +5,7 @@ import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { 
   Bold, 
   Italic, 
@@ -25,9 +25,14 @@ interface TipTapEditorProps {
   onChange: (json: object) => void;
   placeholder?: string;
   noteId?: string; // Required for image uploads
+  onPersistNote?: () => Promise<string | null>; // Called to persist temp notes before upload
 }
 
-export function TipTapEditor({ content, onChange, placeholder = 'Start writing...', noteId }: TipTapEditorProps) {
+export interface TipTapEditorHandle {
+  focus: () => void;
+}
+
+export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(function TipTapEditor({ content, onChange, placeholder = 'Start writing...', noteId, onPersistNote }, ref) {
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -35,18 +40,40 @@ export function TipTapEditor({ content, onChange, placeholder = 'Start writing..
   // Use ref for noteId to avoid stale closure in editor handlers
   const noteIdRef = useRef(noteId);
   noteIdRef.current = noteId;
+  
+  // Use ref for onPersistNote callback
+  const onPersistNoteRef = useRef(onPersistNote);
+  onPersistNoteRef.current = onPersistNote;
+
+  // Get a valid noteId, persisting if necessary
+  const getValidNoteId = useCallback(async (): Promise<string | null> => {
+    const currentNoteId = noteIdRef.current;
+    if (!currentNoteId) return null;
+    
+    // If it's a temp note, persist it first
+    if (currentNoteId.startsWith('temp-') && onPersistNoteRef.current) {
+      const newNoteId = await onPersistNoteRef.current();
+      if (newNoteId) {
+        noteIdRef.current = newNoteId;
+        return newNoteId;
+      }
+      return null;
+    }
+    
+    return currentNoteId;
+  }, []);
 
   // Upload image file to attachments API
   const uploadImage = useCallback(async (file: File): Promise<string | null> => {
-    const currentNoteId = noteIdRef.current;
-    if (!currentNoteId) {
-      console.error('No noteId provided for image upload');
+    const validNoteId = await getValidNoteId();
+    if (!validNoteId) {
+      console.error('No valid noteId for image upload');
       return null;
     }
 
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('noteId', currentNoteId);
+    formData.append('noteId', validNoteId);
 
     try {
       const response = await fetch('/api/attachments', {
@@ -64,9 +91,10 @@ export function TipTapEditor({ content, onChange, placeholder = 'Start writing..
       console.error('Failed to upload image:', error);
       return null;
     }
-  }, []); // No dependencies - uses noteIdRef
+  }, [getValidNoteId]); // Uses getValidNoteId
 
   const editor = useEditor({
+    immediatelyRender: false,
     extensions: [
       StarterKit.configure({
         heading: {
@@ -148,6 +176,13 @@ export function TipTapEditor({ content, onChange, placeholder = 'Start writing..
       onChangeRef.current(editor.getJSON());
     },
   });
+
+  // Expose focus method via ref
+  useImperativeHandle(ref, () => ({
+    focus: () => {
+      editor?.chain().focus().run();
+    },
+  }), [editor]);
 
   // Update content when it changes externally
   useEffect(() => {
@@ -294,4 +329,4 @@ export function TipTapEditor({ content, onChange, placeholder = 'Start writing..
       <EditorContent editor={editor} />
     </div>
   );
-}
+});

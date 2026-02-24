@@ -1,51 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as fs from 'fs/promises';
-import { existsSync } from 'fs';
-import { PATHS } from '@/lib/storage/file-storage';
-import { listNotes, updateNote } from '@/lib/repositories/notes-repo';
+import prisma from '@/lib/db';
 import type { AttachmentMeta } from '@/lib/types';
 
 interface Params {
   params: { id: string };
 }
 
-// Find attachment metadata across all notes
-async function findAttachment(attachmentId: string): Promise<{ 
-  noteId: string; 
-  attachment: AttachmentMeta 
-} | null> {
-  const notes = await listNotes({ includeArchived: true });
-  
-  for (const note of notes) {
-    const attachment = note.attachments.find(a => a.id === attachmentId);
-    if (attachment) {
-      return { noteId: note.id, attachment };
-    }
-  }
-  
-  return null;
-}
-
+// REQ-007: Serve attachments from database
 export async function GET(request: NextRequest, { params }: Params) {
   try {
     const { id } = params;
     
-    // Find attachment metadata
-    const result = await findAttachment(id);
-    if (!result) {
+    // Find attachment in database
+    const attachment = await prisma.attachment.findUnique({
+      where: { id },
+    });
+    
+    if (!attachment) {
       return NextResponse.json({ error: 'Attachment not found' }, { status: 404 });
     }
-    
-    const { attachment } = result;
-    const filePath = PATHS.attachment(attachment.filename);
-    
-    // Check file exists
-    if (!existsSync(filePath)) {
-      return NextResponse.json({ error: 'Attachment file missing' }, { status: 404 });
-    }
-    
-    // Read file
-    const fileBuffer = await fs.readFile(filePath);
     
     // Check if download is requested
     const download = request.nextUrl.searchParams.get('download') === 'true';
@@ -53,6 +26,7 @@ export async function GET(request: NextRequest, { params }: Params) {
     const headers: HeadersInit = {
       'Content-Type': attachment.mimeType,
       'Content-Length': attachment.size.toString(),
+      'Cache-Control': 'public, max-age=31536000, immutable',
     };
     
     if (download) {
@@ -61,7 +35,10 @@ export async function GET(request: NextRequest, { params }: Params) {
       headers['Content-Disposition'] = `inline; filename="${attachment.originalName}"`;
     }
     
-    return new NextResponse(fileBuffer, {
+    // Convert Buffer to Uint8Array for NextResponse
+    const uint8Array = new Uint8Array(attachment.data);
+    
+    return new NextResponse(uint8Array, {
       status: 200,
       headers,
     });
@@ -76,27 +53,13 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
   try {
     const { id } = params;
     
-    // Find attachment metadata
-    const result = await findAttachment(id);
-    if (!result) {
+    // Delete from database (cascade will handle if note is deleted)
+    const attachment = await prisma.attachment.delete({
+      where: { id },
+    }).catch(() => null);
+    
+    if (!attachment) {
       return NextResponse.json({ error: 'Attachment not found' }, { status: 404 });
-    }
-    
-    const { noteId, attachment } = result;
-    const filePath = PATHS.attachment(attachment.filename);
-    
-    // Delete file if exists
-    if (existsSync(filePath)) {
-      await fs.unlink(filePath);
-    }
-    
-    // Get note and update attachments array
-    const notes = await listNotes({ includeArchived: true });
-    const note = notes.find(n => n.id === noteId);
-    
-    if (note) {
-      const updatedAttachments = note.attachments.filter(a => a.id !== id);
-      await updateNote(noteId, { attachments: updatedAttachments });
     }
     
     return new NextResponse(null, { status: 204 });
@@ -112,29 +75,30 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const { id } = params;
     const body = await request.json();
     
-    // Find attachment metadata
-    const result = await findAttachment(id);
-    if (!result) {
+    if (!body.originalName) {
+      return NextResponse.json({ error: 'originalName is required' }, { status: 400 });
+    }
+    
+    // Update attachment name in database
+    const attachment = await prisma.attachment.update({
+      where: { id },
+      data: { originalName: body.originalName },
+    }).catch(() => null);
+    
+    if (!attachment) {
       return NextResponse.json({ error: 'Attachment not found' }, { status: 404 });
     }
     
-    const { noteId } = result;
+    const response: AttachmentMeta = {
+      id: attachment.id,
+      filename: attachment.filename,
+      originalName: attachment.originalName,
+      mimeType: attachment.mimeType,
+      size: attachment.size,
+      createdAt: attachment.createdAt.toISOString(),
+    };
     
-    // Get note and update attachment name
-    const notes = await listNotes({ includeArchived: true });
-    const note = notes.find(n => n.id === noteId);
-    
-    if (note && body.originalName) {
-      const updatedAttachments = note.attachments.map(a => 
-        a.id === id ? { ...a, originalName: body.originalName } : a
-      );
-      await updateNote(noteId, { attachments: updatedAttachments });
-      
-      const updatedAttachment = updatedAttachments.find(a => a.id === id);
-      return NextResponse.json(updatedAttachment);
-    }
-    
-    return NextResponse.json({ error: 'Failed to update attachment' }, { status: 400 });
+    return NextResponse.json(response);
     
   } catch (error) {
     console.error('Error updating attachment:', error);

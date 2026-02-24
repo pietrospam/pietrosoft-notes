@@ -1,17 +1,20 @@
 export { Sidebar } from './Sidebar';
 export { NotesList } from './NotesList';
-export { EditorPanel } from './EditorPanel';
 export { TopBar } from './TopBar';
 export { TipTapEditor } from './TipTapEditor';
 export { ConfigPanel } from './ConfigPanel';
 export { ClientsManager } from './ClientsManager';
 export { ProjectsManager } from './ProjectsManager';
 export { IconPicker, DynamicIcon, ICONS } from './IconPicker';
-export { TaskFields } from './TaskFields';
-export { ConnectionFields } from './ConnectionFields';
 export { TimeSheetFields } from './TimeSheetFields';
+export { ConnectionFields } from './ConnectionFields';
 export { AttachmentsPanel } from './AttachmentsPanel';
 export { QuickCreateModal } from './QuickCreateModal';
 export { UnsavedChangesModal } from './UnsavedChangesModal';
 export { TimeSheetView } from './TimeSheetView';
 export { TimeSheetModal } from './TimeSheetModal';
+// Editor Modals
+export { BaseEditorModal } from './BaseEditorModal';
+export { TaskEditorModal } from './TaskEditorModal';
+export { NoteEditorModal } from './NoteEditorModal';
+export { ConnectionEditorModal } from './ConnectionEditorModal';

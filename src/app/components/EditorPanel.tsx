@@ -2,14 +2,15 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
-import { TipTapEditor } from './TipTapEditor';
+import { TipTapEditor, TipTapEditorHandle } from './TipTapEditor';
 import { TaskFields } from './TaskFields';
 import { ConnectionFields } from './ConnectionFields';
 import { TimeSheetFields } from './TimeSheetFields';
 import { AttachmentsPanel } from './AttachmentsPanel';
 import { Toast } from './Toast';
 import { UnsavedChangesModal } from './UnsavedChangesModal';
-import { Trash2, Save, Archive, ArchiveRestore, RotateCcw, Circle, Pencil } from 'lucide-react';
+import { Trash2, Save, Archive, ArchiveRestore, RotateCcw, Circle, Pencil, Clock } from 'lucide-react';
+import { TimeSheetModal } from './TimeSheetModal';
 import type { Note, TaskNote, ConnectionNote, TimeSheetNote, AttachmentMeta } from '@/lib/types';
 
 export function EditorPanel() {
@@ -35,20 +36,32 @@ export function EditorPanel() {
   const [title, setTitle] = useState('');
   const [toast, setToast] = useState<{ message: string; action?: { label: string; onClick: () => void } } | null>(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
+  // Local note state for immediate UI updates (especially for new notes)
+  const [localNote, setLocalNote] = useState<Note | null>(null);
+  const [showTimeSheetModal, setShowTimeSheetModal] = useState(false);
   const selectedNoteId = selectedNote?.id;
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const editorRef = useRef<TipTapEditorHandle>(null);
   
   // Track pending changes
   const pendingChangesRef = useRef<Partial<Note>>({});
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Update local state when selected note changes
+  // Track the previous note ID to detect actual note changes
+  const prevNoteIdRef = useRef<string | null>(null);
+  
+  // Update local state when selected note ACTUALLY changes (different ID)
   useEffect(() => {
     if (selectedNote) {
-      setTitle(selectedNote.title);
+      // Only reset when switching to a different note
+      if (prevNoteIdRef.current !== selectedNote.id) {
+        setTitle(selectedNote.title);
+        setLocalNote(selectedNote);
+        prevNoteIdRef.current = selectedNote.id;
+      }
       // For new notes (temp IDs), keep dirty state - they need to be saved
       const isTemp = selectedNote.id.startsWith('temp-');
-      if (!isTemp) {
+      if (!isTemp && prevNoteIdRef.current !== selectedNote.id) {
         setLastSaved(new Date(selectedNote.updatedAt));
         // Reset dirty state and pending changes when switching to existing notes
         pendingChangesRef.current = {};
@@ -102,9 +115,11 @@ export function EditorPanel() {
     }, 2000); // 2 second delay for auto-save
   }, [autoSaveEnabled, selectedNote, isNewNote, updateNote, setIsSaving, setLastSaved, setIsDirty]);
 
-  // Track changes
+  // Track changes and update local state for immediate UI feedback
   const trackChange = useCallback((data: Partial<Note>) => {
     pendingChangesRef.current = { ...pendingChangesRef.current, ...data };
+    // Update local note for immediate UI response
+    setLocalNote(prev => prev ? { ...prev, ...data } as Note : null);
     setIsDirty(true);
     scheduleAutoSave();
   }, [setIsDirty, scheduleAutoSave]);
@@ -157,6 +172,15 @@ export function EditorPanel() {
     }
   };
 
+  // Handle Enter key in title to move focus to editor
+  const handleTitleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.ctrlKey) {
+      e.preventDefault();
+      editorRef.current?.focus();
+    }
+    // Ctrl+Enter does nothing special in input type="text" (no line breaks)
+  };
+
   const handleContentChange = (contentJson: object) => {
     if (selectedNote) {
       trackChange({ contentJson });
@@ -195,6 +219,31 @@ export function EditorPanel() {
     if (selectedNote && selectedNote.deletedAt) {
       await updateNote(selectedNote.id, { deletedAt: undefined });
     }
+  };
+
+  // Handle persist note for image uploads (called before uploading images to temp notes)
+  const handlePersistForUpload = useCallback(async (): Promise<string | null> => {
+    if (!isNewNote || !selectedNote) return selectedNote?.id || null;
+    
+    setIsSaving(true);
+    const savedNote = await persistNewNote(pendingChangesRef.current);
+    setIsSaving(false);
+    
+    if (savedNote) {
+      pendingChangesRef.current = {};
+      setToast({ message: 'Nota guardada para adjuntar imagen' });
+      return savedNote.id;
+    }
+    return null;
+  }, [isNewNote, selectedNote, persistNewNote, setIsSaving]);
+
+  // Handle TimeSheet button click for task notes
+  const handleAddTimeSheet = () => {
+    if (!selectedNote || selectedNote.id.startsWith('temp-')) {
+      setToast({ message: 'Guarda la tarea primero antes de registrar horas' });
+      return;
+    }
+    setShowTimeSheetModal(true);
   };
 
   if (!selectedNote) {
@@ -287,6 +336,7 @@ export function EditorPanel() {
             onChange={(e) => handleTitleChange(e.target.value)}
             onFocus={() => setIsEditingTitle(true)}
             onBlur={() => setIsEditingTitle(false)}
+            onKeyDown={handleTitleKeyDown}
             placeholder="Título de la nota..."
             className={`flex-1 text-2xl font-bold bg-transparent border-b-2 outline-none text-white placeholder-gray-600 py-1 transition-colors ${
               isEditingTitle 
@@ -306,42 +356,54 @@ export function EditorPanel() {
               <Pencil size={16} />
             </button>
           )}
+          {/* Clock icon for task notes - Register timesheet */}
+          {selectedNote.type === 'task' && (
+            <button
+              onClick={handleAddTimeSheet}
+              className="p-1.5 text-green-500 hover:text-green-400 hover:bg-gray-800 rounded transition-colors"
+              title="Registrar horas"
+            >
+              <Clock size={18} />
+            </button>
+          )}
         </div>
 
         {/* Editor */}
         <TipTapEditor
+          ref={editorRef}
           key={selectedNote.id}
           content={selectedNote.contentJson}
           onChange={handleContentChange}
           noteId={selectedNote.id}
+          onPersistNote={isNewNote ? handlePersistForUpload : undefined}
         />
 
         {/* Type-specific fields */}
-        {selectedNote.type === 'task' && (
+        {selectedNote.type === 'task' && localNote && (
           <div className="mt-6 pt-6 border-t border-gray-800">
             <h3 className="text-sm font-medium text-gray-400 mb-3">Task Details</h3>
             <TaskFields
-              note={selectedNote as TaskNote}
+              note={localNote as TaskNote}
               onChange={(data) => trackChange(data)}
             />
           </div>
         )}
 
-        {selectedNote.type === 'connection' && (
+        {selectedNote.type === 'connection' && localNote && (
           <div className="mt-6 pt-6 border-t border-gray-800">
             <h3 className="text-sm font-medium text-gray-400 mb-3">Connection Details</h3>
             <ConnectionFields
-              note={selectedNote as ConnectionNote}
+              note={localNote as ConnectionNote}
               onChange={(data) => trackChange(data)}
             />
           </div>
         )}
 
-        {selectedNote.type === 'timesheet' && (
+        {selectedNote.type === 'timesheet' && localNote && (
           <div className="mt-6 pt-6 border-t border-gray-800">
             <h3 className="text-sm font-medium text-gray-400 mb-3">TimeSheet Details</h3>
             <TimeSheetFields
-              note={selectedNote as TimeSheetNote}
+              note={localNote as TimeSheetNote}
               onChange={(data) => trackChange(data)}
             />
           </div>
@@ -369,6 +431,18 @@ export function EditorPanel() {
           }}
         />
       </div>
+
+      {/* TimeSheet Modal for task notes */}
+      {showTimeSheetModal && selectedNote.type === 'task' && (
+        <TimeSheetModal
+          task={selectedNote as TaskNote}
+          onClose={() => setShowTimeSheetModal(false)}
+          onSaved={() => {
+            setShowTimeSheetModal(false);
+            setToast({ message: 'Horas registradas exitosamente' });
+          }}
+        />
+      )}
 
       {/* Toast notification */}
       {toast && (

@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider      = "prisma-client-js"
   binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
@@ -18,24 +15,22 @@ model Client {
   active      Boolean   @default(true)
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
-  
-  projects    Project[]
   notes       Note[]    @relation("ClientNotes")
+  projects    Project[]
 
   @@map("clients")
 }
 
 model Project {
-  id          String    @id
+  id          String   @id
   name        String
   description String?
-  clientId    String    @map("client_id")
-  client      Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-  
-  notes       Note[]    @relation("ProjectNotes")
-  
+  clientId    String   @map("client_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  notes       Note[]   @relation("ProjectNotes")
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
   @@index([clientId])
   @@map("projects")
 }
@@ -45,39 +40,38 @@ model Note {
   type                  NoteType
   title                 String
   content               String?
-  contentJson           Json?           @map("content_json")
   projectId             String?         @map("project_id")
-  project               Project?        @relation("ProjectNotes", fields: [projectId], references: [id], onDelete: SetNull)
   clientId              String?         @map("client_id")
-  client                Client?         @relation("ClientNotes", fields: [clientId], references: [id], onDelete: SetNull)
   archived              Boolean         @default(false)
+  isFavorite            Boolean         @default(false) @map("is_favorite")
   attachments           Json?
-  
-  // Task fields
   taskStatus            TaskStatus?     @map("task_status")
   taskPriority          TaskPriority?   @map("task_priority")
   taskDueDate           DateTime?       @map("task_due_date")
-  
-  // Connection fields
   connectionUrl         String?         @map("connection_url")
   connectionCredentials String?         @map("connection_credentials")
-  
-  // Timesheet fields
   timesheetDate         DateTime?       @map("timesheet_date")
   timesheetHours        Float?          @map("timesheet_hours")
   timesheetRate         Float?          @map("timesheet_rate")
-  timesheetState        TimesheetState? @map("timesheet_state")
+  timesheetState        TimesheetState? @default(DRAFT) @map("timesheet_state")
   timesheetTaskId       String?         @map("timesheet_task_id")
-  timesheetTask         Note?           @relation("TaskTimesheets", fields: [timesheetTaskId], references: [id], onDelete: SetNull)
-  timesheets            Note[]          @relation("TaskTimesheets")
-  
   createdAt             DateTime        @default(now()) @map("created_at")
   updatedAt             DateTime        @updatedAt @map("updated_at")
-  
+  contentJson           Json?           @map("content_json")
+  taskTicketPhaseCode   String?         @map("task_ticket_phase_code")
+  taskShortDescription  String?         @map("task_short_description")
+  taskBudgetHours       Float?          @map("task_budget_hours")
+  client                Client?         @relation("ClientNotes", fields: [clientId], references: [id])
+  project               Project?        @relation("ProjectNotes", fields: [projectId], references: [id])
+  timesheetTask         Note?           @relation("TaskTimesheets", fields: [timesheetTaskId], references: [id])
+  timesheets            Note[]          @relation("TaskTimesheets")
+  attachmentFiles       Attachment[]    // REQ-007: Relation to attachment files
+
   @@index([type])
   @@index([projectId])
   @@index([clientId])
   @@index([archived])
+  @@index([isFavorite])
   @@index([timesheetTaskId])
   @@map("notes")
 }
@@ -106,4 +100,21 @@ enum TaskPriority {
 enum TimesheetState {
   DRAFT
   FINAL
+}
+
+// REQ-007: Attachments stored in database as BLOB
+model Attachment {
+  id           String   @id @default(uuid())
+  noteId       String   @map("note_id")
+  filename     String   @db.VarChar(255)
+  originalName String   @map("original_name") @db.VarChar(255)
+  mimeType     String   @map("mime_type") @db.VarChar(100)
+  size         Int
+  data         Bytes
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  note         Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@index([noteId])
+  @@map("attachments")
 }
