@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Save, Loader2, Maximize2, Minimize2, Pencil, Clock, ChevronDown, Plus, Check, ExternalLink, Star } from 'lucide-react';
+import { X, Save, Loader2, Maximize2, Minimize2, Pencil, Clock, ChevronDown, Plus, Check, ExternalLink, Star, Archive, ArchiveRestore, Trash2, Copy } from 'lucide-react';
 import { TipTapEditor, TipTapEditorHandle } from './TipTapEditor';
 import { AttachmentsPanel } from './AttachmentsPanel';
 import { TimeSheetModal } from './TimeSheetModal';
@@ -36,7 +36,7 @@ interface TaskEditorModalProps {
 }
 
 export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onExpandToPopup, defaultClientId }: TaskEditorModalProps) {
-  const { refreshNotes, refreshClients, toggleFavorite, autoSaveEnabled, setIsDirty: setGlobalIsDirty, setPendingChanges: setGlobalPendingChanges } = useApp();
+  const { refreshNotes, refreshClients, toggleFavorite, autoSaveEnabled, setIsDirty: setGlobalIsDirty, setPendingChanges: setGlobalPendingChanges, updateNote, deleteNote, setSelectedNoteId } = useApp();
   
   // Create default task for new notes
   const now = new Date().toISOString();
@@ -67,6 +67,9 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
   const [isEditingTitle, setIsEditingTitle] = useState(!taskId); // Auto-edit title for new notes
   const [toast, setToast] = useState<{ message: string } | null>(null);
   const [showTimeSheetModal, setShowTimeSheetModal] = useState(false);
+  
+  // Header fields edit mode - enabled by default for NEW tasks, disabled for existing
+  const [isHeaderEditing, setIsHeaderEditing] = useState(!taskId);
   
   // Task fields state
   const [clients, setClients] = useState<Client[]>([]);
@@ -135,6 +138,33 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
     setTask(prev => ({ ...prev, isFavorite: !prev.isFavorite }));
     
     await toggleFavorite(targetId);
+  };
+
+  // Handle archive/unarchive
+  const handleArchive = async () => {
+    const targetId = taskId || task.id;
+    if (!targetId || targetId.startsWith('temp-')) return;
+    
+    const wasArchived = !!(task as TaskNote & { archivedAt?: string }).archivedAt;
+    const newArchivedAt = wasArchived ? undefined : new Date().toISOString();
+    
+    await updateNote(targetId, { archivedAt: newArchivedAt });
+    setTask(prev => ({ ...prev, archivedAt: newArchivedAt } as TaskNote));
+    
+    setToast({ message: wasArchived ? 'Tarea restaurada' : 'Tarea archivada' });
+    onSaved?.();
+  };
+
+  // Handle delete
+  const handleDelete = async () => {
+    const targetId = taskId || task.id;
+    if (!targetId || targetId.startsWith('temp-')) return;
+    
+    if (confirm('¿Estás seguro de que quieres eliminar esta tarea?')) {
+      await deleteNote(targetId);
+      setSelectedNoteId(null);
+      onClose();
+    }
   };
 
   // Load clients and projects
@@ -300,12 +330,14 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
         
         if (res.ok) {
           const savedTask = await res.json();
-          setTask(savedTask);
           pendingChangesRef.current = {};
           isCreatedRef.current = true;
           setIsDirty(false);
           setToast({ message: 'Tarea creada exitosamente' });
           await refreshNotes();
+          // Select the new note and close the create form
+          setSelectedNoteId(savedTask.id);
+          onClose();
           onSaved?.();
         } else {
           setToast({ message: 'Error al crear la tarea' });
@@ -381,136 +413,220 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
   // Inline mode content
   const renderContent = () => (
     <>
-      {/* Task Fields */}
-      <div className="mb-6 space-y-4">
-        {/* Validation Summary */}
-        {(!task.projectId || !task.ticketPhaseCode || !task.shortDescription) && (
-          <div className="p-2 bg-yellow-900/30 border border-yellow-700/50 rounded-lg text-xs text-yellow-400">
-            <span className="font-medium">Campos requeridos: </span>
-            {[
-              !task.projectId && 'Proyecto',
-              !task.ticketPhaseCode && 'Ticket/Fase',
-              !task.shortDescription && 'Descripción corta',
-            ].filter(Boolean).join(', ')}
-          </div>
-        )}
-
-        {/* Row 1: Ticket/Phase - Short Description - Due Date - Budget */}
-        <div className="grid grid-cols-4 gap-3">
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Ticket/Fase *</label>
-            <input
-              type="text"
-              value={task.ticketPhaseCode || ''}
-              onChange={(e) => trackChange({ ticketPhaseCode: e.target.value })}
-              className={`w-full bg-gray-800 border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 ${
-                !task.ticketPhaseCode ? 'border-yellow-600' : 'border-gray-700'
+      {/* Task Fields - Compact Header */}
+      <div className="mb-4 space-y-2">
+        {/* Validation Summary + Edit Toggle */}
+        <div className="flex items-center justify-between gap-2">
+          {/* Edit Toggle Button - Only show for existing tasks */}
+          {taskId && (
+            <button
+              type="button"
+              onClick={() => setIsHeaderEditing(!isHeaderEditing)}
+              className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+                isHeaderEditing 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700'
               }`}
-              placeholder="TASK-001"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Descripción *</label>
-            <input
-              type="text"
-              value={task.shortDescription || ''}
-              onChange={(e) => trackChange({ shortDescription: e.target.value })}
-              className={`w-full bg-gray-800 border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 ${
-                !task.shortDescription ? 'border-yellow-600' : 'border-gray-700'
-              }`}
-              placeholder="Descripción breve"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Fecha límite</label>
-            <input
-              type="date"
-              value={task.dueDate?.split('T')[0] || ''}
-              onChange={(e) => trackChange({ dueDate: e.target.value || undefined })}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Horas presup.</label>
-            <input
-              type="number"
-              step="0.5"
-              min="0"
-              value={task.budgetHours ?? ''}
-              onChange={(e) => trackChange({ budgetHours: e.target.value ? parseFloat(e.target.value) : undefined })}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
-              placeholder="0"
-            />
-          </div>
+              title={isHeaderEditing ? 'Bloquear campos' : 'Editar campos'}
+            >
+              <Pencil size={12} />
+              {isHeaderEditing ? 'Editando' : 'Editar'}
+            </button>
+          )}
+          
+          {/* Validation Summary */}
+          {(!task.projectId || !task.ticketPhaseCode || !task.shortDescription) && (
+            <div className="flex-1 p-1.5 bg-yellow-900/30 border border-yellow-700/50 rounded text-xs text-yellow-400">
+              <span className="font-medium">Requeridos: </span>
+              {[
+                !task.projectId && 'Proyecto',
+                !task.ticketPhaseCode && 'Ticket/Fase',
+                !task.shortDescription && 'Descripción corta',
+              ].filter(Boolean).join(', ')}
+            </div>
+          )}
         </div>
 
-        {/* Row 2: Client - Project - Status - Priority */}
-        <div className="grid grid-cols-4 gap-3">
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Cliente</label>
-            <div className="flex gap-1">
-              <div className="relative flex-1">
+        {/* Compact Row: All fields in one row when possible */}
+        <div className="grid grid-cols-8 gap-2">
+          <div className="col-span-1">
+            <label className="block text-[10px] text-gray-500 mb-0.5">Ticket/Fase *</label>
+            {isHeaderEditing ? (
+              <input
+                type="text"
+                value={task.ticketPhaseCode || ''}
+                onChange={(e) => trackChange({ ticketPhaseCode: e.target.value })}
+                className={`w-full bg-gray-800 border rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-blue-500 ${
+                  !task.ticketPhaseCode ? 'border-yellow-600' : 'border-gray-700'
+                }`}
+                placeholder="TASK-001"
+              />
+            ) : (
+              <div className="flex items-center gap-1 group">
+                <span className="px-2 py-1 text-white text-xs truncate flex-1">{task.ticketPhaseCode || '-'}</span>
+                {task.ticketPhaseCode && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(task.ticketPhaseCode || '');
+                      setToast({ message: 'Copiado' });
+                    }}
+                    className="p-0.5 text-gray-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Copiar"
+                  >
+                    <Copy size={10} />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="col-span-2">
+            <label className="block text-[10px] text-gray-500 mb-0.5">Descripción *</label>
+            {isHeaderEditing ? (
+              <input
+                type="text"
+                value={task.shortDescription || ''}
+                onChange={(e) => trackChange({ shortDescription: e.target.value })}
+                className={`w-full bg-gray-800 border rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-blue-500 ${
+                  !task.shortDescription ? 'border-yellow-600' : 'border-gray-700'
+                }`}
+                placeholder="Descripción breve"
+              />
+            ) : (
+              <div className="flex items-center gap-1 group">
+                <span className="px-2 py-1 text-white text-xs truncate flex-1">{task.shortDescription || '-'}</span>
+                {task.shortDescription && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(task.shortDescription || '');
+                      setToast({ message: 'Copiado' });
+                    }}
+                    className="p-0.5 text-gray-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Copiar"
+                  >
+                    <Copy size={10} />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="col-span-1">
+            <label className="block text-[10px] text-gray-500 mb-0.5">Cliente</label>
+            {isHeaderEditing ? (
+              <div className="relative">
                 <select
                   value={selectedClientId}
                   onChange={(e) => handleClientChange(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 appearance-none"
+                  className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-blue-500 appearance-none"
                 >
-                  <option value="">Seleccionar...</option>
+                  <option value="">...</option>
                   {clients.map(c => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
-                <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+                <ChevronDown size={10} className="absolute right-1 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
               </div>
-              <button
-                type="button"
-                onClick={() => setShowCreateClient(true)}
-                className="p-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-400 hover:text-white hover:border-blue-500 transition-colors"
-                title="Nuevo cliente"
-              >
-                <Plus size={14} />
-              </button>
-            </div>
+            ) : (
+              <span className="block px-2 py-1 text-white text-xs truncate">
+                {clients.find(c => c.id === selectedClientId)?.name || '-'}
+              </span>
+            )}
           </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Proyecto *</label>
-            <div className="flex gap-1">
-              <div className="relative flex-1">
+          <div className="col-span-1">
+            <label className="block text-[10px] text-gray-500 mb-0.5">Proyecto *</label>
+            {isHeaderEditing ? (
+              <div className="relative">
                 <select
                   value={task.projectId || ''}
                   onChange={(e) => trackChange({ projectId: e.target.value })}
                   disabled={!selectedClientId}
-                  className={`w-full bg-gray-800 border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 appearance-none disabled:opacity-50 ${
+                  className={`w-full bg-gray-800 border rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-blue-500 appearance-none disabled:opacity-50 ${
                     !task.projectId ? 'border-yellow-600' : 'border-gray-700'
                   }`}
                 >
-                  <option value="">Seleccionar...</option>
+                  <option value="">...</option>
                   {projects.map(p => (
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
                 </select>
-                <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+                <ChevronDown size={10} className="absolute right-1 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
               </div>
-              <button
-                type="button"
-                onClick={() => setShowCreateProject(true)}
-                disabled={!selectedClientId}
-                className="p-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-400 hover:text-white hover:border-blue-500 transition-colors disabled:opacity-50"
-                title="Nuevo proyecto"
-              >
-                <Plus size={14} />
-              </button>
-            </div>
+            ) : (
+              <span className="block px-2 py-1 text-white text-xs truncate">
+                {projects.find(p => p.id === task.projectId)?.name || '-'}
+              </span>
+            )}
           </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Estado</label>
-            <div className="flex flex-wrap gap-1">
+          <div className="col-span-1">
+            <label className="block text-[10px] text-gray-500 mb-0.5">Fecha límite</label>
+            {isHeaderEditing ? (
+              <input
+                type="date"
+                value={task.dueDate?.split('T')[0] || ''}
+                onChange={(e) => trackChange({ dueDate: e.target.value || undefined })}
+                className="w-full bg-gray-800 border border-gray-700 rounded px-1 py-1 text-white text-xs focus:outline-none focus:border-blue-500"
+              />
+            ) : (
+              <span className="block px-2 py-1 text-white text-xs truncate">
+                {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '-'}
+              </span>
+            )}
+          </div>
+          <div className="col-span-1">
+            <label className="block text-[10px] text-gray-500 mb-0.5">Horas</label>
+            {isHeaderEditing ? (
+              <input
+                type="number"
+                step="0.5"
+                min="0"
+                value={task.budgetHours ?? ''}
+                onChange={(e) => trackChange({ budgetHours: e.target.value ? parseFloat(e.target.value) : undefined })}
+                className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-blue-500"
+                placeholder="0"
+              />
+            ) : (
+              <span className="block px-2 py-1 text-white text-xs truncate">
+                {task.budgetHours ?? '-'}
+              </span>
+            )}
+          </div>
+          <div className="col-span-1">
+            {isHeaderEditing && (
+              <div className="flex gap-1 mt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateClient(true)}
+                  className="p-1 bg-gray-800 border border-gray-700 rounded text-gray-400 hover:text-white hover:border-blue-500 transition-colors"
+                  title="Nuevo cliente"
+                >
+                  <Plus size={12} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateProject(true)}
+                  disabled={!selectedClientId}
+                  className="p-1 bg-gray-800 border border-gray-700 rounded text-gray-400 hover:text-white hover:border-blue-500 transition-colors disabled:opacity-50"
+                  title="Nuevo proyecto"
+                >
+                  <Plus size={12} />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Status & Priority Row - Always Active */}
+        <div className="flex items-center gap-4 pt-1">
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] text-gray-500">Estado:</label>
+            <div className="flex gap-1">
               {STATUSES.map(s => (
                 <button
                   key={s.value}
                   type="button"
                   onClick={() => trackChange({ status: s.value })}
-                  className={`px-2 py-1 rounded text-xs transition-colors ${
+                  className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${
                     task.status === s.value
                       ? `${s.color} text-white`
                       : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
@@ -521,15 +637,15 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
               ))}
             </div>
           </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Prioridad</label>
-            <div className="flex flex-wrap gap-1">
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] text-gray-500">Prioridad:</label>
+            <div className="flex gap-1">
               {PRIORITIES.map(p => (
                 <button
                   key={p.value}
                   type="button"
                   onClick={() => trackChange({ priority: p.value })}
-                  className={`px-2 py-1 rounded text-xs transition-colors ${
+                  className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${
                     task.priority === p.value
                       ? `bg-gray-700 ${p.color}`
                       : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
@@ -544,8 +660,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
       </div>
 
       {/* Editor */}
-      <div className="mb-6 border-t border-gray-800 pt-6">
-        <h3 className="text-sm font-medium text-gray-400 mb-3">Descripción</h3>
+      <div className="mb-4 border-t border-gray-800 pt-3">
         <TipTapEditor
           ref={editorRef}
           key={task.id}
@@ -558,7 +673,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
       </div>
 
       {/* Attachments */}
-      <div className="border-t border-gray-800 pt-6">
+      <div className="border-t border-gray-800 pt-3">
         <AttachmentsPanel
           noteId={task.id}
           attachments={task.attachments || []}
@@ -641,6 +756,32 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
               </button>
             )}
             
+            {/* Archive/Unarchive button - only for saved tasks */}
+            {(taskId || isCreatedRef.current) && !task.id.startsWith('temp-') && (
+              <button
+                onClick={handleArchive}
+                className={`p-2 rounded transition-colors ${
+                  (task as TaskNote & { archivedAt?: string }).archivedAt 
+                    ? 'text-yellow-500 hover:text-yellow-400 hover:bg-gray-800' 
+                    : 'text-gray-400 hover:text-yellow-400 hover:bg-gray-800'
+                }`}
+                title={(task as TaskNote & { archivedAt?: string }).archivedAt ? 'Restaurar tarea' : 'Archivar tarea'}
+              >
+                {(task as TaskNote & { archivedAt?: string }).archivedAt ? <ArchiveRestore size={20} /> : <Archive size={20} />}
+              </button>
+            )}
+            
+            {/* Delete button - only for saved tasks */}
+            {(taskId || isCreatedRef.current) && !task.id.startsWith('temp-') && (
+              <button
+                onClick={handleDelete}
+                className="p-2 rounded transition-colors text-gray-400 hover:text-red-400 hover:bg-gray-800"
+                title="Eliminar tarea"
+              >
+                <Trash2 size={20} />
+              </button>
+            )}
+            
             {/* TimeSheet button - only for existing tasks */}
             {(taskId || isCreatedRef.current) && (
               <button
@@ -686,7 +827,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
         </div>
 
         {/* Content - Scrollable */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto px-4 py-3">
           {renderContent()}
         </div>
 
@@ -820,6 +961,32 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
                 title={task.isFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos'}
               >
                 <Star size={20} className={task.isFavorite ? 'fill-current' : ''} />
+              </button>
+            )}
+            
+            {/* Archive/Unarchive button - only for saved tasks */}
+            {(taskId || isCreatedRef.current) && !task.id.startsWith('temp-') && (
+              <button
+                onClick={handleArchive}
+                className={`p-2 rounded transition-colors ${
+                  (task as TaskNote & { archivedAt?: string }).archivedAt 
+                    ? 'text-yellow-500 hover:text-yellow-400 hover:bg-gray-800' 
+                    : 'text-gray-400 hover:text-yellow-400 hover:bg-gray-800'
+                }`}
+                title={(task as TaskNote & { archivedAt?: string }).archivedAt ? 'Restaurar tarea' : 'Archivar tarea'}
+              >
+                {(task as TaskNote & { archivedAt?: string }).archivedAt ? <ArchiveRestore size={20} /> : <Archive size={20} />}
+              </button>
+            )}
+            
+            {/* Delete button - only for saved tasks */}
+            {(taskId || isCreatedRef.current) && !task.id.startsWith('temp-') && (
+              <button
+                onClick={handleDelete}
+                className="p-2 rounded transition-colors text-gray-400 hover:text-red-400 hover:bg-gray-800"
+                title="Eliminar tarea"
+              >
+                <Trash2 size={20} />
               </button>
             )}
             

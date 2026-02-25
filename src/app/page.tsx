@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useCallback } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { TopBar, Sidebar, NotesList, ConfigPanel, TimeSheetView, UnsavedChangesModal } from './components';
 import { TaskEditorModal } from './components/TaskEditorModal';
@@ -13,7 +14,21 @@ function InlineEditorPanel() {
     editorModal,
     openEditorModal,
     refreshNotes,
+    isNotesListCollapsed,
+    setNotesListCollapsed,
   } = useApp();
+  
+  // ESC key handler to expand NotesList when collapsed
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape' && isNotesListCollapsed) {
+      setNotesListCollapsed(false);
+    }
+  }, [isNotesListCollapsed, setNotesListCollapsed]);
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
   
   // Check if we have a note selected (not creating, existing note selected in list)
   // Find the selected note to determine its type

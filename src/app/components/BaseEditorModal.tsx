@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, ReactNode } from 'react';
-import { X, Save, Loader2, Maximize2, Minimize2, Pencil, Check, ExternalLink, Star } from 'lucide-react';
+import { X, Save, Loader2, Maximize2, Minimize2, Pencil, Check, ExternalLink, Star, Archive, ArchiveRestore, Trash2 } from 'lucide-react';
 import { TipTapEditor, TipTapEditorHandle } from './TipTapEditor';
 import { AttachmentsPanel } from './AttachmentsPanel';
 import { Toast } from './Toast';
@@ -32,7 +32,7 @@ export function BaseEditorModal({
   headerActions,
   inline = false,
 }: BaseEditorModalProps) {
-  const { updateNote, refreshNotes, toggleFavorite, autoSaveEnabled, setIsDirty: setGlobalIsDirty, setPendingChanges: setGlobalPendingChanges } = useApp();
+  const { updateNote, refreshNotes, toggleFavorite, autoSaveEnabled, setIsDirty: setGlobalIsDirty, setPendingChanges: setGlobalPendingChanges, deleteNote, setSelectedNoteId } = useApp();
   
   const [note, setNote] = useState<Note>(defaultNote);
   const [loading, setLoading] = useState(!!noteId);
@@ -104,6 +104,33 @@ export function BaseEditorModal({
     setNote(prev => ({ ...prev, isFavorite: !prev.isFavorite }));
     
     await toggleFavorite(targetId);
+  };
+
+  // Handle archive/unarchive
+  const handleArchive = async () => {
+    const targetId = noteId || note.id;
+    if (!targetId || targetId.startsWith('temp-')) return;
+    
+    const wasArchived = !!note.archivedAt;
+    const newArchivedAt = wasArchived ? undefined : new Date().toISOString();
+    
+    await updateNote(targetId, { archivedAt: newArchivedAt });
+    setNote(prev => ({ ...prev, archivedAt: newArchivedAt }));
+    
+    setToast({ message: wasArchived ? 'Nota restaurada' : 'Nota archivada' });
+    onSaved?.();
+  };
+
+  // Handle delete
+  const handleDelete = async () => {
+    const targetId = noteId || note.id;
+    if (!targetId || targetId.startsWith('temp-')) return;
+    
+    if (confirm('¿Estás seguro de que quieres eliminar esta nota?')) {
+      await deleteNote(targetId);
+      setSelectedNoteId(null);
+      onClose();
+    }
   };
 
   // Load existing note data
@@ -225,12 +252,14 @@ export function BaseEditorModal({
         
         if (res.ok) {
           const savedNote = await res.json();
-          setNote(savedNote);
           pendingChangesRef.current = {};
           isCreatedRef.current = true;
           setIsDirty(false);
           setToast({ message: 'Creado exitosamente' });
           await refreshNotes();
+          // Select the new note and close the create form
+          setSelectedNoteId(savedNote.id);
+          onClose();
           onSaved?.();
         } else {
           setToast({ message: 'Error al crear' });
@@ -357,6 +386,32 @@ export function BaseEditorModal({
                 title={note.isFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos'}
               >
                 <Star size={20} className={note.isFavorite ? 'fill-current' : ''} />
+              </button>
+            )}
+            
+            {/* Archive/Unarchive button - only for saved notes */}
+            {(noteId || isCreatedRef.current) && !note.id.startsWith('temp-') && (
+              <button
+                onClick={handleArchive}
+                className={`p-2 rounded transition-colors ${
+                  note.archivedAt 
+                    ? 'text-yellow-500 hover:text-yellow-400 hover:bg-gray-800' 
+                    : 'text-gray-400 hover:text-yellow-400 hover:bg-gray-800'
+                }`}
+                title={note.archivedAt ? 'Restaurar nota' : 'Archivar nota'}
+              >
+                {note.archivedAt ? <ArchiveRestore size={20} /> : <Archive size={20} />}
+              </button>
+            )}
+            
+            {/* Delete button - only for saved notes */}
+            {(noteId || isCreatedRef.current) && !note.id.startsWith('temp-') && (
+              <button
+                onClick={handleDelete}
+                className="p-2 rounded transition-colors text-gray-400 hover:text-red-400 hover:bg-gray-800"
+                title="Eliminar nota"
+              >
+                <Trash2 size={20} />
               </button>
             )}
             
@@ -538,6 +593,32 @@ export function BaseEditorModal({
                 title={note.isFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos'}
               >
                 <Star size={20} className={note.isFavorite ? 'fill-current' : ''} />
+              </button>
+            )}
+            
+            {/* Archive/Unarchive button - only for saved notes */}
+            {(noteId || isCreatedRef.current) && !note.id.startsWith('temp-') && (
+              <button
+                onClick={handleArchive}
+                className={`p-2 rounded transition-colors ${
+                  note.archivedAt 
+                    ? 'text-yellow-500 hover:text-yellow-400 hover:bg-gray-800' 
+                    : 'text-gray-400 hover:text-yellow-400 hover:bg-gray-800'
+                }`}
+                title={note.archivedAt ? 'Restaurar nota' : 'Archivar nota'}
+              >
+                {note.archivedAt ? <ArchiveRestore size={20} /> : <Archive size={20} />}
+              </button>
+            )}
+            
+            {/* Delete button - only for saved notes */}
+            {(noteId || isCreatedRef.current) && !note.id.startsWith('temp-') && (
+              <button
+                onClick={handleDelete}
+                className="p-2 rounded transition-colors text-gray-400 hover:text-red-400 hover:bg-gray-800"
+                title="Eliminar nota"
+              >
+                <Trash2 size={20} />
               </button>
             )}
             

@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useCallback } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 
 interface UnsavedChangesModalProps {
@@ -10,6 +11,26 @@ interface UnsavedChangesModalProps {
 }
 
 export function UnsavedChangesModal({ isOpen, onDiscard, onCancel, onSave }: UnsavedChangesModalProps) {
+  // Keyboard shortcuts: Enter = Save, Escape = Cancel
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      onSave();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      onCancel();
+    }
+  }, [onSave, onCancel]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
+  }, [isOpen, handleKeyDown]);
+
   if (!isOpen) return null;
 
   return (
@@ -59,13 +80,13 @@ export function UnsavedChangesModal({ isOpen, onDiscard, onCancel, onSave }: Uns
             onClick={onCancel}
             className="flex-1 px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-600 rounded-lg font-medium transition-colors"
           >
-            Cancelar
+            Cancelar <span className="text-gray-500 text-xs">(Esc)</span>
           </button>
           <button
             onClick={onSave}
             className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
           >
-            Guardar
+            Guardar <span className="text-blue-300 text-xs">(↵)</span>
           </button>
         </div>
       </div>

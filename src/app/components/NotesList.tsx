@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { FileText, CheckSquare, Link, Clock, Plus, X, Star, Paperclip, GripVertical } from 'lucide-react';
+import { FileText, CheckSquare, Link, Clock, Plus, X, Star, Paperclip, GripVertical, ChevronRight, ChevronLeft } from 'lucide-react';
 import { TimeSheetModal } from './TimeSheetModal';
 import { TaskEditorModal } from './TaskEditorModal';
 import { NoteEditorModal } from './NoteEditorModal';
@@ -40,23 +40,6 @@ const typeLabels: Record<FilterableNoteType, string> = {
   connection: 'Conexión',
 };
 
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diff = now.getTime() - date.getTime();
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  
-  if (days === 0) {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  } else if (days === 1) {
-    return 'Ayer';
-  } else if (days < 7) {
-    return date.toLocaleDateString('es', { weekday: 'short' });
-  } else {
-    return date.toLocaleDateString('es', { month: 'short', day: 'numeric' });
-  }
-}
-
 export function NotesList() {
   const { 
     filteredNotes, 
@@ -76,6 +59,8 @@ export function NotesList() {
     confirmNavigation,
     reorderFavorites,
     getClientForNote,
+    isNotesListCollapsed,
+    setNotesListCollapsed,
   } = useApp();
   
   const listRef = useRef<HTMLDivElement>(null);
@@ -94,6 +79,23 @@ export function NotesList() {
   // REQ-008.2: Drag & drop state for reordering favorites
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
+
+  // Track previous collapsed state to detect expansion
+  const wasCollapsedRef = useRef(isNotesListCollapsed);
+
+  // Focus selected note when expanding from collapsed state
+  useEffect(() => {
+    if (wasCollapsedRef.current && !isNotesListCollapsed && selectedNoteId) {
+      // Transitioned from collapsed to expanded - focus selected note
+      const noteEl = noteRefs.current.get(selectedNoteId);
+      if (noteEl) {
+        noteEl.focus();
+      }
+    }
+    wasCollapsedRef.current = isNotesListCollapsed;
+  }, [isNotesListCollapsed, selectedNoteId]);
+
+
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -146,14 +148,23 @@ export function NotesList() {
   }, [pendingNoteType, handleCreateNote]);
 
   // Handle note selection - check for unsaved changes first
+  // Selection does NOT collapse - only ENTER does
   const handleSelectNote = useCallback((noteId: string) => {
     // Don't do anything if selecting the same note
     if (noteId === selectedNoteId) return;
     
     confirmNavigation(() => {
       setSelectedNoteId(noteId);
+      // Do NOT collapse on selection - user navigates with arrows
     });
   }, [setSelectedNoteId, selectedNoteId, confirmNavigation]);
+
+  // Handle ENTER to collapse and focus editor
+  const handleEnterOnNote = useCallback(() => {
+    if (!selectedNoteId) return;
+    setNotesListCollapsed(true);
+    // The editor will receive focus via the page.tsx effect
+  }, [selectedNoteId, setNotesListCollapsed]);
 
   // REQ-008.2: Drag & drop handlers for favorites
   const handleDragStart = useCallback((e: React.DragEvent, noteId: string) => {
@@ -224,6 +235,13 @@ export function NotesList() {
       return;
     }
 
+    // ENTER to collapse and focus editor
+    if (e.key === 'Enter' && selectedNoteId && !isNotesListCollapsed) {
+      e.preventDefault();
+      handleEnterOnNote();
+      return;
+    }
+
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       
@@ -247,7 +265,7 @@ export function NotesList() {
         }
       }
     }
-  }, [filteredNotes, selectedNoteId, handleSelectNote, currentView, editorModal.isOpen]);
+  }, [filteredNotes, selectedNoteId, handleSelectNote, currentView, editorModal.isOpen, isNotesListCollapsed, handleEnterOnNote]);
 
   useEffect(() => {
     document.addEventListener('keydown', handleKeyDown);
@@ -273,10 +291,35 @@ export function NotesList() {
   // Filterable types (timesheet excluded per REQ-002)
   const allTypes: FilterableNoteType[] = ['general', 'task', 'connection'];
 
+  // Collapsed state: minimal view with just expand button
+  if (isNotesListCollapsed && selectedNoteId) {
+    return (
+      <div className="w-10 bg-gray-900 border-r border-gray-800 flex flex-col items-center py-2">
+        <button
+          onClick={() => setNotesListCollapsed(false)}
+          className="p-2 rounded hover:bg-gray-800 text-gray-400 hover:text-white transition-colors"
+          title="Expandir lista (ESC)"
+        >
+          <ChevronRight size={18} />
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="w-72 bg-gray-900 border-r border-gray-800 overflow-hidden flex flex-col">
-      {/* Type filters + Create button */}
+      {/* Type filters + Create button + Collapse button */}
       <div className="px-3 py-2 border-b border-gray-800 flex items-center gap-1">
+        {/* Collapse button - only when note selected */}
+        {selectedNoteId && (
+          <button
+            onClick={() => setNotesListCollapsed(true)}
+            className="p-1 rounded hover:bg-gray-800 text-gray-400 hover:text-white transition-colors mr-1 flex-shrink-0"
+            title="Colapsar lista (Enter)"
+          >
+            <ChevronLeft size={14} />
+          </button>
+        )}
         <div className="flex flex-wrap gap-1 flex-1">
           {allTypes.map(type => {
             const isActive = activeTypeFilters.includes(type);
@@ -289,12 +332,12 @@ export function NotesList() {
                 onClick={() => toggleTypeFilter(type)}
                 className={`
                   flex items-center gap-1 px-2 py-1 rounded text-xs font-medium
-                  transition-colors
+                  transition-colors whitespace-nowrap
                   ${isActive ? colors.active + ' text-white' : colors.inactive + ' text-gray-500'}
                 `}
                 title={typeLabels[type]}
               >
-                <Icon size={12} />
+                <Icon size={12} className="flex-shrink-0" />
                 <span className="hidden sm:inline">{typeLabels[type]}</span>
               </button>
             );
@@ -372,7 +415,7 @@ export function NotesList() {
           <p className="text-gray-500 text-sm">No hay notas</p>
         </div>
       ) : (
-        <div ref={listRef} className="divide-y divide-gray-800 flex-1 overflow-y-auto">
+        <div ref={listRef} className="divide-y divide-gray-800 flex-1 overflow-y-auto notes-list-scrollbar">
           {filteredNotes.map((note, index) => {
             // Note: timesheets are filtered out by AppContext, but handle type safety
             const Icon = note.type !== 'timesheet' ? typeIcons[note.type] : Clock;
@@ -383,9 +426,10 @@ export function NotesList() {
             const isDragging = draggedId === note.id;
             const isDragOver = dragOverId === note.id;
             
-            // REQ-008.3: Get client for badge (only show in "all" or "favorites" view)
+            // REQ-001.13.3: Get client for color indicator (always)
+            const noteClient = getClientForNote(note);
+            // REQ-008.3: Only show badge in "all" or "favorites" view
             const showClientBadge = (currentView === 'all' && !selectedClientId) || currentView === 'favorites';
-            const noteClient = showClientBadge ? getClientForNote(note) : null;
             
             return (
               <div
@@ -394,7 +438,9 @@ export function NotesList() {
                   if (el) noteRefs.current.set(note.id, el as unknown as HTMLButtonElement);
                   else noteRefs.current.delete(note.id);
                 }}
+                tabIndex={0}
                 onClick={() => handleSelectNote(note.id)}
+                onDoubleClick={() => handleEnterOnNote()}
                 draggable={isFavoritesView}
                 onDragStart={(e) => handleDragStart(e, note.id)}
                 onDragOver={(e) => handleDragOver(e, note.id)}
@@ -402,7 +448,8 @@ export function NotesList() {
                 onDrop={(e) => handleDrop(e, note.id)}
                 onDragEnd={handleDragEnd}
                 className={`
-                  w-full text-left p-3 transition-colors cursor-pointer
+                  w-full text-left pt-0 pb-3 px-3 transition-colors cursor-pointer relative outline-none
+                  focus:ring-1 focus:ring-blue-500 focus:ring-inset
                   ${isSelected 
                     ? 'bg-gray-800' 
                     : 'hover:bg-gray-800/50'}
@@ -410,62 +457,83 @@ export function NotesList() {
                   ${isDragOver ? 'border-t-2 border-blue-500' : ''}
                 `}
               >
-                <div className="flex items-start gap-2">
-                  {/* REQ-008.2: Drag handle and position badge for favorites */}
-                  {isFavoritesView && (
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <GripVertical size={14} className="text-gray-600 cursor-grab" />
-                      <span className="text-xs font-mono text-yellow-500 w-5">#{index + 1}</span>
-                    </div>
+                {/* REQ-001.13.3: Client color indicator - left and top borders */}
+                {noteClient?.color && (
+                  <>
+                    <div
+                      className="absolute left-0 top-0 bottom-0 w-1"
+                      style={{ backgroundColor: noteClient.color }}
+                    />
+                    <div
+                      className="absolute left-0 right-0 top-0 h-px"
+                      style={{ backgroundColor: noteClient.color }}
+                    />
+                  </>
+                )}
+                
+                {/* Top row: Drag handle, Client badge, Type icon, Position badge */}
+                <div className="flex items-center gap-1 mb-1 -ml-3">
+                  {/* Client badge */}
+                  {showClientBadge && noteClient && (
+                    <span
+                      className="px-1.5 py-0.5 text-[10px] rounded-sm flex-shrink-0"
+                      style={{
+                        backgroundColor: noteClient.color || '#6B7280',
+                        color: noteClient.color ? getContrastTextColor(noteClient.color) : 'white',
+                      }}
+                      title={noteClient.name}
+                    >
+                      {noteClient.name}
+                    </span>
                   )}
-                  <Icon size={16} className={`mt-0.5 ${typeColors[note.type]}`} />
+                  {/* Drag handle for favorites */}
+                  {isFavoritesView && (
+                    <GripVertical size={14} className="text-gray-600 cursor-grab flex-shrink-0" />
+                  )}
+                  {/* Spacer */}
+                  <div className="flex-1" />
+                  {/* Position badge for favorites - aligned right */}
+                  {isFavoritesView && (
+                    <span className="text-xs font-mono text-yellow-500 flex-shrink-0">#{index + 1}</span>
+                  )}
+                </div>
+                
+                {/* Content row: Title and actions */}
+                <div className="flex items-start gap-2 pl-1">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-medium text-white truncate flex-1">
+                    {/* REQ-001.13.1: Word wrap title */}
+                    <div className="flex items-start gap-2">
+                      <h3 className="text-sm font-medium text-white flex-1 break-words">
                         {note.title || 'Sin título'}
                       </h3>
                       {/* REQ-006: Favorite indicator */}
                       {note.isFavorite && !isFavoritesView && (
-                        <Star size={14} className="text-yellow-400 fill-current flex-shrink-0" />
-                      )}
-                      {/* Quick TimeSheet button for tasks */}
-                      {isSavedTask && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setTimeSheetTask(note as TaskNote);
-                          }}
-                          className="p-1 rounded hover:bg-gray-700 text-gray-500 hover:text-green-400 transition-colors"
-                          title="Registrar horas"
-                        >
-                          <Clock size={14} />
-                        </button>
+                        <Star size={14} className="text-yellow-400 fill-current flex-shrink-0 mt-0.5" />
                       )}
                     </div>
-                    <p className="text-xs text-gray-500 truncate mt-0.5">
-                      {note.contentText || (
-                        note.attachments && note.attachments.length > 0 ? (
-                          <span className="flex items-center gap-1 text-gray-600">
-                            <Paperclip size={12} />
-                            {note.attachments.length}
-                          </span>
-                        ) : null
-                      )}
-                    </p>
-                    <p className="text-xs text-gray-600 mt-1">
-                      {formatDate(note.updatedAt)}
-                    </p>
-                    {/* REQ-008.3: Client badge */}
-                    {noteClient && (
-                      <span
-                        className="inline-block mt-1 px-1.5 py-0.5 text-xs rounded-sm truncate max-w-[120px]"
-                        style={{
-                          backgroundColor: noteClient.color || '#6B7280',
-                          color: noteClient.color ? getContrastTextColor(noteClient.color) : 'white',
+                  </div>
+                  {/* Right column: Type icon, Clock, Attachments */}
+                  <div className="flex flex-col items-center justify-center gap-1 flex-shrink-0">
+                    {/* Type icon */}
+                    <Icon size={14} className={`flex-shrink-0 ${typeColors[note.type]}`} />
+                    {/* Quick TimeSheet button for tasks */}
+                    {isSavedTask && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setTimeSheetTask(note as TaskNote);
                         }}
-                        title={noteClient.name}
+                        className="p-1 rounded hover:bg-gray-700 text-gray-500 hover:text-green-400 transition-colors"
+                        title="Registrar horas"
                       >
-                        {noteClient.name.length > 12 ? noteClient.name.substring(0, 12) + '…' : noteClient.name}
+                        <Clock size={14} />
+                      </button>
+                    )}
+                    {/* Attachments */}
+                    {note.attachments && note.attachments.length > 0 && (
+                      <span className="flex items-center gap-0.5 text-xs text-gray-500" title="Adjuntos">
+                        <Paperclip size={12} />
+                        {note.attachments.length}
                       </span>
                     )}
                   </div>

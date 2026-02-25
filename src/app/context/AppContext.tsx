@@ -40,6 +40,7 @@ interface AppState {
   lastSaved: Date | null;
   taskFilters: TaskFilters;
   timeSheetFilters: TimeSheetFilters;
+  isNotesListCollapsed: boolean; // REQ-001.13.2: NotesList collapsed state
   // Editor modal state
   editorModal: {
     isOpen: boolean;
@@ -83,6 +84,10 @@ interface AppContextValue extends AppState {
   // Editor modal actions
   openEditorModal: (type: NoteType, noteId?: string) => void;
   closeEditorModal: () => void;
+  // REQ-001.13.2: NotesList collapse control
+  isNotesListCollapsed: boolean;
+  setNotesListCollapsed: (collapsed: boolean) => void;
+  toggleNotesListCollapsed: () => void;
 }
 
 // ============================================================================
@@ -127,6 +132,7 @@ export function AppProvider({ children }: AppProviderProps) {
     lastSaved: null,
     taskFilters: { status: '', clientId: '', projectId: '' },
     timeSheetFilters: { startDate: '', endDate: '', clientId: '' },
+    isNotesListCollapsed: false, // REQ-001.13.2: NotesList collapsed state
     editorModal: {
       isOpen: false,
       mode: 'create',
@@ -766,6 +772,9 @@ export function AppProvider({ children }: AppProviderProps) {
         noteId: null,
       },
     })),
+    // REQ-001.13.2: NotesList collapse control
+    setNotesListCollapsed: (collapsed) => setState(s => ({ ...s, isNotesListCollapsed: collapsed })),
+    toggleNotesListCollapsed: () => setState(s => ({ ...s, isNotesListCollapsed: !s.isNotesListCollapsed })),
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

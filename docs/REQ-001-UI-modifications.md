@@ -467,14 +467,90 @@ Agregar un botón pequeño con ícono de reloj (⏱️) en cada card de tarea de
 
 ---
 
+## 13. Mejoras Visuales en NotesList
+
+### 13.1 Título con Word Wrap
+- **Descripción:** El título de cada nota debe mostrarse completo, permitiendo que el texto haga wrap a múltiples líneas en lugar de truncarse con ellipsis.
+- **Comportamiento:** Si el título es largo, debe continuar en la siguiente línea dentro de la card.
+
+### 13.2 NotesList Colapsable
+- **Descripción:** Al hacer clic en una nota, el panel NotesList debe colapsarse automáticamente de forma similar al comportamiento del Sidebar.
+- **Objetivo:** Priorizar la visualización del contenido de la nota (InlineEditorPanel) sobre la lista.
+- **Comportamiento esperado:**
+  - Al seleccionar una nota, NotesList se colapsa mostrando una versión mínima o solo un botón para expandir
+  - Debe existir una forma de volver a expandir el panel (botón o interacción similar al Sidebar)
+
+### 13.3 Indicador de Color del Cliente en la Card
+- **Descripción:** Cada card de nota debe mostrar el indicador de color del cliente asociado, similar a como se muestra en el Sidebar.
+- **Diseño:** Barra vertical de color en el borde izquierdo de la card, o indicador visual equivalente.
+
+### 13.4 Reorganización de Información en la Card
+- **Badge de cliente:** Mover a la misma línea que la información de adjuntos
+- **Fecha y hora:** Ocultar de la visualización de la card
+- **Diseño sugerido:**
+  ```
+  ┌─────────────────────────────────────────┐
+  │ ▌ Título de la nota que puede ser      │
+  │ ▌ largo y hace word wrap               │
+  │ ▌ [Cliente] [📎 2]                     │
+  └─────────────────────────────────────────┘
+  ```
+
+### 13.5 Scrollbar con Estilo Personalizado
+- **Descripción:** La scrollbar de NotesList debe ser oscura y delgada, acorde al diseño dark de la aplicación.
+- **Especificaciones:**
+  - Color: Gris oscuro (ej: `#374151` o similar)
+  - Ancho: Delgado (~6px)
+  - Track: Semi-transparente o muy oscuro
+
+**Criterios de aceptación:**
+- [ ] Los títulos de las notas hacen word wrap y se muestran completos
+- [ ] Al hacer clic en una nota, NotesList se colapsa
+- [ ] Existe forma de expandir NotesList nuevamente
+- [ ] Cada card muestra el color del cliente como indicador visual
+- [ ] El badge de cliente está en la misma línea que los adjuntos
+- [ ] La fecha/hora ya no se muestra en las cards
+- [ ] La scrollbar es oscura y delgada
+
+---
+
+## 14. Campos de Cabecera en Modo Compacto (Inline Editor)
+
+### 14.1 Descripción
+En el editor inline de tareas (TaskEditorModal), los campos de cabecera deben estar **deshabilitados por defecto** para priorizar la visualización del contenido.
+
+### 14.2 Comportamiento esperado
+- **Campos siempre editables:** Estado y Prioridad (no dependen del lápiz)
+- **Campos deshabilitados por defecto:** Ticket/Fase, Descripción corta, Fecha límite, Horas presupuestadas, Cliente, Proyecto
+- **Botón lápiz:** Un ícono de lápiz que habilita todos los campos deshabilitados cuando se activa
+
+### 14.3 Diseño Compacto
+- Los campos de cabecera deben estar más comprimidos para ocupar menos espacio vertical
+- Reducir márgenes y padding
+- Usar un diseño más condensado (posiblemente una sola fila o campos inline)
+
+### 14.4 UI del botón lápiz
+- Ubicación: Al inicio de la sección de campos de cabecera
+- Estado inactivo: Ícono gris, campos deshabilitados (apariencia desaturada)
+- Estado activo: Ícono azul/blanco, campos habilitados
+
+**Criterios de aceptación:**
+- [ ] Estado y Prioridad siempre editables
+- [ ] Demás campos deshabilitados por defecto
+- [ ] Botón lápiz que habilita/deshabilita los campos bloqueados
+- [ ] Diseño de cabecera más compacto
+- [ ] Visual feedback claro del estado (bloqueado vs editable)
+
+---
+
 ## Componentes afectados
 
 | Componente | Cambio |
 |------------|--------|
 | `TopBar.tsx` | Renombrar título, convertir botón en dropdown |
 | `Sidebar.tsx` | Cambiar navegación de tipos a clientes |
-| `NotesList.tsx` | Agregar barra de filtros por tipo, manejar eventos de teclado, **agregar botón "+" con selector de cliente** |
-| `AppContext.tsx` | Agregar estado para filtros de tipo activos, dirty state, preferencias de auto-guardado |
+| `NotesList.tsx` | Agregar barra de filtros por tipo, manejar eventos de teclado, **agregar botón "+" con selector de cliente**, **word wrap en títulos, colapsable, indicador de color cliente, reorganizar info card, scrollbar oscura** |
+| `AppContext.tsx` | Agregar estado para filtros de tipo activos, dirty state, preferencias de auto-guardado, **estado collapsed de NotesList** |
 | `AttachmentsPanel.tsx` | Agregar previsualización, renombrar, eliminar |
 | `AttachmentViewer.tsx` | Nuevo componente para lightbox/modal de preview |
 | `clients-repo.ts` | Crear proyecto "General" al crear cliente |
@@ -485,6 +561,7 @@ Agregar un botón pequeño con ícono de reloj (⏱️) en cada card de tarea de
 | `TaskFields.tsx` | **Agregar botón "Registrar Horas" para abrir modal de TimeSheet** |
 | `TimeSheetModal.tsx` | **Nuevo componente: modal para crear/editar TimeSheet desde Task** |
 | `NotesList.tsx` | **Agregar botón de reloj en cards de tareas para acceso rápido a TimeSheet** |
+| `globals.css` | **Estilos para scrollbar oscura y delgada en NotesList** |
 
 ---
 
