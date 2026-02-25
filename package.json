@@ -3,12 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "bash scripts/sync-attachments.sh && next dev",
-    "dev:nosync": "next dev",
+    "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "sync": "bash scripts/sync-attachments.sh",
     "web": "bash scripts/redeploy.sh"
   },
   "dependencies": {
