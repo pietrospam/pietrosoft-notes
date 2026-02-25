@@ -62,6 +62,39 @@ export function BaseEditorModal({
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isCreatedRef = useRef(false); // Track if note was created
 
+  // Persist note and return new ID (for attachments/images before first save)
+  const persistNote = useCallback(async (): Promise<string | null> => {
+    if (noteId || isCreatedRef.current) {
+      return noteId || note.id;
+    }
+    
+    try {
+      const dataToSend = { ...note, ...pendingChangesRef.current };
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { id: _tempId, ...noteWithoutId } = dataToSend;
+      
+      const res = await fetch('/api/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(noteWithoutId),
+      });
+      
+      if (res.ok) {
+        const savedNote = await res.json();
+        setNote(savedNote);
+        pendingChangesRef.current = {};
+        isCreatedRef.current = true;
+        setIsDirty(false);
+        setToast({ message: 'Nota creada' });
+        await refreshNotes();
+        return savedNote.id;
+      }
+    } catch (err) {
+      console.error('Error persisting note:', err);
+    }
+    return null;
+  }, [noteId, note, refreshNotes, setIsDirty]);
+
   // REQ-006: Handle favorite toggle
   const handleToggleFavorite = async () => {
     const targetId = noteId || note.id;
@@ -381,6 +414,7 @@ export function BaseEditorModal({
               content={note.contentJson}
               onChange={handleContentChange}
               noteId={note.id}
+              onPersistNote={persistNote}
               placeholder="Escribe aquí..."
             />
           </div>
@@ -565,6 +599,7 @@ export function BaseEditorModal({
               content={note.contentJson}
               onChange={handleContentChange}
               noteId={note.id}
+              onPersistNote={persistNote}
               placeholder="Escribe aquí..."
             />
           </div>

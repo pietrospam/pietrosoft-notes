@@ -23,6 +23,7 @@ export interface Client {
   name: string;
   description?: string;
   icon: string; // Icon key/name
+  color?: string; // REQ-008.3: Client color (hex code)
   disabled?: boolean;
   createdAt: string;
   updatedAt: string;
@@ -87,6 +88,7 @@ export interface NoteBase extends Timestamps {
   contentText: string; // Derived plain text for search
   attachments: AttachmentMeta[];
   isFavorite: boolean; // REQ-006: Favorites
+  favoriteOrder?: number; // REQ-008.2: Position in favorites
 }
 
 // ============================================================================

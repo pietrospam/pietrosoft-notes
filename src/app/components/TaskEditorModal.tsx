@@ -32,9 +32,10 @@ interface TaskEditorModalProps {
   onSaved?: () => void;
   inline?: boolean;
   onExpandToPopup?: () => void;
+  defaultClientId?: string;
 }
 
-export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onExpandToPopup }: TaskEditorModalProps) {
+export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onExpandToPopup, defaultClientId }: TaskEditorModalProps) {
   const { refreshNotes, refreshClients, toggleFavorite, autoSaveEnabled, setIsDirty: setGlobalIsDirty, setPendingChanges: setGlobalPendingChanges } = useApp();
   
   // Create default task for new notes
@@ -70,7 +71,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
   // Task fields state
   const [clients, setClients] = useState<Client[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedClientId, setSelectedClientId] = useState<string>('');
+  const [selectedClientId, setSelectedClientId] = useState<string>(defaultClientId || '');
   const [showCreateClient, setShowCreateClient] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
@@ -92,6 +93,39 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isCreatedRef = useRef(false);
 
+  // Persist task and return new ID (for attachments/images before first save)
+  const persistTask = useCallback(async (): Promise<string | null> => {
+    if (taskId || isCreatedRef.current) {
+      return taskId || task.id;
+    }
+    
+    try {
+      const dataToSend = { ...task, ...pendingChangesRef.current };
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { id: _tempId, ...taskWithoutId } = dataToSend;
+      
+      const res = await fetch('/api/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(taskWithoutId),
+      });
+      
+      if (res.ok) {
+        const savedTask = await res.json();
+        setTask(savedTask);
+        pendingChangesRef.current = {};
+        isCreatedRef.current = true;
+        setIsDirty(false);
+        setToast({ message: 'Tarea creada' });
+        await refreshNotes();
+        return savedTask.id;
+      }
+    } catch (err) {
+      console.error('Error persisting task:', err);
+    }
+    return null;
+  }, [taskId, task, refreshNotes, setIsDirty]);
+
   // REQ-006: Handle favorite toggle
   const handleToggleFavorite = async () => {
     const targetId = taskId || task.id;
@@ -103,10 +137,22 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
     await toggleFavorite(targetId);
   };
 
-  // Load clients
+  // Load clients and projects
   useEffect(() => {
     fetch('/api/clients').then(r => r.json()).then(setClients);
-  }, []);
+    fetch('/api/projects').then(r => r.json()).then(allProjects => {
+      // If defaultClientId provided and in create mode, filter and set projects
+      if (defaultClientId && !taskId) {
+        const clientProjects = allProjects.filter((p: Project) => p.clientId === defaultClientId);
+        setProjects(clientProjects);
+        // Auto-select "General" project
+        const generalProject = clientProjects.find((p: Project) => p.name === 'General');
+        if (generalProject) {
+          setTask(prev => ({ ...prev, projectId: generalProject.id }));
+        }
+      }
+    });
+  }, [defaultClientId, taskId]);
 
   // Load task data (edit mode)
   useEffect(() => {
@@ -506,6 +552,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
           content={task.contentJson}
           onChange={handleContentChange}
           noteId={task.id}
+          onPersistNote={persistTask}
           placeholder="Descripción de la tarea..."
         />
       </div>

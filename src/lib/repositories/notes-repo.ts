@@ -115,6 +115,7 @@ function toNote(p: PrismaNote): Note {
     updatedAt: p.updatedAt.toISOString(),
     archivedAt: p.archived ? p.updatedAt.toISOString() : undefined,
     isFavorite: p.isFavorite ?? false,
+    favoriteOrder: p.favoriteOrder ?? undefined,
   };
 
   const type = noteTypeFromDb[p.type];
@@ -389,6 +390,11 @@ export async function updateNote<T extends Note>(
   // REQ-006: Favorites field
   if ('isFavorite' in input) {
     data.isFavorite = anyInput.isFavorite as boolean;
+  }
+
+  // REQ-008.2: Favorite order field
+  if ('favoriteOrder' in input) {
+    data.favoriteOrder = anyInput.favoriteOrder as number | null;
   }
 
   const updated = await prisma.note.update({ 

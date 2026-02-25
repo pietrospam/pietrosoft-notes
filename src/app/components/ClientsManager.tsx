@@ -1,21 +1,26 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Plus, Pencil, Trash2, Check, X, Eye, EyeOff } from 'lucide-react';
 import { IconPicker, DynamicIcon } from './IconPicker';
+import { useApp } from '../context/AppContext';
+import { CLIENT_COLORS } from '@/lib/colorPalette';
 import type { Client } from '@/lib/types';
 
 export function ClientsManager() {
+  const { refreshClients: refreshGlobalClients } = useApp();
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [showDisabled, setShowDisabled] = useState(false);
+  const nameInputRef = useRef<HTMLInputElement>(null);
   
   // Form state
   const [formName, setFormName] = useState('');
   const [formIcon, setFormIcon] = useState('building');
   const [formDescription, setFormDescription] = useState('');
+  const [formColor, setFormColor] = useState('');
 
   // Fetch clients
   const fetchClients = async () => {
@@ -40,6 +45,7 @@ export function ClientsManager() {
     setFormName('');
     setFormIcon('building');
     setFormDescription('');
+    setFormColor('');
     setEditingClient(null);
     setIsCreating(false);
   };
@@ -49,12 +55,15 @@ export function ClientsManager() {
     setFormName(client.name);
     setFormIcon(client.icon);
     setFormDescription(client.description || '');
+    setFormColor(client.color || '');
     setIsCreating(false);
   };
 
   const handleCreate = () => {
     resetForm();
     setIsCreating(true);
+    // Focus name input after state update
+    setTimeout(() => nameInputRef.current?.focus(), 0);
   };
 
   const handleSave = async () => {
@@ -70,10 +79,12 @@ export function ClientsManager() {
             name: formName,
             icon: formIcon,
             description: formDescription || undefined,
+            color: formColor || undefined,
           }),
         });
         if (res.ok) {
           fetchClients();
+          refreshGlobalClients(); // Refresh sidebar
           resetForm();
         }
       } else {
@@ -85,10 +96,12 @@ export function ClientsManager() {
             name: formName,
             icon: formIcon,
             description: formDescription || undefined,
+            color: formColor || undefined,
           }),
         });
         if (res.ok) {
           fetchClients();
+          refreshGlobalClients(); // Refresh sidebar
           resetForm();
         }
       }
@@ -155,11 +168,13 @@ export function ClientsManager() {
             <div>
               <label className="block text-xs text-gray-500 mb-1">Name *</label>
               <input
+                ref={nameInputRef}
                 type="text"
                 value={formName}
                 onChange={(e) => setFormName(e.target.value)}
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
                 placeholder="Client name"
+                autoFocus={isCreating}
               />
             </div>
             <div>
@@ -175,6 +190,31 @@ export function ClientsManager() {
             <div>
               <label className="block text-xs text-gray-500 mb-1">Icon *</label>
               <IconPicker value={formIcon} onChange={setFormIcon} />
+            </div>
+            {/* REQ-008.3: Color Picker */}
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Color</label>
+              <div className="flex flex-wrap gap-1.5 p-2 bg-gray-800 border border-gray-700 rounded-lg max-h-24 overflow-y-auto">
+                {CLIENT_COLORS.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    onClick={() => setFormColor(color)}
+                    className={`w-6 h-6 rounded-md transition-all ${
+                      formColor === color 
+                        ? 'ring-2 ring-white ring-offset-2 ring-offset-gray-800 scale-110' 
+                        : 'hover:scale-110'
+                    }`}
+                    style={{ backgroundColor: color }}
+                    title={color}
+                  />
+                ))}
+              </div>
+              {formColor && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Selected: <span style={{ color: formColor }}>{formColor}</span>
+                </p>
+              )}
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <button
@@ -212,6 +252,14 @@ export function ClientsManager() {
                   client.disabled ? 'opacity-50' : ''
                 }`}
               >
+                {/* REQ-008.3: Color indicator */}
+                {client.color && (
+                  <div
+                    className="w-3 h-8 rounded-sm flex-shrink-0"
+                    style={{ backgroundColor: client.color }}
+                    title={client.color}
+                  />
+                )}
                 <DynamicIcon icon={client.icon} className="text-gray-400" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-white truncate">{client.name}</p>

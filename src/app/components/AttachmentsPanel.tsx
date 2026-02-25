@@ -38,8 +38,15 @@ export function AttachmentsPanel({
   const [viewingAttachment, setViewingAttachment] = useState<AttachmentMeta | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const handleUpload = async (file: File) => {
+    // Skip if noteId is temporary (note not saved yet)
+    if (noteId.startsWith('temp-')) {
+      alert('Por favor guarda la nota antes de adjuntar archivos');
+      return;
+    }
+    
     setUploading(true);
     
     const formData = new FormData();
@@ -136,8 +143,42 @@ export function AttachmentsPanel({
     }
   };
 
+  // REQ-008.1: Drag & drop handlers
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer.types.includes('Files')) {
+      setIsDragOver(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length === 0) return;
+
+    // Upload files sequentially
+    for (const file of files) {
+      await handleUpload(file);
+    }
+  };
+
   return (
-    <div className="border-t border-gray-800 pt-4 mt-4">
+    <div 
+      className={`border-t border-gray-800 pt-4 mt-4 transition-colors ${isDragOver ? 'bg-blue-900/20 border-blue-500' : ''}`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2 text-sm font-medium text-gray-400">
           <Paperclip size={14} />
@@ -172,7 +213,13 @@ export function AttachmentsPanel({
       </div>
 
       {attachments.length === 0 ? (
-        <p className="text-xs text-gray-600 py-2">Sin anexos</p>
+        <div className={`text-center py-4 border-2 border-dashed rounded-lg ${isDragOver ? 'border-blue-500 bg-blue-900/10' : 'border-gray-700'}`}>
+          {isDragOver ? (
+            <p className="text-xs text-blue-400">Suelta los archivos aquí</p>
+          ) : (
+            <p className="text-xs text-gray-600">Arrastra archivos aquí o usa el botón Agregar</p>
+          )}
+        </div>
       ) : (
         <div className="space-y-2">
           {attachments.map((attachment) => {

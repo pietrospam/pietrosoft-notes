@@ -12,6 +12,7 @@ model Client {
   id          String    @id
   name        String
   description String?
+  color       String?   // REQ-008.3: Client color (hex code)
   active      Boolean   @default(true)
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
@@ -44,6 +45,7 @@ model Note {
   clientId              String?         @map("client_id")
   archived              Boolean         @default(false)
   isFavorite            Boolean         @default(false) @map("is_favorite")
+  favoriteOrder         Int?            @map("favorite_order") // REQ-008.2: Position in favorites
   attachments           Json?
   taskStatus            TaskStatus?     @map("task_status")
   taskPriority          TaskPriority?   @map("task_priority")

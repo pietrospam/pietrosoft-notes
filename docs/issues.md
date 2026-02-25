@@ -157,3 +157,34 @@ RESOLUCION FINAL: Se modificaron BaseEditorModal.tsx y TaskEditorModal.tsx para 
    - Actualiza el estado global solo si `inline=true`
 4. Ahora cuando el usuario edita en modo inline, el estado dirty se propaga al contexto global y `confirmNavigation` lo detecta correctamente
 ESTADO: RESUELTO
+
+
+## Issue 17: Autofocus en campo nombre al crear cliente
+ESTADO : RESUELTO
+DESCRIPCION : Al abrir el modal de creación de cliente, el cursor no se posiciona automáticamente en el campo "name". El usuario debe hacer click manualmente para comenzar a escribir.
+RESOLUCION : Se agregó useRef para el input de nombre, autoFocus={isCreating}, y setTimeout para enfocar el input cuando se abre el modal de creación en ClientsManager.tsx.
+
+
+## Issue 18: Sidebar no se refresca al crear cliente
+ESTADO : RESUELTO
+DESCRIPCION : Cuando se crea un nuevo cliente, el panel lateral izquierdo donde se listan los clientes no se actualiza automáticamente. El usuario debe refrescar la página para ver el nuevo cliente.
+RESOLUCION : Se importó useApp y se llama a refreshGlobalClients() después de crear exitosamente un cliente en ClientsManager.tsx.
+
+
+## Issue 19: Error al adjuntar archivo en nota nueva (sin guardar)
+ESTADO : RESUELTO
+DESCRIPCION : Al crear una nota nueva, si se intenta adjuntar un archivo antes de guardarla por primera vez, se produce un error. Sin embargo, una vez la nota está guardada, adjuntar archivos o pegar desde el clipboard funciona correctamente.
+CAUSA : El noteId es temporal (temp-*) hasta que la nota se persiste en la base de datos. El API de attachments verifica que la nota exista.
+RESOLUCION : Se agregó la función `persistNote` en BaseEditorModal y `persistTask` en TaskEditorModal que guarda la nota y retorna el ID real. Esta función se pasa como prop `onPersistNote` al TipTapEditor, que la usa para persistir la nota automáticamente antes de subir imágenes pegadas.
+
+
+## Issue 20: Preseleccionar cliente activo al crear nota/tarea/conexión
+ESTADO : RESUELTO
+DESCRIPCION : Cuando se tiene un cliente seleccionado en el panel izquierdo (filtrando sus notas), al crear una nueva nota, tarea o conexión no se preselecciona automáticamente ese cliente ni su proyecto "General".
+RESOLUCION : Se agregó prop `defaultClientId` a NoteEditorModal, TaskEditorModal y ConnectionEditorModal. NotesList pasa el selectedClientId a estos modales. Los modales ahora inicializan selectedClientId con el valor default y auto-seleccionan el proyecto "General" del cliente.
+
+
+## Issue 21: Mostrar contador de adjuntos en lugar de "sin contenido"
+ESTADO : RESUELTO
+DESCRIPCION : Las cards de notas, tareas y conexiones muestran un texto "sin contenido" de origen desconocido. Este texto no aporta valor y debería eliminarse. En su lugar, mostrar un icono con el número de archivos adjuntos que tiene cada nota (si tiene alguno).
+RESOLUCION : Se modificó NotesList.tsx para mostrar el contador de attachments con ícono Paperclip cuando la nota no tiene contentText pero sí tiene attachments. Si no tiene ninguno, no se muestra nada.

@@ -13,22 +13,35 @@ interface NoteEditorModalProps {
   onSaved?: () => void;
   inline?: boolean;
   onExpandToPopup?: () => void;
+  defaultClientId?: string;
+  defaultProjectId?: string;
 }
 
-export function NoteEditorModal({ noteId, onClose, onSaved, inline = false, onExpandToPopup }: NoteEditorModalProps) {
+export function NoteEditorModal({ noteId, onClose, onSaved, inline = false, onExpandToPopup, defaultClientId, defaultProjectId }: NoteEditorModalProps) {
   const { refreshClients } = useApp();
   const [clients, setClients] = useState<Client[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedClientId, setSelectedClientId] = useState<string>('');
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const [selectedClientId, setSelectedClientId] = useState<string>(defaultClientId || '');
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(defaultProjectId || '');
   const [showCreateClient, setShowCreateClient] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
 
   // Load clients and projects
   useEffect(() => {
     fetch('/api/clients').then(r => r.json()).then(setClients);
-    fetch('/api/projects').then(r => r.json()).then(setProjects);
-  }, []);
+    fetch('/api/projects').then(r => r.json()).then(async (allProjects) => {
+      setProjects(allProjects);
+      // Auto-select "General" project if client is selected but no project
+      if (defaultClientId && !defaultProjectId) {
+        const generalProject = allProjects.find(
+          (p: Project) => p.clientId === defaultClientId && p.name === 'General'
+        );
+        if (generalProject) {
+          setSelectedProjectId(generalProject.id);
+        }
+      }
+    });
+  }, [defaultClientId, defaultProjectId]);
 
   // Filter projects by selected client
   const filteredProjects = selectedClientId 

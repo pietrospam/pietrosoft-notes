@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { X, Clock, Save, AlertCircle } from 'lucide-react';
 import type { TaskNote, TimeSheetNote, Client, Project } from '@/lib/types';
 
@@ -26,6 +26,10 @@ export function TimeSheetModal({ task, initialDate, onClose, onSaved }: TimeShee
   // Task context info
   const [client, setClient] = useState<Client | null>(null);
   const [project, setProject] = useState<Project | null>(null);
+
+  // Refs for focus management
+  const hoursRef = useRef<HTMLInputElement>(null);
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
 
   // Handle Escape key to close modal
   useEffect(() => {
@@ -104,6 +108,14 @@ export function TimeSheetModal({ task, initialDate, onClose, onSaved }: TimeShee
   useEffect(() => {
     checkExistingTimeSheet(date);
   }, [date, checkExistingTimeSheet]);
+
+  // Auto-focus hours field when loading completes
+  useEffect(() => {
+    if (!loading && hoursRef.current) {
+      hoursRef.current.focus();
+      hoursRef.current.select();
+    }
+  }, [loading]);
 
   const handleDateChange = (newDate: string) => {
     setDate(newDate);
@@ -230,14 +242,21 @@ export function TimeSheetModal({ task, initialDate, onClose, onSaved }: TimeShee
 
           {/* Hours */}
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Horas trabajadas *</label>
+            <label className="block text-sm text-gray-400 mb-1">Horas trabajadas * <span className="text-gray-600 text-xs">(Enter=descripción)</span></label>
             <input
+              ref={hoursRef}
               type="number"
               step="0.5"
               min="0"
               max="24"
               value={hours}
               onChange={(e) => setHours(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  descriptionRef.current?.focus();
+                }
+              }}
               placeholder="8.0"
               disabled={loading}
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 disabled:opacity-50"
@@ -248,6 +267,7 @@ export function TimeSheetModal({ task, initialDate, onClose, onSaved }: TimeShee
           <div>
             <label className="block text-sm text-gray-400 mb-1">Descripción <span className="text-gray-600 text-xs">(Enter=guardar, Ctrl+Enter=salto de línea)</span></label>
             <textarea
+              ref={descriptionRef}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               onKeyDown={(e) => {

@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { FileText, CheckSquare, Link, Clock, Plus, X, Star } from 'lucide-react';
+import { FileText, CheckSquare, Link, Clock, Plus, X, Star, Paperclip, GripVertical } from 'lucide-react';
 import { TimeSheetModal } from './TimeSheetModal';
 import { TaskEditorModal } from './TaskEditorModal';
 import { NoteEditorModal } from './NoteEditorModal';
 import { ConnectionEditorModal } from './ConnectionEditorModal';
 import { Toast } from './Toast';
+import { getContrastTextColor } from '@/lib/colorPalette';
 import type { NoteType, TaskNote } from '@/lib/types';
 
 // Note: timesheet is excluded from NotesList filters as per REQ-002
@@ -73,6 +74,8 @@ export function NotesList() {
     openEditorModal,
     closeEditorModal,
     confirmNavigation,
+    reorderFavorites,
+    getClientForNote,
   } = useApp();
   
   const listRef = useRef<HTMLDivElement>(null);
@@ -87,6 +90,10 @@ export function NotesList() {
   // TimeSheet modal state for quick access from task cards
   const [timeSheetTask, setTimeSheetTask] = useState<TaskNote | null>(null);
   const [toast, setToast] = useState<{ message: string } | null>(null);
+
+  // REQ-008.2: Drag & drop state for reordering favorites
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -147,6 +154,64 @@ export function NotesList() {
       setSelectedNoteId(noteId);
     });
   }, [setSelectedNoteId, selectedNoteId, confirmNavigation]);
+
+  // REQ-008.2: Drag & drop handlers for favorites
+  const handleDragStart = useCallback((e: React.DragEvent, noteId: string) => {
+    if (currentView !== 'favorites') return;
+    setDraggedId(noteId);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', noteId);
+  }, [currentView]);
+
+  const handleDragOver = useCallback((e: React.DragEvent, noteId: string) => {
+    if (currentView !== 'favorites' || !draggedId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (noteId !== draggedId) {
+      setDragOverId(noteId);
+    }
+  }, [currentView, draggedId]);
+
+  const handleDragLeave = useCallback(() => {
+    setDragOverId(null);
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    if (currentView !== 'favorites' || !draggedId || draggedId === targetId) {
+      setDraggedId(null);
+      setDragOverId(null);
+      return;
+    }
+
+    // Calculate new order
+    const currentOrder = filteredNotes.map(n => n.id);
+    const draggedIndex = currentOrder.indexOf(draggedId);
+    const targetIndex = currentOrder.indexOf(targetId);
+    
+    if (draggedIndex === -1 || targetIndex === -1) {
+      setDraggedId(null);
+      setDragOverId(null);
+      return;
+    }
+
+    // Remove dragged item and insert at new position
+    const newOrder = [...currentOrder];
+    newOrder.splice(draggedIndex, 1);
+    newOrder.splice(targetIndex, 0, draggedId);
+
+    // Reset drag state
+    setDraggedId(null);
+    setDragOverId(null);
+
+    // Update order
+    await reorderFavorites(newOrder);
+  }, [currentView, draggedId, filteredNotes, reorderFavorites]);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedId(null);
+    setDragOverId(null);
+  }, []);
 
   // Keyboard navigation
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -308,12 +373,19 @@ export function NotesList() {
         </div>
       ) : (
         <div ref={listRef} className="divide-y divide-gray-800 flex-1 overflow-y-auto">
-          {filteredNotes.map(note => {
+          {filteredNotes.map((note, index) => {
             // Note: timesheets are filtered out by AppContext, but handle type safety
             const Icon = note.type !== 'timesheet' ? typeIcons[note.type] : Clock;
             const isSelected = note.id === selectedNoteId;
             const isTask = note.type === 'task';
             const isSavedTask = isTask && !note.id.startsWith('temp-');
+            const isFavoritesView = currentView === 'favorites';
+            const isDragging = draggedId === note.id;
+            const isDragOver = dragOverId === note.id;
+            
+            // REQ-008.3: Get client for badge (only show in "all" or "favorites" view)
+            const showClientBadge = (currentView === 'all' && !selectedClientId) || currentView === 'favorites';
+            const noteClient = showClientBadge ? getClientForNote(note) : null;
             
             return (
               <div
@@ -323,14 +395,29 @@ export function NotesList() {
                   else noteRefs.current.delete(note.id);
                 }}
                 onClick={() => handleSelectNote(note.id)}
+                draggable={isFavoritesView}
+                onDragStart={(e) => handleDragStart(e, note.id)}
+                onDragOver={(e) => handleDragOver(e, note.id)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, note.id)}
+                onDragEnd={handleDragEnd}
                 className={`
                   w-full text-left p-3 transition-colors cursor-pointer
                   ${isSelected 
                     ? 'bg-gray-800' 
                     : 'hover:bg-gray-800/50'}
+                  ${isDragging ? 'opacity-50' : ''}
+                  ${isDragOver ? 'border-t-2 border-blue-500' : ''}
                 `}
               >
                 <div className="flex items-start gap-2">
+                  {/* REQ-008.2: Drag handle and position badge for favorites */}
+                  {isFavoritesView && (
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <GripVertical size={14} className="text-gray-600 cursor-grab" />
+                      <span className="text-xs font-mono text-yellow-500 w-5">#{index + 1}</span>
+                    </div>
+                  )}
                   <Icon size={16} className={`mt-0.5 ${typeColors[note.type]}`} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
@@ -338,7 +425,7 @@ export function NotesList() {
                         {note.title || 'Sin título'}
                       </h3>
                       {/* REQ-006: Favorite indicator */}
-                      {note.isFavorite && (
+                      {note.isFavorite && !isFavoritesView && (
                         <Star size={14} className="text-yellow-400 fill-current flex-shrink-0" />
                       )}
                       {/* Quick TimeSheet button for tasks */}
@@ -356,11 +443,31 @@ export function NotesList() {
                       )}
                     </div>
                     <p className="text-xs text-gray-500 truncate mt-0.5">
-                      {note.contentText || 'Sin contenido'}
+                      {note.contentText || (
+                        note.attachments && note.attachments.length > 0 ? (
+                          <span className="flex items-center gap-1 text-gray-600">
+                            <Paperclip size={12} />
+                            {note.attachments.length}
+                          </span>
+                        ) : null
+                      )}
                     </p>
                     <p className="text-xs text-gray-600 mt-1">
                       {formatDate(note.updatedAt)}
                     </p>
+                    {/* REQ-008.3: Client badge */}
+                    {noteClient && (
+                      <span
+                        className="inline-block mt-1 px-1.5 py-0.5 text-xs rounded-sm truncate max-w-[120px]"
+                        style={{
+                          backgroundColor: noteClient.color || '#6B7280',
+                          color: noteClient.color ? getContrastTextColor(noteClient.color) : 'white',
+                        }}
+                        title={noteClient.name}
+                      >
+                        {noteClient.name.length > 12 ? noteClient.name.substring(0, 12) + '…' : noteClient.name}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -375,6 +482,7 @@ export function NotesList() {
           taskId={undefined}
           onClose={closeEditorModal}
           onSaved={() => refreshNotes()}
+          defaultClientId={selectedClientId && selectedClientId !== 'none' ? selectedClientId : undefined}
         />
       )}
       {editorModal.isOpen && editorModal.mode === 'create' && editorModal.noteType === 'general' && (
@@ -382,6 +490,7 @@ export function NotesList() {
           noteId={undefined}
           onClose={closeEditorModal}
           onSaved={() => refreshNotes()}
+          defaultClientId={selectedClientId && selectedClientId !== 'none' ? selectedClientId : undefined}
         />
       )}
       {editorModal.isOpen && editorModal.mode === 'create' && editorModal.noteType === 'connection' && (
@@ -389,6 +498,7 @@ export function NotesList() {
           noteId={undefined}
           onClose={closeEditorModal}
           onSaved={() => refreshNotes()}
+          defaultClientId={selectedClientId && selectedClientId !== 'none' ? selectedClientId : undefined}
         />
       )}
 

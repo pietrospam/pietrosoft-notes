@@ -10,7 +10,7 @@ export interface TimeSheetGridEntry {
   description: string;
   taskId: string;
   taskTitle: string;
-  taskCode: string; // Short code for display (e.g., first 8 chars of ID)
+  taskCode: string; // Ticket/Phase code from the task (taskTicketPhaseCode)
   projectId: string;
   projectName: string;
   clientId: string;
@@ -82,7 +82,7 @@ export async function GET(request: Request) {
       description: ts.content || '',
       taskId: ts.timesheetTaskId || '',
       taskTitle: ts.timesheetTask?.title || 'Sin tarea',
-      taskCode: ts.timesheetTask?.id.substring(0, 8) || '',
+      taskCode: ts.timesheetTask?.taskTicketPhaseCode || '',
       projectId: ts.timesheetTask?.projectId || '',
       projectName: ts.timesheetTask?.project?.name || 'Sin proyecto',
       clientId: ts.timesheetTask?.project?.clientId || '',

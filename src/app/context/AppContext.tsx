@@ -75,6 +75,7 @@ interface AppContextValue extends AppState {
   updateNote: (id: string, data: Partial<Note>) => Promise<Note | null>;
   deleteNote: (id: string) => Promise<boolean>;
   toggleFavorite: (id: string) => Promise<boolean>; // REQ-006: Toggle favorite status
+  reorderFavorites: (orderedIds: string[]) => Promise<boolean>; // REQ-008.2: Reorder favorites
   selectedNote: Note | null;
   filteredNotes: Note[];
   favoritesCount: number; // REQ-006: Count of favorites
@@ -391,23 +392,34 @@ export function AppProvider({ children }: AppProviderProps) {
   }, []);
 
   // REQ-006: Toggle favorite status with optimistic update
+  // REQ-008.2: Handle favoriteOrder when toggling
   const toggleFavorite = useCallback(async (id: string): Promise<boolean> => {
     const note = notesRef.current.find(n => n.id === id);
     if (!note) return false;
 
     const newValue = !note.isFavorite;
     
+    // Calculate new favoriteOrder
+    let newFavoriteOrder: number | null = null;
+    if (newValue) {
+      // Find max order and add 1
+      const maxOrder = notesRef.current
+        .filter(n => n.isFavorite && n.favoriteOrder)
+        .reduce((max, n) => Math.max(max, n.favoriteOrder || 0), 0);
+      newFavoriteOrder = maxOrder + 1;
+    }
+    
     // Optimistic update
     setState(s => ({
       ...s,
-      notes: s.notes.map(n => n.id === id ? { ...n, isFavorite: newValue } : n),
+      notes: s.notes.map(n => n.id === id ? { ...n, isFavorite: newValue, favoriteOrder: newFavoriteOrder ?? undefined } : n),
     }));
 
     try {
       const response = await fetch(`/api/notes/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isFavorite: newValue }),
+        body: JSON.stringify({ isFavorite: newValue, favoriteOrder: newFavoriteOrder }),
       });
       
       if (response.ok) {
@@ -433,6 +445,50 @@ export function AppProvider({ children }: AppProviderProps) {
         ...s,
         notes: s.notes.map(n => n.id === id ? { ...n, isFavorite: !newValue } : n),
       }));
+      return false;
+    }
+  }, []);
+
+  // REQ-008.2: Reorder favorites
+  const reorderFavorites = useCallback(async (orderedIds: string[]): Promise<boolean> => {
+    // Optimistic update
+    setState(s => ({
+      ...s,
+      notes: s.notes.map(n => {
+        const index = orderedIds.indexOf(n.id);
+        if (index !== -1) {
+          return { ...n, favoriteOrder: index + 1 };
+        }
+        return n;
+      }),
+    }));
+
+    try {
+      const response = await fetch('/api/notes/reorder-favorites', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderedIds }),
+      });
+      
+      if (response.ok) {
+        return true;
+      } else {
+        // Revert by refreshing notes
+        const notesRes = await fetch('/api/notes');
+        if (notesRes.ok) {
+          const notes = await notesRes.json();
+          setState(s => ({ ...s, notes }));
+        }
+        return false;
+      }
+    } catch (error) {
+      console.error('Failed to reorder favorites:', error);
+      // Revert by refreshing notes
+      const notesRes = await fetch('/api/notes');
+      if (notesRes.ok) {
+        const notes = await notesRes.json();
+        setState(s => ({ ...s, notes }));
+      }
       return false;
     }
   }, []);
@@ -640,6 +696,11 @@ export function AppProvider({ children }: AppProviderProps) {
     return true;
   });
 
+  // REQ-008.2: Sort favorites by favoriteOrder
+  const sortedFilteredNotes = state.currentView === 'favorites'
+    ? filteredNotes.sort((a, b) => (a.favoriteOrder || 999) - (b.favoriteOrder || 999))
+    : filteredNotes;
+
   // REQ-006: Count favorites (non-archived non-timesheets)
   const favoritesCount = state.notes.filter(n => 
     n.isFavorite && !n.archivedAt && n.type !== 'timesheet'
@@ -680,9 +741,10 @@ export function AppProvider({ children }: AppProviderProps) {
     updateNote,
     deleteNote,
     toggleFavorite, // REQ-006
+    reorderFavorites, // REQ-008.2
     persistNewNote,
     selectedNote,
-    filteredNotes,
+    filteredNotes: sortedFilteredNotes,
     favoritesCount, // REQ-006
     getClientForNote,
     // Editor modal actions

@@ -104,12 +104,19 @@ export function Sidebar() {
               })}
               className={`
                 w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm
-                transition-colors whitespace-nowrap
+                transition-colors whitespace-nowrap relative
                 ${selectedClientId === client.id
                   ? 'bg-blue-600 text-white' 
                   : 'text-gray-400 hover:bg-gray-800 hover:text-white'}
               `}
             >
+              {/* REQ-008.3: Client color indicator */}
+              {client.color && (
+                <div
+                  className="absolute left-0 top-1 bottom-1 w-1 rounded-r"
+                  style={{ backgroundColor: client.color }}
+                />
+              )}
               <Building2 size={18} className="flex-shrink-0" />
               <span className="opacity-0 group-hover:opacity-100 transition-opacity truncate">
                 {client.name}
