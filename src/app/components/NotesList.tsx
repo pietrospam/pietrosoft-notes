@@ -48,6 +48,7 @@ export function NotesList() {
     isLoading, 
     currentView,
     activeTypeFilters,
+    clearTypeFilters,
     toggleTypeFilter,
     selectedClientId,
     setSelectedClientId,
@@ -65,6 +66,12 @@ export function NotesList() {
   
   const listRef = useRef<HTMLDivElement>(null);
   const noteRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  
+  // Resizable width state
+  const [panelWidth, setPanelWidth] = useState(288); // 288px = w-72
+  const isResizing = useRef(false);
+  const startX = useRef(0);
+  const startWidth = useRef(0);
   
   // Create note dropdown and client selector state
   const [showCreateDropdown, setShowCreateDropdown] = useState(false);
@@ -95,7 +102,39 @@ export function NotesList() {
     wasCollapsedRef.current = isNotesListCollapsed;
   }, [isNotesListCollapsed, selectedNoteId]);
 
+  // Resize handlers
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = true;
+    startX.current = e.clientX;
+    startWidth.current = panelWidth;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, [panelWidth]);
 
+  useEffect(() => {
+    const handleResizeMove = (e: MouseEvent) => {
+      if (!isResizing.current) return;
+      const delta = e.clientX - startX.current;
+      const newWidth = Math.max(200, Math.min(600, startWidth.current + delta));
+      setPanelWidth(newWidth);
+    };
+
+    const handleResizeEnd = () => {
+      if (isResizing.current) {
+        isResizing.current = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+    };
+
+    document.addEventListener('mousemove', handleResizeMove);
+    document.addEventListener('mouseup', handleResizeEnd);
+    return () => {
+      document.removeEventListener('mousemove', handleResizeMove);
+      document.removeEventListener('mouseup', handleResizeEnd);
+    };
+  }, []);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -274,7 +313,7 @@ export function NotesList() {
 
   if (currentView === 'config') {
     return (
-      <div className="w-72 bg-gray-900 border-r border-gray-800 flex items-center justify-center">
+      <div style={{ width: panelWidth }} className="bg-gray-900 border-r border-gray-800 flex items-center justify-center">
         <p className="text-gray-500 text-sm">Panel de configuración</p>
       </div>
     );
@@ -282,14 +321,14 @@ export function NotesList() {
 
   if (isLoading) {
     return (
-      <div className="w-72 bg-gray-900 border-r border-gray-800 flex items-center justify-center">
+      <div style={{ width: panelWidth }} className="bg-gray-900 border-r border-gray-800 flex items-center justify-center">
         <p className="text-gray-500 text-sm">Cargando...</p>
       </div>
     );
   }
 
   // Filterable types (timesheet excluded per REQ-002)
-  const allTypes: FilterableNoteType[] = ['general', 'task', 'connection'];
+  const allTypes: FilterableNoteType[] = ['task', 'connection', 'general'];
 
   // Collapsed state: minimal view with just expand button
   if (isNotesListCollapsed && selectedNoteId) {
@@ -307,7 +346,12 @@ export function NotesList() {
   }
 
   return (
-    <div className="w-72 bg-gray-900 border-r border-gray-800 overflow-hidden flex flex-col">
+    <div style={{ width: panelWidth }} className="bg-gray-900 border-r border-gray-800 overflow-hidden flex flex-col relative">
+      {/* Resize handle */}
+      <div
+        onMouseDown={handleResizeStart}
+        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500 transition-colors z-20"
+      />
       {/* Type filters + Create button + Collapse button */}
       <div className="px-3 py-2 border-b border-gray-800 flex items-center gap-1">
         {/* Collapse button - only when note selected */}
@@ -320,7 +364,9 @@ export function NotesList() {
             <ChevronLeft size={14} />
           </button>
         )}
-        <div className="flex flex-wrap gap-1 flex-1">
+        
+        {/* Type filter icons */}
+        <div className="flex gap-1">
           {allTypes.map(type => {
             const isActive = activeTypeFilters.includes(type);
             const Icon = typeIcons[type];
@@ -331,27 +377,38 @@ export function NotesList() {
                 key={type}
                 onClick={() => toggleTypeFilter(type)}
                 className={`
-                  flex items-center gap-1 px-2 py-1 rounded text-xs font-medium
-                  transition-colors whitespace-nowrap
-                  ${isActive ? colors.active + ' text-white' : colors.inactive + ' text-gray-500'}
+                  p-1.5 rounded transition-colors
+                  ${isActive ? colors.active + ' text-white' : 'bg-gray-800 text-gray-500 hover:text-gray-300'}
                 `}
                 title={typeLabels[type]}
               >
-                <Icon size={12} className="flex-shrink-0" />
-                <span className="hidden sm:inline">{typeLabels[type]}</span>
+                <Icon size={14} />
               </button>
             );
           })}
         </div>
         
+        {/* Clear filters button - only show when filters active */}
+        {activeTypeFilters.length > 0 && (
+          <button
+            onClick={clearTypeFilters}
+            className="p-1.5 rounded bg-gray-800 text-gray-400 hover:text-red-400 transition-colors"
+            title="Quitar filtros"
+          >
+            <X size={14} />
+          </button>
+        )}
+        
+        <div className="flex-1" />
+        
         {/* Create note button */}
         <div className="relative" ref={createDropdownRef}>
           <button
             onClick={() => setShowCreateDropdown(!showCreateDropdown)}
-            className="p-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+            className="p-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white transition-colors shadow-md"
             title="Crear nota"
           >
-            <Plus size={14} />
+            <Plus size={16} strokeWidth={2.5} />
           </button>
           
           {/* Type dropdown */}
@@ -504,7 +561,14 @@ export function NotesList() {
                     {/* REQ-001.13.1: Word wrap title */}
                     <div className="flex items-start gap-2">
                       <h3 className="text-sm font-medium text-white flex-1 break-words">
-                        {note.title || 'Sin título'}
+                        {note.type === 'task' && (note as TaskNote).ticketPhaseCode ? (
+                          <>
+                            <span className="text-blue-400 font-semibold">#{(note as TaskNote).ticketPhaseCode}</span>
+                            {' '}{(note as TaskNote).shortDescription || note.title || 'Sin título'}
+                          </>
+                        ) : (
+                          note.title || 'Sin título'
+                        )}
                       </h3>
                       {/* REQ-006: Favorite indicator */}
                       {note.isFavorite && !isFavoritesView && (

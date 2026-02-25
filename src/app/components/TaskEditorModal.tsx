@@ -303,6 +303,66 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
     trackChange({ title: newTitle });
   };
 
+  // REQ-009: Parse task title to extract ticket/fase and short description
+  const parseTaskTitle = useCallback((input: string) => {
+    const TICKET_PATTERN = /#(\d{5})#?/;  // Captura 5 dígitos después de # y opcionalmente otro # al final
+    const INC_PATTERN = /(INC\d{7})/;   // Captura INC + 7 dígitos
+    
+    const ticketMatch = input.match(TICKET_PATTERN);
+    const incMatch = input.match(INC_PATTERN);
+    
+    let cleanTitle = input;
+    
+    if (ticketMatch) {
+      cleanTitle = cleanTitle.replace(TICKET_PATTERN, '');
+    }
+    if (incMatch) {
+      cleanTitle = cleanTitle.replace(INC_PATTERN, '');
+    }
+    
+    // Limpiar espacios duplicados y trim
+    cleanTitle = cleanTitle.replace(/\s+/g, ' ').trim();
+    
+    // Si hay INC, usar INC. Si no, usar el título limpio como descripción corta
+    const shortDescription = incMatch ? incMatch[1] : cleanTitle;
+    
+    return {
+      ticket: ticketMatch ? ticketMatch[1] : null,
+      shortDescription,
+      cleanTitle
+    };
+  }, []);
+
+  // REQ-009: Handle title parsing on blur/tab
+  const handleTitleBlur = useCallback(() => {
+    setIsEditingTitle(false);
+    
+    // Only parse if title has content
+    if (!title.trim()) return;
+    
+    const parsed = parseTaskTitle(title);
+    
+    // Update fields based on parsed data
+    const updates: Partial<TaskNote> = {};
+    
+    if (parsed.ticket && !task.ticketPhaseCode) {
+      updates.ticketPhaseCode = parsed.ticket;
+    }
+    
+    if (parsed.shortDescription && !task.shortDescription) {
+      updates.shortDescription = parsed.shortDescription;
+    }
+    
+    if (parsed.cleanTitle && parsed.cleanTitle !== title) {
+      updates.title = parsed.cleanTitle;
+      setTitle(parsed.cleanTitle);
+    }
+    
+    if (Object.keys(updates).length > 0) {
+      trackChange(updates);
+    }
+  }, [title, task.ticketPhaseCode, task.shortDescription, parseTaskTitle, trackChange]);
+
   const handleContentChange = (contentJson: object) => {
     trackChange({ contentJson });
   };
@@ -660,7 +720,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
       </div>
 
       {/* Editor */}
-      <div className="mb-4 border-t border-gray-800 pt-3">
+      <div className="mb-4 border-t border-gray-800 pt-3 -mx-4 px-4 py-3 bg-gray-950">
         <TipTapEditor
           ref={editorRef}
           key={task.id}
@@ -712,10 +772,11 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
                 type="text"
                 value={title}
                 onChange={(e) => handleTitleChange(e.target.value)}
-                onBlur={() => setIsEditingTitle(false)}
+                onBlur={handleTitleBlur}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    setIsEditingTitle(false);
+                  if (e.key === 'Enter' || e.key === 'Tab') {
+                    e.preventDefault();
+                    handleTitleBlur();
                     editorRef.current?.focus();
                   }
                   if (e.key === 'Escape') setIsEditingTitle(false);
@@ -919,10 +980,11 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
                 type="text"
                 value={title}
                 onChange={(e) => handleTitleChange(e.target.value)}
-                onBlur={() => setIsEditingTitle(false)}
+                onBlur={handleTitleBlur}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    setIsEditingTitle(false);
+                  if (e.key === 'Enter' || e.key === 'Tab') {
+                    e.preventDefault();
+                    handleTitleBlur();
                     editorRef.current?.focus();
                   }
                   if (e.key === 'Escape') setIsEditingTitle(false);

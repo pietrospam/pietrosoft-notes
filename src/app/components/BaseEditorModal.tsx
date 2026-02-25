@@ -461,7 +461,7 @@ export function BaseEditorModal({
           )}
 
           {/* Editor */}
-          <div className={fieldsComponent ? "mb-6 border-t border-gray-800 pt-6" : "mb-6"}>
+          <div className={fieldsComponent ? "mb-6 border-t border-gray-800 pt-6 -mx-6 px-6 py-4 bg-gray-950" : "mb-6 -mx-6 px-6 py-4 bg-gray-950"}>
             {fieldsComponent && <h3 className="text-sm font-medium text-gray-400 mb-3">Contenido</h3>}
             <TipTapEditor
               ref={editorRef}
@@ -672,7 +672,7 @@ export function BaseEditorModal({
           )}
 
           {/* Editor */}
-          <div className={fieldsComponent ? "mb-6 border-t border-gray-800 pt-6" : "mb-6"}>
+          <div className={fieldsComponent ? "mb-6 border-t border-gray-800 pt-6 -mx-6 px-6 py-4 bg-gray-950" : "mb-6 -mx-6 px-6 py-4 bg-gray-950"}>
             {fieldsComponent && <h3 className="text-sm font-medium text-gray-400 mb-3">Contenido</h3>}
             <TipTapEditor
               ref={editorRef}

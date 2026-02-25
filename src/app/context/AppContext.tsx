@@ -55,6 +55,7 @@ interface AppContextValue extends AppState {
   setSelectedNoteId: (id: string | null) => void;
   setSelectedClientId: (id: string | null) => void;
   toggleTypeFilter: (type: NoteType) => void;
+  clearTypeFilters: () => void;
   setSearchQuery: (query: string) => void;
   setTaskFilters: (filters: TaskFilters) => void;
   setTimeSheetFilters: (filters: TimeSheetFilters) => void;
@@ -117,7 +118,7 @@ export function AppProvider({ children }: AppProviderProps) {
     currentView: 'all',
     selectedNoteId: null,
     selectedClientId: null,
-    activeTypeFilters: ['general', 'task', 'connection'], // timesheet excluded per REQ-002
+    activeTypeFilters: [], // Empty = no filter, show all types
     notes: [],
     clients: [],
     projects: [],
@@ -682,8 +683,8 @@ export function AppProvider({ children }: AppProviderProps) {
     // Other views exclude archived notes by default
     if (note.archivedAt) return false;
     
-    // Filter by active type filters
-    if (!state.activeTypeFilters.includes(note.type)) {
+    // Filter by active type filters (empty = no filter, show all)
+    if (state.activeTypeFilters.length > 0 && !state.activeTypeFilters.includes(note.type)) {
       return false;
     }
     
@@ -720,13 +721,13 @@ export function AppProvider({ children }: AppProviderProps) {
     toggleTypeFilter: (type) => setState(s => {
       const current = s.activeTypeFilters;
       const isActive = current.includes(type);
+      // Single selection: if already active, deactivate (show all). Otherwise, set as only filter.
       return {
         ...s,
-        activeTypeFilters: isActive
-          ? current.filter(t => t !== type)
-          : [...current, type],
+        activeTypeFilters: isActive ? [] : [type],
       };
     }),
+    clearTypeFilters: () => setState(s => ({ ...s, activeTypeFilters: [] })),
     setSearchQuery: (query) => setState(s => ({ ...s, searchQuery: query })),
     setTaskFilters: (filters) => setState(s => ({ ...s, taskFilters: filters })),
     setTimeSheetFilters: (filters) => setState(s => ({ ...s, timeSheetFilters: filters })),
