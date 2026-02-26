@@ -15,7 +15,7 @@ interface BaseEditorModalProps {
   onClose: () => void;
   onSaved?: () => void;
   onExpandToPopup?: () => void; // For inline mode: expand to popup
-  fieldsComponent?: ReactNode;  // Custom fields for the note type
+  fieldsComponent?: ReactNode | ((trackChange: (data: Partial<Note>) => void) => ReactNode);  // Custom fields for the note type
   onFieldsChange?: (data: Partial<Note>) => void;
   headerActions?: ReactNode;    // Additional header actions (e.g., clock icon for tasks)
   inline?: boolean;             // Render as inline panel (not modal)
@@ -143,6 +143,8 @@ export function BaseEditorModal({
             const data = await res.json();
             setNote(data);
             setTitle(data.title);
+            // Sync fields with loaded data (for Connection, Note editors)
+            onFieldsChange?.(data);
             setIsDirty(false);
           }
         } catch (err) {
@@ -315,6 +317,11 @@ export function BaseEditorModal({
     onClose();
   };
 
+  // Render fieldsComponent - support both ReactNode and render function
+  const renderedFields = typeof fieldsComponent === 'function' 
+    ? fieldsComponent(trackChange) 
+    : fieldsComponent;
+
   if (loading) {
     if (inline) {
       return (
@@ -454,15 +461,15 @@ export function BaseEditorModal({
         {/* Content - Scrollable */}
         <div className="flex-1 overflow-y-auto p-6">
           {/* Custom fields for the note type */}
-          {fieldsComponent && (
+          {renderedFields && (
             <div className="mb-6">
-              {fieldsComponent}
+              {renderedFields}
             </div>
           )}
 
           {/* Editor */}
-          <div className={fieldsComponent ? "mb-6 border-t border-gray-800 pt-6 -mx-6 px-6 py-4 bg-gray-950" : "mb-6 -mx-6 px-6 py-4 bg-gray-950"}>
-            {fieldsComponent && <h3 className="text-sm font-medium text-gray-400 mb-3">Contenido</h3>}
+          <div className={renderedFields ? "mb-6 border-t border-gray-800 pt-6 -mx-6 px-6 py-4 bg-gray-950" : "mb-6 -mx-6 px-6 py-4 bg-gray-950"}>
+            {renderedFields && <h3 className="text-sm font-medium text-gray-400 mb-3">Contenido</h3>}
             <TipTapEditor
               ref={editorRef}
               key={note.id}
@@ -665,15 +672,15 @@ export function BaseEditorModal({
         {/* Content - Scrollable */}
         <div className="flex-1 overflow-y-auto p-6">
           {/* Custom fields for the note type */}
-          {fieldsComponent && (
+          {renderedFields && (
             <div className="mb-6">
-              {fieldsComponent}
+              {renderedFields}
             </div>
           )}
 
           {/* Editor */}
-          <div className={fieldsComponent ? "mb-6 border-t border-gray-800 pt-6 -mx-6 px-6 py-4 bg-gray-950" : "mb-6 -mx-6 px-6 py-4 bg-gray-950"}>
-            {fieldsComponent && <h3 className="text-sm font-medium text-gray-400 mb-3">Contenido</h3>}
+          <div className={renderedFields ? "mb-6 border-t border-gray-800 pt-6 -mx-6 px-6 py-4 bg-gray-950" : "mb-6 -mx-6 px-6 py-4 bg-gray-950"}>
+            {renderedFields && <h3 className="text-sm font-medium text-gray-400 mb-3">Contenido</h3>}
             <TipTapEditor
               ref={editorRef}
               key={note.id}

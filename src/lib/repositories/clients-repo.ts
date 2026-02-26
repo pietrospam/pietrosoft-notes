@@ -12,6 +12,7 @@ function toClient(prismaClient: {
   name: string;
   description: string | null;
   color: string | null;
+  parentClientId: string | null;
   active: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -22,6 +23,7 @@ function toClient(prismaClient: {
     description: prismaClient.description ?? undefined,
     icon: 'Building2', // Default icon since DB doesn't store it
     color: prismaClient.color ?? undefined,
+    parentClientId: prismaClient.parentClientId ?? undefined,
     disabled: !prismaClient.active, // Invert: active=true -> disabled=false
     createdAt: prismaClient.createdAt.toISOString(),
     updatedAt: prismaClient.updatedAt.toISOString(),
@@ -54,6 +56,9 @@ export async function createClient(input: CreateClientInput): Promise<Client> {
   const usedColors = existingClients.map(c => c.color);
   const autoColor = (input as { color?: string }).color || getNextAvailableColor(usedColors);
   
+  // REQ-010: Get parentClientId if provided
+  const parentClientId = (input as { parentClientId?: string | null }).parentClientId || null;
+  
   // Create client and default "General" project in a transaction
   const [client] = await prisma.$transaction([
     prisma.client.create({
@@ -62,6 +67,7 @@ export async function createClient(input: CreateClientInput): Promise<Client> {
         name: input.name,
         description: input.description,
         color: autoColor,
+        parentClientId,
         active: input.disabled !== true,
       },
     }),
@@ -80,11 +86,15 @@ export async function createClient(input: CreateClientInput): Promise<Client> {
 
 export async function updateClient(id: string, input: UpdateClientInput): Promise<Client | null> {
   try {
-    const data: { name?: string; description?: string | null; color?: string | null; active?: boolean } = {};
+    const data: { name?: string; description?: string | null; color?: string | null; parentClientId?: string | null; active?: boolean } = {};
     
     if (input.name !== undefined) data.name = input.name;
     if (input.description !== undefined) data.description = input.description;
     if ((input as { color?: string }).color !== undefined) data.color = (input as { color?: string }).color;
+    // REQ-010: Handle parentClientId update - check if key exists in input object
+    if ('parentClientId' in input) {
+      data.parentClientId = (input as { parentClientId?: string | null }).parentClientId ?? null;
+    }
     if (input.disabled !== undefined) data.active = !input.disabled; // Invert
 
     const client = await prisma.client.update({

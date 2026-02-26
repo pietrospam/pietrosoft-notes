@@ -188,3 +188,50 @@ RESOLUCION : Se agregó prop `defaultClientId` a NoteEditorModal, TaskEditorModa
 ESTADO : RESUELTO
 DESCRIPCION : Las cards de notas, tareas y conexiones muestran un texto "sin contenido" de origen desconocido. Este texto no aporta valor y debería eliminarse. En su lugar, mostrar un icono con el número de archivos adjuntos que tiene cada nota (si tiene alguno).
 RESOLUCION : Se modificó NotesList.tsx para mostrar el contador de attachments con ícono Paperclip cuando la nota no tiene contentText pero sí tiene attachments. Si no tiene ninguno, no se muestra nada.
+
+
+## Issue 22: Control de cambios incorrecto en notas tipo Conexión
+ESTADO : RESUELTO
+DESCRIPCION : Al abrir una nota de tipo Conexión existente, sin hacer ningún cambio, el modal de "guardar cambios" aparece al intentar cerrar o cambiar de nota.
+CAUSA : Cuando se cargaba una nota existente en BaseEditorModal, los datos se asignaban al estado `note` pero no se sincronizaban con los estados locales del ConnectionEditorModal (url, username, password, clientId, projectId). Estos estados quedaban vacíos, y al compararlos con la nota cargada, el sistema detectaba "cambios".
+RESOLUCION : Se agregó llamada a `onFieldsChange?.(data)` al cargar la nota existente en BaseEditorModal, para sincronizar los estados locales con los datos cargados.
+
+
+## Issue 23: Modal de cambios sin guardar demasiado grande
+ESTADO : RESUELTO
+DESCRIPCION : El modal de "Cambios sin guardar" ocupa demasiado espacio visual para su funcionalidad simple.
+RESOLUCION : Se redujo el tamaño del modal de `max-w-md` a `max-w-xs`, se compactaron los paddings, tipografías y los botones.
+
+
+## Issue 24: Navegador sugiere autocompletado en campos de conexión
+ESTADO : RESUELTO
+DESCRIPCION : En las notas tipo Conexión, el navegador intenta recordar y sugerir valores en los campos de usuario y contraseña, lo cual no es deseado ya que estos campos almacenan credenciales de diferentes servicios.
+RESOLUCION : Se agregaron múltiples atributos para prevenir el autocompletado:
+- `autoComplete="off"` / `autoComplete="new-password"`
+- `autoCorrect="off"`, `autoCapitalize="off"`, `spellCheck={false}`
+- `data-lpignore="true"` (LastPass)
+- `data-form-type="other"` (otros gestores de contraseñas)
+
+
+## Issue 25: Usuario no se guarda en notas tipo Conexión
+ESTADO : RESUELTO
+DESCRIPCION : En las notas tipo Conexión, el campo de usuario no se guardaba en la base de datos. El valor se perdía al recargar la página.
+CAUSA : El esquema de la base de datos tenía `connectionUrl` y `connectionCredentials` (password), pero no existía un campo para el username. En el repositorio (notes-repo.ts), la función `toNote()` retornaba `username: undefined` hardcodeado.
+RESOLUCION : 
+1. Se agregó el campo `connectionUsername` al schema de Prisma
+2. Se creó migración `20260226000000_add_connection_username` para agregar la columna a la base de datos
+3. Se actualizó notes-repo.ts:
+   - `toNote()` ahora lee de `p.connectionUsername`
+   - `createNote()` escribe a `connectionUsername`
+   - `updateNote()` actualiza `connectionUsername` cuando el campo 'username' está presente en el input
+
+
+## Issue 26: Proyecto no se auto-selecciona al cambiar cliente
+ESTADO : RESUELTO
+DESCRIPCION : Al crear una nota, conexión o tarea, si se selecciona un cliente, el proyecto debería auto-seleccionarse a "General" (si existe un proyecto con ese nombre para el cliente seleccionado).
+CAUSA : Los handlers `handleClientChange` en todos los componentes simplemente limpiaban el proyecto a cadena vacía al cambiar de cliente.
+RESOLUCION : Se actualizaron los siguientes componentes para buscar y auto-seleccionar el proyecto "General":
+- ConnectionEditorModal.tsx
+- NoteEditorModal.tsx
+- TaskFields.tsx
+- TaskEditorModal.tsx

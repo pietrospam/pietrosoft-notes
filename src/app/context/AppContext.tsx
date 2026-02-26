@@ -9,6 +9,8 @@ import type { Note, NoteType, Client, Project } from '@/lib/types';
 
 export type ViewType = 'all' | 'general' | 'task' | 'connection' | 'timesheets' | 'archived' | 'config' | 'favorites'; // REQ-006: Added favorites
 
+export type ActiveTab = 'bitacora' | 'timesheets'; // REQ-010: Main navigation tabs
+
 export interface TaskFilters {
   status: string;
   clientId: string;
@@ -41,6 +43,10 @@ interface AppState {
   taskFilters: TaskFilters;
   timeSheetFilters: TimeSheetFilters;
   isNotesListCollapsed: boolean; // REQ-001.13.2: NotesList collapsed state
+  // REQ-010: Tab navigation
+  activeTab: ActiveTab;
+  selectedTimesheetClientId: string | null; // null = all, string = specific client
+  expandedClientIds: string[]; // Which client hierarchies are expanded
   // Editor modal state
   editorModal: {
     isOpen: boolean;
@@ -89,6 +95,11 @@ interface AppContextValue extends AppState {
   isNotesListCollapsed: boolean;
   setNotesListCollapsed: (collapsed: boolean) => void;
   toggleNotesListCollapsed: () => void;
+  // REQ-010: Tab navigation
+  setActiveTab: (tab: ActiveTab) => void;
+  setSelectedTimesheetClientId: (clientId: string | null) => void;
+  toggleClientExpanded: (clientId: string) => void;
+  getParentClients: () => Client[]; // Get clients without parent (top-level or independent)
 }
 
 // ============================================================================
@@ -134,6 +145,10 @@ export function AppProvider({ children }: AppProviderProps) {
     taskFilters: { status: '', clientId: '', projectId: '' },
     timeSheetFilters: { startDate: '', endDate: '', clientId: '' },
     isNotesListCollapsed: false, // REQ-001.13.2: NotesList collapsed state
+    // REQ-010: Tab navigation
+    activeTab: 'bitacora',
+    selectedTimesheetClientId: null,
+    expandedClientIds: [],
     editorModal: {
       isOpen: false,
       mode: 'create',
@@ -147,6 +162,35 @@ export function AppProvider({ children }: AppProviderProps) {
     const saved = localStorage.getItem('bitacora-autosave');
     if (saved !== null) {
       setState(s => ({ ...s, autoSaveEnabled: saved === 'true' }));
+    }
+    
+    // REQ-010: Load tab preferences from localStorage
+    const savedTab = localStorage.getItem('bitacora-active-tab') as ActiveTab | null;
+    if (savedTab && (savedTab === 'bitacora' || savedTab === 'timesheets')) {
+      setState(s => ({ 
+        ...s, 
+        activeTab: savedTab,
+        currentView: savedTab === 'timesheets' ? 'timesheets' : s.currentView
+      }));
+    }
+    
+    const savedTimesheetClient = localStorage.getItem('bitacora-timesheet-client');
+    if (savedTimesheetClient) {
+      const clientId = savedTimesheetClient === 'all' ? null : savedTimesheetClient;
+      setState(s => ({ ...s, selectedTimesheetClientId: clientId }));
+    }
+    
+    // Load expanded clients from localStorage
+    const savedExpanded = localStorage.getItem('bitacora-expanded-clients');
+    if (savedExpanded) {
+      try {
+        const expanded = JSON.parse(savedExpanded);
+        if (Array.isArray(expanded)) {
+          setState(s => ({ ...s, expandedClientIds: expanded }));
+        }
+      } catch {
+        // Ignore invalid JSON
+      }
     }
   }, []);
 
@@ -688,15 +732,25 @@ export function AppProvider({ children }: AppProviderProps) {
       return false;
     }
     
-    // Filter by selected client
+    // Filter by selected client (REQ-010: includes sub-clients when parent is selected)
     if (state.selectedClientId !== null) {
       const noteClient = getClientForNote(note);
       if (state.selectedClientId === 'none') {
         // "Sin Cliente" - notes without a client
         if (noteClient !== null) return false;
       } else {
-        // Specific client
-        if (noteClient?.id !== state.selectedClientId) return false;
+        // Specific client - also include sub-clients if this is a parent
+        const selectedClient = state.clients.find(c => c.id === state.selectedClientId);
+        const isParentClient = selectedClient && state.clients.some(c => c.parentClientId === state.selectedClientId);
+        
+        if (isParentClient) {
+          // Include notes from parent and all sub-clients
+          const validClientIds = [state.selectedClientId, ...state.clients.filter(c => c.parentClientId === state.selectedClientId).map(c => c.id)];
+          if (!noteClient || !validClientIds.includes(noteClient.id)) return false;
+        } else {
+          // Regular client - match exactly
+          if (noteClient?.id !== state.selectedClientId) return false;
+        }
       }
     }
     
@@ -776,6 +830,32 @@ export function AppProvider({ children }: AppProviderProps) {
     // REQ-001.13.2: NotesList collapse control
     setNotesListCollapsed: (collapsed) => setState(s => ({ ...s, isNotesListCollapsed: collapsed })),
     toggleNotesListCollapsed: () => setState(s => ({ ...s, isNotesListCollapsed: !s.isNotesListCollapsed })),
+    // REQ-010: Tab navigation
+    setActiveTab: (tab) => {
+      localStorage.setItem('bitacora-active-tab', tab);
+      setState(s => ({ 
+        ...s, 
+        activeTab: tab,
+        currentView: tab === 'timesheets' ? 'timesheets' : (s.currentView === 'timesheets' ? 'all' : s.currentView)
+      }));
+    },
+    setSelectedTimesheetClientId: (clientId) => {
+      localStorage.setItem('bitacora-timesheet-client', clientId || 'all');
+      setState(s => ({ ...s, selectedTimesheetClientId: clientId }));
+    },
+    toggleClientExpanded: (clientId) => {
+      setState(s => {
+        const expanded = s.expandedClientIds.includes(clientId)
+          ? s.expandedClientIds.filter(id => id !== clientId)
+          : [...s.expandedClientIds, clientId];
+        localStorage.setItem('bitacora-expanded-clients', JSON.stringify(expanded));
+        return { ...s, expandedClientIds: expanded };
+      });
+    },
+    getParentClients: () => {
+      // Return clients without a parent (top-level clients)
+      return state.clients.filter(c => !c.parentClientId && !c.disabled);
+    },
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

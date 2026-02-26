@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server';
 import { listNotes, createNote } from '@/lib/repositories/notes-repo';
+import { 
+  createActivityLog, 
+  createPlaceholderTimesheet,
+  getPlaceholderTimesheetDescription,
+  shouldCreatePlaceholderTimesheet 
+} from '@/lib/repositories/activity-log-repo';
 import type { Note, NoteType, CreateNoteInput } from '@/lib/types';
 
 // GET /api/notes - List all notes
@@ -56,6 +62,22 @@ export async function POST(request: Request) {
     }
     
     const note = await createNote(body);
+    
+    // REQ-010: Log activity for task creation
+    if (note.type === 'task') {
+      try {
+        await createActivityLog(note.id, 'CREATED', 'Tarea creada');
+        // Create placeholder timesheet
+        if (shouldCreatePlaceholderTimesheet('CREATED')) {
+          const description = getPlaceholderTimesheetDescription('CREATED');
+          await createPlaceholderTimesheet(note.id, description);
+        }
+      } catch (error) {
+        console.error('Failed to log task creation activity:', error);
+        // Don't fail the request if logging fails
+      }
+    }
+    
     return NextResponse.json(note, { status: 201 });
   } catch (error) {
     console.error('Error creating note:', error);

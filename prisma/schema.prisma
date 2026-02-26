@@ -9,15 +9,20 @@ datasource db {
 }
 
 model Client {
-  id          String    @id
-  name        String
-  description String?
-  color       String?   // REQ-008.3: Client color (hex code)
-  active      Boolean   @default(true)
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-  notes       Note[]    @relation("ClientNotes")
-  projects    Project[]
+  id              String    @id
+  name            String
+  description     String?
+  color           String?   // REQ-008.3: Client color (hex code)
+  active          Boolean   @default(true)
+  parentClientId  String?   @map("parent_client_id")  // REQ-010: Reference to parent client
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  notes           Note[]    @relation("ClientNotes")
+  projects        Project[]
+  
+  // REQ-010: Hierarchical relations
+  parentClient    Client?   @relation("ClientHierarchy", fields: [parentClientId], references: [id])
+  subClients      Client[]  @relation("ClientHierarchy")
 
   @@map("clients")
 }
@@ -51,6 +56,7 @@ model Note {
   taskPriority          TaskPriority?   @map("task_priority")
   taskDueDate           DateTime?       @map("task_due_date")
   connectionUrl         String?         @map("connection_url")
+  connectionUsername    String?         @map("connection_username")
   connectionCredentials String?         @map("connection_credentials")
   timesheetDate         DateTime?       @map("timesheet_date")
   timesheetHours        Float?          @map("timesheet_hours")
@@ -68,6 +74,7 @@ model Note {
   timesheetTask         Note?           @relation("TaskTimesheets", fields: [timesheetTaskId], references: [id])
   timesheets            Note[]          @relation("TaskTimesheets")
   attachmentFiles       Attachment[]    // REQ-007: Relation to attachment files
+  activityLogs          TaskActivityLog[] // REQ-010: Activity history
 
   @@index([type])
   @@index([projectId])
@@ -119,4 +126,19 @@ model Attachment {
 
   @@index([noteId])
   @@map("attachments")
+}
+
+// REQ-010: Task Activity Log for tracking changes
+model TaskActivityLog {
+  id          String   @id @default(uuid())
+  taskId      String   @map("task_id")
+  eventType   String   @map("event_type")
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  task        Note     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([createdAt])
+  @@map("task_activity_logs")
 }

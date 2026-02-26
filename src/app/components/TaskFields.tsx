@@ -55,12 +55,15 @@ export function TaskFields({ note, onChange }: TaskFieldsProps) {
     setSelectedClientId(clientId);
     if (clientId) {
       const res = await fetch(`/api/projects?clientId=${clientId}`);
-      const projectsList = await res.json();
+      const projectsList: Project[] = await res.json();
       setProjects(projectsList);
+      // Auto-select "General" project if it exists
+      const generalProject = projectsList.find((p: Project) => p.name === 'General');
+      onChange({ projectId: generalProject?.id || '' });
     } else {
       setProjects([]);
+      onChange({ projectId: '' });
     }
-    onChange({ projectId: '' }); // Clear project when client changes
   };
 
   return (

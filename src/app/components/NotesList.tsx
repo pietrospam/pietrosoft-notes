@@ -59,6 +59,7 @@ export function NotesList() {
     closeEditorModal,
     confirmNavigation,
     reorderFavorites,
+    toggleFavorite,
     getClientForNote,
     isNotesListCollapsed,
     setNotesListCollapsed,
@@ -553,6 +554,20 @@ export function NotesList() {
                   {isFavoritesView && (
                     <span className="text-xs font-mono text-yellow-500 flex-shrink-0">#{index + 1}</span>
                   )}
+                  {/* Favorite star in favorites view */}
+                  {isFavoritesView && (
+                    <button
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        toggleFavorite(note.id);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-yellow-400 flex-shrink-0 transition-colors hover:text-yellow-300"
+                      title="Quitar de favoritos (doble clic)"
+                    >
+                      <Star size={14} className="fill-current" />
+                    </button>
+                  )}
                 </div>
                 
                 {/* Content row: Title and actions */}
@@ -570,9 +585,23 @@ export function NotesList() {
                           note.title || 'Sin título'
                         )}
                       </h3>
-                      {/* REQ-006: Favorite indicator */}
-                      {note.isFavorite && !isFavoritesView && (
-                        <Star size={14} className="text-yellow-400 fill-current flex-shrink-0 mt-0.5" />
+                      {/* REQ-006: Favorite star - always visible, double-click to toggle */}
+                      {!isFavoritesView && (
+                        <button
+                          onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            toggleFavorite(note.id);
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          className={`flex-shrink-0 mt-0.5 transition-colors ${
+                            note.isFavorite 
+                              ? 'text-yellow-400' 
+                              : 'text-gray-600 hover:text-gray-400'
+                          }`}
+                          title={note.isFavorite ? 'Quitar de favoritos (doble clic)' : 'Agregar a favoritos (doble clic)'}
+                        >
+                          <Star size={14} className={note.isFavorite ? 'fill-current' : ''} />
+                        </button>
                       )}
                     </div>
                   </div>

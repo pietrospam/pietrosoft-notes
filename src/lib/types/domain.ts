@@ -24,9 +24,11 @@ export interface Client {
   description?: string;
   icon: string; // Icon key/name
   color?: string; // REQ-008.3: Client color (hex code)
+  parentClientId?: string; // REQ-010: Reference to parent client
   disabled?: boolean;
   createdAt: string;
   updatedAt: string;
+  subClients?: Client[]; // REQ-010: Sub-clients (populated by API)
 }
 
 export type CreateClientInput = Omit<Client, 'id' | 'createdAt' | 'updatedAt'>;
@@ -175,3 +177,34 @@ export type CreateNoteInput<T extends Note> = Omit<T, 'id' | 'createdAt' | 'upda
 };
 
 export type UpdateNoteInput<T extends Note> = Partial<Omit<T, 'id' | 'type' | 'createdAt' | 'updatedAt'>>;
+
+// ============================================================================
+// REQ-010: Task Activity Log Types
+// ============================================================================
+
+export type TaskActivityEventType =
+  | 'CREATED'
+  | 'TITLE_CHANGED'
+  | 'STATUS_CHANGED'
+  | 'PRIORITY_CHANGED'
+  | 'PROJECT_CHANGED'
+  | 'CLIENT_CHANGED'
+  | 'DUE_DATE_CHANGED'
+  | 'CONTENT_UPDATED'
+  | 'TIMESHEET_ADDED'
+  | 'TIMESHEET_MODIFIED'
+  | 'TIMESHEET_DELETED'
+  | 'ATTACHMENT_ADDED'
+  | 'ATTACHMENT_DELETED'
+  | 'ARCHIVED'
+  | 'UNARCHIVED'
+  | 'FAVORITED'
+  | 'UNFAVORITED';
+
+export interface TaskActivityLog {
+  id: UUID;
+  taskId: UUID;
+  eventType: TaskActivityEventType;
+  description?: string;
+  createdAt: string;
+}

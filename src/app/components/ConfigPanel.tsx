@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Building2, FolderKanban, Database, Download, Upload, Loader2, Settings, Save, Clock } from 'lucide-react';
+import { Building2, FolderKanban, Database, Download, Upload, Loader2, Settings, Save, Clock, Trash2 } from 'lucide-react';
 import { ClientsManager } from './ClientsManager';
 import { ProjectsManager } from './ProjectsManager';
 import { useApp } from '../context/AppContext';
@@ -60,6 +60,7 @@ function BackupManager() {
       });
 
       const result = await response.json();
+      console.log('Import response:', result);
 
       if (response.ok) {
         setImportResult({ 
@@ -68,7 +69,9 @@ function BackupManager() {
         });
         refreshNotes();
       } else {
-        setImportResult({ success: false, message: result.error || 'Import failed' });
+        const msg = result.error || 'Import failed';
+        const details = result.details ? `\nDetails: ${result.details}` : '';
+        setImportResult({ success: false, message: msg + details });
       }
     } catch (error) {
       console.error('Import error:', error);
@@ -88,7 +91,7 @@ function BackupManager() {
         <div className="bg-gray-900 rounded-lg p-4 border border-gray-800">
           <h3 className="text-lg font-medium text-white mb-2">Export Workspace</h3>
           <p className="text-gray-400 text-sm mb-4">
-            Download a complete backup of all your notes, clients, projects, and attachments as a ZIP file.
+            Download a complete backup of all your notes, clients, projects, attachments (including blob data), and database tables as a ZIP file.
           </p>
           <button
             onClick={handleExport}
@@ -101,6 +104,37 @@ function BackupManager() {
               <Download size={18} />
             )}
             {isExporting ? 'Exporting...' : 'Export Backup'}
+          </button>
+        </div>
+
+        {/* Wipe Section */}
+        <div className="bg-gray-900 rounded-lg p-4 border border-red-800">
+          <h3 className="text-lg font-medium text-white mb-2">Wipe Application Data</h3>
+          <p className="text-red-400 text-sm mb-4">
+            This will permanently delete <strong>all</strong> notes, clients, projects,
+            attachments and configuration from both the database and the file storage.
+          </p>
+          <button
+            onClick={async () => {
+              if (!confirm('Are you absolutely sure? This action cannot be undone.')) return;
+              try {
+                const res = await fetch('/api/workspace/wipe', { method: 'POST' });
+                if (res.ok) {
+                  alert('Workspace wiped successfully.');
+                  refreshNotes();
+                } else {
+                  const json = await res.json();
+                  alert('Wipe failed: ' + (json.error || 'unknown error'));
+                }
+              } catch (err) {
+                console.error('Wipe error:', err);
+                alert('Wipe failed.');
+              }
+            }}
+            className="flex items-center gap-2 bg-red-600 hover:bg-red-700 disabled:bg-red-800 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            <Trash2 size={18} />
+            Wipe Workspace
           </button>
         </div>
 

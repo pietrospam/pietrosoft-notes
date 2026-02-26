@@ -24,10 +24,11 @@ export async function GET() {
     const dataPath = path.resolve(DATA_DIR);
     
     // Check if data directory exists
+    let hasDataDir = true;
     try {
       await fs.access(dataPath);
     } catch {
-      return NextResponse.json({ error: 'Data directory not found' }, { status: 404 });
+      hasDataDir = false;
     }
 
     // Helper to recursively add files
@@ -47,7 +48,33 @@ export async function GET() {
       }
     };
 
-    await addDirectory(dataPath, '');
+    if (hasDataDir) {
+      await addDirectory(dataPath, 'data');
+    }
+
+    // Additionally export database tables to JSON
+    try {
+      const { prisma } = await import('@/lib/db');
+      const clients = await prisma.client.findMany();
+      const projects = await prisma.project.findMany();
+      const notes = await prisma.note.findMany();
+      const attachments = await prisma.attachment.findMany();
+      const activityLogs = await prisma.taskActivityLog.findMany();
+
+      archive.append(JSON.stringify(clients), { name: 'db/clients.json' });
+      archive.append(JSON.stringify(projects), { name: 'db/projects.json' });
+      archive.append(JSON.stringify(notes), { name: 'db/notes.json' });
+
+      // encode attachment data to base64 to make JSON-safe
+      const attachmentsWithData = attachments.map(a => ({
+        ...a,
+        data: a.data.toString('base64'),
+      }));
+      archive.append(JSON.stringify(attachmentsWithData), { name: 'db/attachments.json' });
+      archive.append(JSON.stringify(activityLogs), { name: 'db/activityLogs.json' });
+    } catch (err) {
+      console.warn('Failed to include database export:', err);
+    }
     await archive.finalize();
     
     const zipBuffer = await finishPromise;

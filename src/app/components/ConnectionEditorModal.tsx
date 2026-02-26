@@ -93,9 +93,15 @@ export function ConnectionEditorModal({ noteId, onClose, onSaved, inline = false
     </button>
   );
 
-  const handleClientChange = (clientId: string) => {
+  const handleClientChange = (clientId: string, trackChange?: (data: Partial<Note>) => void) => {
     setSelectedClientId(clientId);
-    setSelectedProjectId('');
+    // Auto-select "General" project if it exists for this client
+    const generalProject = projects.find(
+      (p: Project) => p.clientId === clientId && p.name === 'General'
+    );
+    const newProjectId = generalProject?.id || '';
+    setSelectedProjectId(newProjectId);
+    trackChange?.({ clientId: clientId || undefined, projectId: newProjectId || undefined });
   };
 
   const handleFieldsChange = (data: Partial<Note>) => {
@@ -117,7 +123,7 @@ export function ConnectionEditorModal({ noteId, onClose, onSaved, inline = false
     }
   };
 
-  const fieldsComponent = (
+  const renderFields = (trackChange: (data: Partial<Note>) => void) => (
     <div className="space-y-4">
       {/* Row 1: Client and Project */}
       <div className="grid grid-cols-2 gap-4">
@@ -128,7 +134,7 @@ export function ConnectionEditorModal({ noteId, onClose, onSaved, inline = false
             <div className="relative flex-1">
               <select
                 value={selectedClientId}
-                onChange={(e) => handleClientChange(e.target.value)}
+                onChange={(e) => handleClientChange(e.target.value, trackChange)}
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 appearance-none"
               >
                 <option value="">Sin cliente</option>
@@ -156,7 +162,10 @@ export function ConnectionEditorModal({ noteId, onClose, onSaved, inline = false
             <div className="relative flex-1">
               <select
                 value={selectedProjectId}
-                onChange={(e) => setSelectedProjectId(e.target.value)}
+                onChange={(e) => {
+                  setSelectedProjectId(e.target.value);
+                  trackChange({ projectId: e.target.value || undefined });
+                }}
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 appearance-none"
                 disabled={!selectedClientId}
               >
@@ -187,7 +196,10 @@ export function ConnectionEditorModal({ noteId, onClose, onSaved, inline = false
           <input
             type="url"
             value={url}
-            onChange={(e) => setUrl(e.target.value)}
+            onChange={(e) => {
+              setUrl(e.target.value);
+              trackChange({ url: e.target.value || undefined } as Partial<ConnectionNote>);
+            }}
             className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
             placeholder="https://..."
           />
@@ -203,9 +215,18 @@ export function ConnectionEditorModal({ noteId, onClose, onSaved, inline = false
             <input
               type="text"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(e) => {
+                setUsername(e.target.value);
+                trackChange({ username: e.target.value || undefined } as Partial<ConnectionNote>);
+              }}
               className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
               placeholder="usuario o email"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              data-lpignore="true"
+              data-form-type="other"
             />
             {username && <CopyButton field="username" value={username} />}
           </div>
@@ -218,9 +239,18 @@ export function ConnectionEditorModal({ noteId, onClose, onSaved, inline = false
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  trackChange({ password: e.target.value || undefined } as Partial<ConnectionNote>);
+                }}
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 pr-10 text-white text-sm focus:outline-none focus:border-blue-500"
                 placeholder="contraseña"
+                autoComplete="new-password"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                data-lpignore="true"
+                data-form-type="other"
               />
               <button
                 type="button"
@@ -281,7 +311,7 @@ export function ConnectionEditorModal({ noteId, onClose, onSaved, inline = false
       } as Note}
       onClose={onClose}
       onSaved={onSaved}
-      fieldsComponent={fieldsComponent}
+      fieldsComponent={renderFields}
       onFieldsChange={handleFieldsChange}
       inline={inline}
       onExpandToPopup={onExpandToPopup}

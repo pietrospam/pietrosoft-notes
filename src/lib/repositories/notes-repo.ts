@@ -150,7 +150,7 @@ function toNote(p: PrismaNote): Note {
         clientId: p.clientId ?? undefined,
         projectId: p.projectId ?? undefined,
         url: p.connectionUrl ?? undefined,
-        username: undefined,
+        username: p.connectionUsername ?? undefined,
         password: p.connectionCredentials ?? undefined,
       } as ConnectionNote;
 
@@ -274,6 +274,7 @@ export async function createNote<T extends Note>(input: CreateNoteInput<T>): Pro
   if (input.type === 'connection') {
     const connInput = anyInput;
     data.connectionUrl = (connInput.url as string) || null;
+    data.connectionUsername = (connInput.username as string) || null;
     data.connectionCredentials = (connInput.password as string) || null;
   }
 
@@ -352,6 +353,9 @@ export async function updateNote<T extends Note>(
   // Connection-specific fields
   if ('url' in input) {
     data.connectionUrl = (anyInput.url as string) || null;
+  }
+  if ('username' in input) {
+    data.connectionUsername = (anyInput.username as string) || null;
   }
   if ('password' in input) {
     data.connectionCredentials = (anyInput.password as string) || null;

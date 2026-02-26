@@ -19,6 +19,8 @@ interface TimeSheetGridEntry {
   projectName: string;
   clientId: string;
   clientName: string;
+  parentClientId?: string; // REQ-010: Added for parent client grouping
+  parentClientName?: string; // REQ-010: Added for parent client grouping
   state: string; // DRAFT or FINAL
   createdAt: string;
   updatedAt: string;
@@ -47,7 +49,11 @@ type SortField = 'workDate' | 'clientName' | 'projectName' | 'taskTitle' | 'hour
 type SortDirection = 'asc' | 'desc';
 
 export function TimeSheetView() {
-  const { refreshNotes } = useApp();
+  const { refreshNotes, selectedTimesheetClientId, clients } = useApp();
+  // REQ-010: determine selected parent client for header display
+  const selectedParentClient = selectedTimesheetClientId
+    ? clients.find(c => c.id === selectedTimesheetClientId)
+    : null;
   const [timesheets, setTimesheets] = useState<TimeSheetGridEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -156,6 +162,11 @@ export function TimeSheetView() {
   // Filter timesheets
   const selectedMonthStr = `${selectedYear}-${selectedMonth.toString().padStart(2, '0')}`;
   
+  // REQ-010: Get client IDs that are sub-clients of a parent (NOT including the parent itself)
+  const getSubClientIds = (parentId: string): string[] => {
+    return clients.filter(c => c.parentClientId === parentId).map(c => c.id);
+  };
+  
   const filteredTimesheets = useMemo(() => {
     return timesheets.filter(ts => {
       // Month filter (always active)
@@ -171,9 +182,16 @@ export function TimeSheetView() {
       if (filterClient && ts.clientName !== filterClient) return false;
       // Project filter
       if (filterProject && ts.projectName !== filterProject) return false;
+      
+      // REQ-010: Parent client filter from sidebar - show only sub-clients' timesheets
+      if (selectedTimesheetClientId) {
+        const subClientIds = getSubClientIds(selectedTimesheetClientId);
+        if (!subClientIds.includes(ts.clientId)) return false;
+      }
+      
       return true;
     });
-  }, [timesheets, selectedMonthStr, filterDateFrom, filterDateTo, filterClient, filterProject]);
+  }, [timesheets, selectedMonthStr, filterDateFrom, filterDateTo, filterClient, filterProject, selectedTimesheetClientId, clients]);
 
   const totalHours = filteredTimesheets.reduce((sum, ts) => sum + ts.hoursWorked, 0);
 
@@ -882,7 +900,18 @@ export function TimeSheetView() {
       <div className="px-6 py-3 border-b border-gray-800 flex items-center gap-4">
         <div className="flex items-center gap-3">
           <Clock size={24} className="text-orange-400" />
-          <h1 className="text-xl font-semibold text-white">TimeSheets</h1>
+          <h1 className="text-xl font-semibold text-white">
+            TimeSheets
+            {selectedParentClient && (
+              <span className="ml-2 flex items-center text-sm font-medium">
+                <span
+                  className="w-2 h-2 rounded-full mr-1"
+                  style={{ backgroundColor: selectedParentClient.color || '#888' }}
+                />
+                {selectedParentClient.name}
+              </span>
+            )}
+          </h1>
           <span className="text-sm text-gray-500">({filteredTimesheets.length})</span>
         </div>
         
@@ -1103,6 +1132,18 @@ export function TimeSheetView() {
         </div>
       ) : (
         <div className="flex-1 overflow-auto">
+          {/* Parent client title if filtered */}
+          {selectedParentClient && (
+            <div className="px-6 py-2">
+              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                <span
+                  className="w-2 h-2 rounded-full"
+                  style={{ backgroundColor: selectedParentClient.color || '#888' }}
+                />
+                {selectedParentClient.name}
+              </h2>
+            </div>
+          )}
           {/* Table */}
           <table className="w-full">
             <thead className="bg-gray-900 sticky top-0">

@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Save, Loader2, Maximize2, Minimize2, Pencil, Clock, ChevronDown, Plus, Check, ExternalLink, Star, Archive, ArchiveRestore, Trash2, Copy } from 'lucide-react';
+import { X, Save, Loader2, Maximize2, Minimize2, Pencil, Clock, ChevronDown, Plus, Check, ExternalLink, Star, Archive, ArchiveRestore, Trash2, Copy, History } from 'lucide-react';
 import { TipTapEditor, TipTapEditorHandle } from './TipTapEditor';
 import { AttachmentsPanel } from './AttachmentsPanel';
 import { TimeSheetModal } from './TimeSheetModal';
 import { QuickCreateModal } from './QuickCreateModal';
 import { Toast } from './Toast';
 import { UnsavedChangesModal } from './UnsavedChangesModal';
+import { TaskActivityLogModal } from './TaskActivityLogModal';
 import { useApp } from '../context/AppContext';
 import type { TaskNote, AttachmentMeta, Client, Project, TaskStatus, TaskPriority } from '@/lib/types';
 
@@ -67,6 +68,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
   const [isEditingTitle, setIsEditingTitle] = useState(!taskId); // Auto-edit title for new notes
   const [toast, setToast] = useState<{ message: string } | null>(null);
   const [showTimeSheetModal, setShowTimeSheetModal] = useState(false);
+  const [showActivityLog, setShowActivityLog] = useState(false); // REQ-010: Activity log modal
   
   // Header fields edit mode - enabled by default for NEW tasks, disabled for existing
   const [isHeaderEditing, setIsHeaderEditing] = useState(!taskId);
@@ -229,12 +231,15 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
     setSelectedClientId(clientId);
     if (clientId) {
       const res = await fetch(`/api/projects?clientId=${clientId}`);
-      const projectsList = await res.json();
+      const projectsList: Project[] = await res.json();
       setProjects(projectsList);
+      // Auto-select "General" project if it exists
+      const generalProject = projectsList.find((p: Project) => p.name === 'General');
+      trackChange({ projectId: generalProject?.id || '' });
     } else {
       setProjects([]);
+      trackChange({ projectId: '' });
     }
-    trackChange({ projectId: '' }); // Clear project when client changes
   };
 
   // Handle Escape key (only in popup mode)
@@ -802,6 +807,17 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
             )}
           </div>
           <div className="flex items-center gap-2">
+            {/* REQ-010: Activity History button - only for saved tasks */}
+            {(taskId || isCreatedRef.current) && !task.id.startsWith('temp-') && (
+              <button
+                onClick={() => setShowActivityLog(true)}
+                className="p-2 rounded transition-colors text-gray-400 hover:text-blue-400 hover:bg-gray-800"
+                title="Ver historial de actividad"
+              >
+                <History size={20} />
+              </button>
+            )}
+            
             {/* REQ-006: Favorite toggle - only for saved tasks */}
             {(taskId || isCreatedRef.current) && !task.id.startsWith('temp-') && (
               <button
@@ -1010,7 +1026,17 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
             )}
           </div>
           <div className="flex items-center gap-2">
-            {/* TimeSheet button - only for existing tasks */}
+            {/* REQ-010: Activity History button - only for saved tasks */}
+            {(taskId || isCreatedRef.current) && !task.id.startsWith('temp-') && (
+              <button
+                onClick={() => setShowActivityLog(true)}
+                className="p-2 rounded transition-colors text-gray-400 hover:text-blue-400 hover:bg-gray-800"
+                title="Ver historial de actividad"
+              >
+                <History size={20} />
+              </button>
+            )}
+            
             {/* REQ-006: Favorite toggle - only for saved tasks */}
             {(taskId || isCreatedRef.current) && !task.id.startsWith('temp-') && (
               <button
@@ -1184,6 +1210,15 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
         onCancel={() => setShowUnsavedModal(false)}
         onSave={handleSaveAndClose}
       />
+
+      {/* Activity Log Modal */}
+      {showActivityLog && (taskId || isCreatedRef.current) && (
+        <TaskActivityLogModal
+          taskId={taskId || task.id}
+          taskTitle={title}
+          onClose={() => setShowActivityLog(false)}
+        />
+      )}
     </div>
   );
 }

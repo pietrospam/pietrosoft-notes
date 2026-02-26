@@ -26,29 +26,60 @@ export async function POST(request: NextRequest) {
     
     const zip = new AdmZip(buffer);
     const entries = zip.getEntries();
+    console.log('Import ZIP entries:', entries.map(e => e.entryName));
 
     if (entries.length === 0) {
       return NextResponse.json({ error: 'ZIP file is empty' }, { status: 400 });
     }
 
-    // Validate structure - should contain expected folders
+    // Validate structure - should contain expected folders somewhere in the tree
     const expectedFolders = ['notes', 'clients', 'projects'];
     const foundFolders = new Set<string>();
     
     for (const entry of entries) {
-      const topFolder = entry.entryName.split('/')[0];
-      if (expectedFolders.includes(topFolder)) {
-        foundFolders.add(topFolder);
+      // split on either forward or back slash to cover different zip creators
+      const parts = entry.entryName.split(/[/\\]/).filter(Boolean);
+      for (const part of parts) {
+        if (expectedFolders.includes(part)) {
+          foundFolders.add(part);
+        }
       }
     }
 
-    if (foundFolders.size === 0) {
+    // if there are no legacy folders, accept file as long as it contains
+    // any of the new `db/` JSON dumps
+    const hasDbDump = entries.some(e => e.entryName.startsWith('db/'));
+    if (foundFolders.size === 0 && !hasDbDump) {
       return NextResponse.json({ 
-        error: 'Invalid backup file. Expected folders: notes, clients, projects' 
+        error: 'Invalid backup file. Expected folders: notes, clients, projects or db/' 
       }, { status: 400 });
     }
 
-    const dataPath = path.resolve(DATA_DIR);
+    let dataPath = path.resolve(DATA_DIR);
+
+    // try to create data directory if it doesn't exist, handle permission errors
+    try {
+      await fs.mkdir(dataPath, { recursive: true });
+    } catch (err: unknown) {
+      const code = (err as { code?: string }).code;
+      if (code === 'EACCES' || code === 'EPERM') {
+        // cannot write to configured directory, fallback to temp
+        const os = await import('os');
+        const fallback = path.join(os.tmpdir(), 'pietrosoft-data');
+        console.warn(`Permission denied for DATA_DIR ${dataPath}, using fallback ${fallback}`);
+        dataPath = fallback;
+        try {
+          await fs.mkdir(dataPath, { recursive: true });
+        } catch (err2) {
+          console.error('Fallback data directory creation failed', err2);
+          return NextResponse.json({ error: 'Import failed', details: `cannot create data directory (${dataPath})` }, { status: 500 });
+        }
+      } else {
+        // unexpected error
+        console.error('Error ensuring data directory', err);
+        return NextResponse.json({ error: 'Import failed', details: String(err) }, { status: 500 });
+      }
+    }
 
     // Backup existing data (optional - create .backup suffix)
     const backupPath = `${dataPath}.backup-${Date.now()}`;
@@ -82,14 +113,77 @@ export async function POST(request: NextRequest) {
         // Backup might not exist
       }
 
-      // Count imported items
-      const counts = {
+      // after writing files to data directory, also import database dumps if present
+      const counts: Record<string, number> = {
         notes: 0,
         clients: 0,
         projects: 0,
         attachments: 0,
+        activityLogs: 0,
       };
 
+      const dbDir = entries.some(e => e.entryName.startsWith('db/')) ? path.join(dataPath, 'db') : null;
+      if (dbDir) {
+        try {
+          const { prisma } = await import('@/lib/db');
+          // wipe tables
+          await prisma.$transaction([
+            prisma.taskActivityLog.deleteMany(),
+            prisma.attachment.deleteMany(),
+            prisma.note.deleteMany(),
+            prisma.project.deleteMany(),
+            prisma.client.deleteMany(),
+          ]);
+
+          const readJson = async (name: string) => {
+            const p = path.join(dataPath, 'db', name);
+            try {
+              const raw = await fs.readFile(p, 'utf-8');
+              return JSON.parse(raw);
+            } catch {
+              return null;
+            }
+          };
+
+          const clients = await readJson('clients.json');
+          if (clients) {
+            await prisma.client.createMany({ data: clients });
+            counts.clients = clients.length;
+          }
+          const projects = await readJson('projects.json');
+          if (projects) {
+            await prisma.project.createMany({ data: projects });
+            counts.projects = projects.length;
+          }
+          const notes = await readJson('notes.json');
+          if (notes) {
+            await prisma.note.createMany({ data: notes });
+            counts.notes = notes.length;
+          }
+          const attachments = await readJson('attachments.json');
+          if (attachments) {
+            // decode base64
+            interface AttachmentJson { [key: string]: unknown; data: string; }
+            const withBinary = (attachments as AttachmentJson[]).map(a => ({
+              ...a,
+              data: Buffer.from(a.data, 'base64'),
+            }));
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore: input derived from exported JSON and should match schema
+            await prisma.attachment.createMany({ data: withBinary });
+            counts.attachments = attachments.length;
+          }
+          const logs = await readJson('activityLogs.json');
+          if (logs) {
+            await prisma.taskActivityLog.createMany({ data: logs });
+            counts.activityLogs = logs.length;
+          }
+        } catch (err) {
+          console.error('DB import error:', err);
+        }
+      }
+
+      // also count existing exported files
       for (const entry of entries) {
         if (entry.isDirectory) continue;
         if (entry.entryName.startsWith('notes/')) counts.notes++;
@@ -117,6 +211,22 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Import error:', error);
-    return NextResponse.json({ error: 'Import failed' }, { status: 500 });
+    // also log entries for context
+    try {
+      const zip = await (async () => {
+        const formData = await request.formData();
+        const file = formData.get('file') as File | null;
+        if (file) {
+          const buf = Buffer.from(await file.arrayBuffer());
+          return new AdmZip(buf);
+        }
+        return null;
+      })();
+      if (zip) console.error('Entries at failure:', zip.getEntries().map(e => e.entryName));
+    } catch {
+      // ignore
+    }
+    // return error message for debugging
+    return NextResponse.json({ error: 'Import failed', details: String(error) }, { status: 500 });
   }
 }

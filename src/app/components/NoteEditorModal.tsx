@@ -64,9 +64,15 @@ export function NoteEditorModal({ noteId, onClose, onSaved, inline = false, onEx
     updatedAt: now,
   };
 
-  const handleClientChange = (clientId: string) => {
+  const handleClientChange = (clientId: string, trackChange?: (data: Partial<Note>) => void) => {
     setSelectedClientId(clientId);
-    setSelectedProjectId(''); // Clear project when client changes
+    // Auto-select "General" project if it exists for this client
+    const generalProject = projects.find(
+      (p: Project) => p.clientId === clientId && p.name === 'General'
+    );
+    const newProjectId = generalProject?.id || '';
+    setSelectedProjectId(newProjectId);
+    trackChange?.({ clientId: clientId || undefined, projectId: newProjectId || undefined });
   };
 
   const handleFieldsChange = (data: Partial<Note>) => {
@@ -79,7 +85,7 @@ export function NoteEditorModal({ noteId, onClose, onSaved, inline = false, onEx
     }
   };
 
-  const fieldsComponent = (
+  const renderFields = (trackChange: (data: Partial<Note>) => void) => (
     <div className="grid grid-cols-2 gap-4">
       {/* Client Selection */}
       <div>
@@ -88,7 +94,7 @@ export function NoteEditorModal({ noteId, onClose, onSaved, inline = false, onEx
           <div className="relative flex-1">
             <select
               value={selectedClientId}
-              onChange={(e) => handleClientChange(e.target.value)}
+              onChange={(e) => handleClientChange(e.target.value, trackChange)}
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 appearance-none"
             >
               <option value="">Sin cliente</option>
@@ -116,7 +122,10 @@ export function NoteEditorModal({ noteId, onClose, onSaved, inline = false, onEx
           <div className="relative flex-1">
             <select
               value={selectedProjectId}
-              onChange={(e) => setSelectedProjectId(e.target.value)}
+              onChange={(e) => {
+                setSelectedProjectId(e.target.value);
+                trackChange({ projectId: e.target.value || undefined });
+              }}
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 appearance-none"
               disabled={!selectedClientId}
             >
@@ -177,7 +186,7 @@ export function NoteEditorModal({ noteId, onClose, onSaved, inline = false, onEx
       }}
       onClose={onClose}
       onSaved={onSaved}
-      fieldsComponent={fieldsComponent}
+      fieldsComponent={renderFields}
       onFieldsChange={handleFieldsChange}
       inline={inline}
       onExpandToPopup={onExpandToPopup}

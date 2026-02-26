@@ -2,9 +2,10 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Search, Plus, Save, FileText, CheckSquare, Link, ChevronDown, X } from 'lucide-react';
+import { Search, Plus, Save, FileText, CheckSquare, Link, ChevronDown, X, Clock, BookOpen } from 'lucide-react';
 import { Toast } from './Toast';
 import type { NoteType } from '@/lib/types';
+import type { ActiveTab } from '../context/AppContext';
 
 const noteTypes: { type: NoteType; label: string; icon: React.ElementType }[] = [
   { type: 'general', label: 'General', icon: FileText },
@@ -20,8 +21,14 @@ const typeLabels: Record<NoteType, string> = {
   timesheet: 'TimeSheet',
 };
 
+// REQ-010: Tab definitions
+const tabs: { id: ActiveTab; label: string; icon: React.ElementType }[] = [
+  { id: 'bitacora', label: 'Bitácora', icon: BookOpen },
+  { id: 'timesheets', label: 'TimeSheets', icon: Clock },
+];
+
 export function TopBar() {
-  const { searchQuery, setSearchQuery, createNote, currentView, isSaving, lastSaved, selectedNote, confirmNavigation, filteredNotes, setSelectedNoteId } = useApp();
+  const { searchQuery, setSearchQuery, createNote, currentView, isSaving, lastSaved, selectedNote, confirmNavigation, filteredNotes, setSelectedNoteId, activeTab, setActiveTab } = useApp();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string } | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -62,11 +69,37 @@ export function TopBar() {
     }
   };
 
+  // REQ-010: Handle tab change
+  const handleTabChange = (tab: ActiveTab) => {
+    confirmNavigation(() => {
+      setActiveTab(tab);
+    });
+  };
+
   return (
     <header className="h-14 bg-gray-900 border-b border-gray-800 flex items-center px-4 gap-4">
-      {/* Logo/Brand */}
-      <div className="flex items-center gap-2">
-        <span className="text-lg font-bold text-white">Bitácora</span>
+      {/* REQ-010: Tab Navigation */}
+      <div className="flex items-center gap-1">
+        {tabs.map(tab => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => handleTabChange(tab.id)}
+              className={`
+                flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
+                ${isActive 
+                  ? 'bg-blue-600 text-white' 
+                  : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                }
+              `}
+            >
+              <Icon size={16} />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Search */}

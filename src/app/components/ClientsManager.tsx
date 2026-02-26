@@ -21,6 +21,7 @@ export function ClientsManager() {
   const [formIcon, setFormIcon] = useState('building');
   const [formDescription, setFormDescription] = useState('');
   const [formColor, setFormColor] = useState('');
+  const [formParentClientId, setFormParentClientId] = useState<string | null>(null);
 
   // Fetch clients
   const fetchClients = async () => {
@@ -46,6 +47,7 @@ export function ClientsManager() {
     setFormIcon('building');
     setFormDescription('');
     setFormColor('');
+    setFormParentClientId(null);
     setEditingClient(null);
     setIsCreating(false);
   };
@@ -56,6 +58,7 @@ export function ClientsManager() {
     setFormIcon(client.icon);
     setFormDescription(client.description || '');
     setFormColor(client.color || '');
+    setFormParentClientId(client.parentClientId || null);
     setIsCreating(false);
   };
 
@@ -80,6 +83,7 @@ export function ClientsManager() {
             icon: formIcon,
             description: formDescription || undefined,
             color: formColor || undefined,
+            parentClientId: formParentClientId || null,
           }),
         });
         if (res.ok) {
@@ -97,6 +101,7 @@ export function ClientsManager() {
             icon: formIcon,
             description: formDescription || undefined,
             color: formColor || undefined,
+            parentClientId: formParentClientId || null,
           }),
         });
         if (res.ok) {
@@ -215,6 +220,25 @@ export function ClientsManager() {
                   Selected: <span style={{ color: formColor }}>{formColor}</span>
                 </p>
               )}
+            </div>
+            {/* REQ-010: Parent Client selector for hierarchy */}
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Cliente Padre</label>
+              <select
+                value={formParentClientId || ''}
+                onChange={(e) => setFormParentClientId(e.target.value || null)}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
+              >
+                <option value="">Sin cliente padre (es cliente principal)</option>
+                {clients
+                  .filter(c => !c.disabled && c.id !== editingClient?.id && !c.parentClientId)
+                  .map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Los sub-clientes aparecen agrupados bajo su cliente padre
+              </p>
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <button
