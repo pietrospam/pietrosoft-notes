@@ -5,14 +5,17 @@ import { Building2, FolderKanban, Database, Download, Upload, Loader2, Settings,
 import { ClientsManager } from './ClientsManager';
 import { ProjectsManager } from './ProjectsManager';
 import { useApp } from '../context/AppContext';
+import { InfoModal } from './InfoModal';
 
-type ConfigTab = 'clients' | 'projects' | 'backup' | 'preferences';
+export type ConfigTab = 'clients' | 'projects' | 'backup' | 'preferences';
 
 function BackupManager() {
   const { refreshNotes } = useApp();
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [showInfoModal, setShowInfoModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleExport = async () => {
@@ -63,10 +66,12 @@ function BackupManager() {
       console.log('Import response:', result);
 
       if (response.ok) {
-        setImportResult({ 
-          success: true, 
-          message: `Imported: ${result.imported.notes} notes, ${result.imported.clients} clients, ${result.imported.projects} projects, ${result.imported.attachments} attachments` 
-        });
+        const msg = `Imported: ${result.imported.notes} notes, ${result.imported.timesheets || 0} timesheets, ${result.imported.clients} clients, ${result.imported.projects} projects, ${result.imported.attachments} attachments, ${result.imported.activityLogs || 0} activity logs`;
+        setImportResult({ success: true, message: msg });
+        // show modal asking user to refresh UI
+        setInfoMessage(msg + '\nPlease refresh to update the interface.');
+        setShowInfoModal(true);
+        // also refresh notes state in the background so sidebar updates soon
         refreshNotes();
       } else {
         const msg = result.error || 'Import failed';
@@ -87,7 +92,16 @@ function BackupManager() {
       <h2 className="text-xl font-semibold text-white mb-6">Backup & Restore</h2>
       
       <div className="space-y-6">
-        {/* Export Section */}
+        {/* render info modal for operations */}
+        <InfoModal
+          isOpen={showInfoModal}
+          message={infoMessage || ''}
+          onConfirm={() => {
+            setShowInfoModal(false);
+            window.location.reload();
+          }}
+        />
+      {/* Export Section */}
         <div className="bg-gray-900 rounded-lg p-4 border border-gray-800">
           <h3 className="text-lg font-medium text-white mb-2">Export Workspace</h3>
           <p className="text-gray-400 text-sm mb-4">
@@ -119,11 +133,13 @@ function BackupManager() {
               if (!confirm('Are you absolutely sure? This action cannot be undone.')) return;
               try {
                 const res = await fetch('/api/workspace/wipe', { method: 'POST' });
+                const json = await res.json();
                 if (res.ok) {
-                  alert('Workspace wiped successfully.');
+                  const msg = 'Workspace wiped successfully.';
+                  setInfoMessage(msg + '\nPlease refresh to update the interface.');
+                  setShowInfoModal(true);
                   refreshNotes();
                 } else {
-                  const json = await res.json();
                   alert('Wipe failed: ' + (json.error || 'unknown error'));
                 }
               } catch (err) {
@@ -308,7 +324,18 @@ function PreferencesManager() {
 }
 
 export function ConfigPanel() {
+  const { configRequest, clearConfigRequest } = useApp();
   const [activeTab, setActiveTab] = useState<ConfigTab>('clients');
+
+  // respond to external open-config requests
+  useEffect(() => {
+    if (configRequest) {
+      setActiveTab(configRequest.tab);
+      if (!configRequest.create) {
+        clearConfigRequest();
+      }
+    }
+  }, [configRequest, clearConfigRequest]);
 
   return (
     <div className="flex-1 bg-gray-950 flex overflow-hidden">

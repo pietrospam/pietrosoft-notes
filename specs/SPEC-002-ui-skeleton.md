@@ -21,7 +21,7 @@ This specification covers the main UI shell including:
 ## 2. Goals
 
 - **G1:** Responsive three-panel layout matching design spec
-- **G2:** Navigation between All/General/Tasks/Connections/TimeSheet/Config views
+- **G2:** Navigation between All/General/Tasks/Connections/Config views (TimeSheet moved to a separate tab system described in REQ‑010)
 - **G3:** Notes list with real-time filtering by type
 - **G4:** Rich text editor with autosave
 - **G5:** Global search input functional
@@ -70,7 +70,7 @@ This specification covers the main UI shell including:
       <NavItem view="general" />
       <NavItem view="task" />
       <NavItem view="connection" />
-      <NavItem view="timesheet" />
+      <!-- TimeSheets accessed via tab, not sidebar -->
       <Divider />
       <NavItem view="config" />
     </Sidebar>

@@ -2,7 +2,16 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { X, Clock, Save, AlertCircle } from 'lucide-react';
-import type { TaskNote, TimeSheetNote, Client, Project } from '@/lib/types';
+import type { TaskNote, Client, Project } from '@/lib/types';
+
+interface FetchedTimeSheet {
+  id: string;
+  taskId: string;
+  workDate: string;
+  hoursWorked: number;
+  description?: string;
+  state: string;
+}
 
 interface TimeSheetModalProps {
   task: TaskNote;
@@ -20,7 +29,7 @@ export function TimeSheetModal({ task, initialDate, onClose, onSaved }: TimeShee
   const [error, setError] = useState('');
   
   // Existing timesheet for edit mode
-  const [existingTimeSheet, setExistingTimeSheet] = useState<TimeSheetNote | null>(null);
+  const [existingTimeSheet, setExistingTimeSheet] = useState<FetchedTimeSheet | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   
   // Task context info
@@ -78,13 +87,13 @@ export function TimeSheetModal({ task, initialDate, onClose, onSaved }: TimeShee
     
     try {
       // Fetch all timesheets and filter by taskId and date
-      const res = await fetch('/api/notes?type=timesheet');
+      // query timesheets for this task and date
+      const res = await fetch(`/api/timesheets?taskId=${task.id}&workDate=${selectedDate}`);
       if (res.ok) {
-        const timesheets: TimeSheetNote[] = await res.json();
+        const timesheets: FetchedTimeSheet[] = await res.json();
         const existing = timesheets.find(
           ts => ts.taskId === task.id && ts.workDate === selectedDate
         );
-        
         if (existing) {
           setExistingTimeSheet(existing);
           setIsEditMode(true);
@@ -134,7 +143,7 @@ export function TimeSheetModal({ task, initialDate, onClose, onSaved }: TimeShee
     try {
       if (isEditMode && existingTimeSheet) {
         // Update existing timesheet
-        const res = await fetch(`/api/notes/${existingTimeSheet.id}`, {
+        const res = await fetch(`/api/timesheets/${existingTimeSheet.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -142,17 +151,16 @@ export function TimeSheetModal({ task, initialDate, onClose, onSaved }: TimeShee
             description,
           }),
         });
-        
-        if (!res.ok) throw new Error('Failed to update');
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => null);
+          throw new Error(errBody?.error || 'Failed to update');
+        }
       } else {
         // Create new timesheet
-        const res = await fetch('/api/notes', {
+        const res = await fetch('/api/timesheets', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            type: 'timesheet',
-            title: `Time: ${task.title || task.shortDescription || 'Task'}`,
-            contentJson: null,
             taskId: task.id,
             workDate: date,
             hoursWorked: parseFloat(hours),
@@ -160,8 +168,10 @@ export function TimeSheetModal({ task, initialDate, onClose, onSaved }: TimeShee
             state: 'DRAFT',
           }),
         });
-        
-        if (!res.ok) throw new Error('Failed to create');
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => null);
+          throw new Error(errBody?.error || 'Failed to create');
+        }
       }
       
       onSaved();

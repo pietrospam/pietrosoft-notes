@@ -56,7 +56,7 @@ export type UpdateProjectInput = Partial<Omit<Project, 'id' | 'createdAt' | 'upd
 // Note Types
 // ============================================================================
 
-export type NoteType = 'general' | 'task' | 'connection' | 'timesheet';
+export type NoteType = 'general' | 'task' | 'connection'; // timesheet moved to separate entity
 
 // Task-specific enums
 export type TaskStatus = 'NONE' | 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
@@ -77,6 +77,27 @@ export interface AttachmentMeta {
   size: number; // bytes
   createdAt: string;
 }
+
+// ============================================================================
+// Timesheet entity (now separate from Note)
+// ============================================================================
+
+export interface TimeSheet {
+  id: UUID;
+  workDate: string;
+  hoursWorked: number;
+  description?: string;
+  taskId?: UUID;
+  projectId?: UUID;
+  clientId?: UUID;
+  rate?: number;
+  state: TimeSheetState;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CreateTimeSheetInput = Omit<TimeSheet, 'id' | 'createdAt' | 'updatedAt'>;
+export type UpdateTimeSheetInput = Partial<CreateTimeSheetInput>;
 
 // ============================================================================
 // Note Base
@@ -137,26 +158,19 @@ export interface ConnectionNote extends NoteBase, ConnectionFields {
 }
 
 // ============================================================================
-// TimeSheet Note
+// TimeSheet Note (deprecated, timesheets moved to separate entity)
 // ============================================================================
 
-export interface TimeSheetFields {
-  taskId: UUID; // Required
-  workDate: string; // Required, ISO 8601 date
-  hoursWorked: number; // Required, decimals allowed
-  description: string; // Required
-  state: TimeSheetState;
-}
-
-export interface TimeSheetNote extends NoteBase, TimeSheetFields {
-  type: 'timesheet';
-}
+// NOTE: previously timesheets were stored as notes of type 'timesheet'.
+// The new `TimeSheet` interface above now represents standalone entries and
+// the Note union no longer includes timesheet cases. The legacy types remain
+// only for historical reference and will not be used anywhere in the app.
 
 // ============================================================================
 // Union Type
 // ============================================================================
 
-export type Note = GeneralNote | TaskNote | ConnectionNote | TimeSheetNote;
+export type Note = GeneralNote | TaskNote | ConnectionNote;
 
 // ============================================================================
 // Workspace Meta

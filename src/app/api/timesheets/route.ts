@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/db';
-import { NoteType as PrismaNoteType } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 // TimeSheet entry with enriched data for the grid
 export interface TimeSheetGridEntry {
@@ -28,25 +28,32 @@ export async function GET(request: Request) {
     const projectId = searchParams.get('projectId');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
+    const taskId = searchParams.get('taskId');
+    const workDate = searchParams.get('workDate');
 
-    // Query all timesheets with related task, project, and client
-    const timesheets = await prisma.note.findMany({
-      where: {
-        type: PrismaNoteType.TIMESHEET,
-        archived: false,
-        ...(startDate && {
-          timesheetDate: {
-            gte: new Date(startDate),
-          },
-        }),
-        ...(endDate && {
-          timesheetDate: {
-            lte: new Date(endDate),
-          },
-        }),
-      },
+    // Build query filters
+    const where: import('@prisma/client').Prisma.TimesheetWhereInput = {};
+    if (startDate || endDate) {
+      where.workDate = {};
+      if (startDate) {
+        where.workDate.gte = new Date(startDate);
+      }
+      if (endDate) {
+        where.workDate.lte = new Date(endDate);
+      }
+    }
+    if (taskId) {
+      where.taskId = taskId;
+    }
+    if (workDate) {
+      where.workDate = new Date(workDate);
+    }
+
+    // Query timesheets with related task, project, and client
+    const timesheets = await prisma.timesheet.findMany({
+      where,
       include: {
-        timesheetTask: {
+        task: {
           include: {
             project: {
               include: {
@@ -55,39 +62,41 @@ export async function GET(request: Request) {
             },
           },
         },
+        project: true,
+        client: true,
       },
       orderBy: {
-        timesheetDate: 'asc',
+        workDate: 'asc',
       },
     });
 
-    // Filter by client/project if specified (through task's project)
+    // Additional filtering by client/project using task association
     let filteredTimesheets = timesheets;
     if (clientId) {
       filteredTimesheets = filteredTimesheets.filter(
-        ts => ts.timesheetTask?.project?.clientId === clientId
+        ts => ts.task?.project?.clientId === clientId
       );
     }
     if (projectId) {
       filteredTimesheets = filteredTimesheets.filter(
-        ts => ts.timesheetTask?.projectId === projectId
+        ts => ts.task?.projectId === projectId
       );
     }
 
     // Transform to grid entries
     const entries: TimeSheetGridEntry[] = filteredTimesheets.map(ts => ({
       id: ts.id,
-      workDate: ts.timesheetDate?.toISOString().split('T')[0] || '',
-      hoursWorked: ts.timesheetHours || 0,
-      description: ts.content || '',
-      taskId: ts.timesheetTaskId || '',
-      taskTitle: ts.timesheetTask?.title || 'Sin tarea',
-      taskCode: ts.timesheetTask?.taskTicketPhaseCode || '',
-      projectId: ts.timesheetTask?.projectId || '',
-      projectName: ts.timesheetTask?.project?.name || 'Sin proyecto',
-      clientId: ts.timesheetTask?.project?.clientId || '',
-      clientName: ts.timesheetTask?.project?.client?.name || 'Sin cliente',
-      state: ts.timesheetState || 'DRAFT',
+      workDate: ts.workDate.toISOString().split('T')[0],
+      hoursWorked: ts.hoursWorked,
+      description: ts.description || '',
+      taskId: ts.taskId || '',
+      taskTitle: ts.task?.title || 'Sin tarea',
+      taskCode: ts.task?.taskTicketPhaseCode || '',
+      projectId: ts.projectId || ts.task?.projectId || '',
+      projectName: ts.project?.name || ts.task?.project?.name || 'Sin proyecto',
+      clientId: ts.clientId || ts.task?.project?.clientId || '',
+      clientName: ts.client?.name || ts.task?.project?.client?.name || 'Sin cliente',
+      state: ts.state,
       createdAt: ts.createdAt.toISOString(),
       updatedAt: ts.updatedAt.toISOString(),
     }));
@@ -102,5 +111,37 @@ export async function GET(request: Request) {
   }
 }
 
-// DELETE /api/timesheets/:id is handled by /api/notes/[id]/route.ts
-// The delete endpoint already exists and works for all note types
+// POST /api/timesheets - create new entry
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+
+    // Basic validation
+    if (!body.workDate) {
+      return NextResponse.json({ error: 'workDate is required' }, { status: 400 });
+    }
+    if (body.hoursWorked === undefined || body.hoursWorked === null || isNaN(body.hoursWorked)) {
+      return NextResponse.json({ error: 'hoursWorked must be a number' }, { status: 400 });
+    }
+
+    const data: Prisma.TimesheetUncheckedCreateInput = {
+      workDate: new Date(body.workDate),
+      hoursWorked: body.hoursWorked,
+      description: body.description || null,
+      taskId: body.taskId || null,
+      projectId: body.projectId || null,
+      clientId: body.clientId || null,
+      rate: body.rate || null,
+      state: body.state || undefined,
+    };
+    const created = await prisma.timesheet.create({ data });
+    return NextResponse.json(created);
+  } catch (error) {
+    console.error('Error creating timesheet:', error);
+    // forward message if available
+    const msg = (error instanceof Error ? error.message : 'Failed to create timesheet');
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
+
+// DELETE/PUT for individual items moved to /api/timesheets/[id] routes

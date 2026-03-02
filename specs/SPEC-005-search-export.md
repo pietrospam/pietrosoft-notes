@@ -11,7 +11,7 @@ Enhance search functionality with filters and add CSV export for TimeSheets.
 - [ ] Highlight search terms in results (optional)
 
 ### AC-2: Type Filter
-- [x] Sidebar nav already filters by note type (All/General/Tasks/Connections/TimeSheet)
+- [x] Sidebar nav filters by note type (All/General/Tasks/Connections); TimeSheets are viewed in their own section
 - [x] Search respects current view filter
 
 ### AC-3: Status/Priority Filters (Tasks)
@@ -19,7 +19,7 @@ Enhance search functionality with filters and add CSV export for TimeSheets.
 - [ ] Filter tasks by priority
 - [ ] Filter by client/project
 
-### AC-4: Date Range Filter (TimeSheets)
+### AC-4: Date Range Filter (TimeSheets - separate table)
 - [ ] Filter timesheets by workDate range
 - [ ] Filter by client/project
 

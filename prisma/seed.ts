@@ -217,68 +217,56 @@ async function main() {
 
   console.log('Created 3 connections')
 
-  // Create notes - Timesheets
-  await prisma.note.create({
+  // Create timesheet entries (now in dedicated table)
+  await prisma.timesheet.create({
     data: {
-      id: 'note-ts-1',
-      type: NoteType.TIMESHEET,
-      title: 'Dev environment setup',
-      content: '<p>Initial setup and configuration</p>',
+      workDate: new Date('2026-02-15'),
+      hoursWorked: 4,
+      description: 'Dev environment setup',
       projectId: acmeWeb.id,
       clientId: acme.id,
-      timesheetDate: new Date('2026-02-15'),
-      timesheetHours: 4,
-      timesheetRate: 75,
-      timesheetState: TimesheetState.FINAL,
-      timesheetTaskId: task1.id,
+      rate: 75,
+      state: TimesheetState.FINAL,
+      taskId: task1.id,
     }
   })
 
-  await prisma.note.create({
+  await prisma.timesheet.create({
     data: {
-      id: 'note-ts-2',
-      type: NoteType.TIMESHEET,
-      title: 'Homepage design work',
-      content: '<p>Worked on hero section and feature grid</p>',
+      workDate: new Date('2026-02-18'),
+      hoursWorked: 6,
+      description: 'Homepage design work',
       projectId: acmeWeb.id,
       clientId: acme.id,
-      timesheetDate: new Date('2026-02-18'),
-      timesheetHours: 6,
-      timesheetRate: 75,
-      timesheetState: TimesheetState.DRAFT,
-      timesheetTaskId: task2.id,
+      rate: 75,
+      state: TimesheetState.DRAFT,
+      taskId: task2.id,
     }
   })
 
-  await prisma.note.create({
+  await prisma.timesheet.create({
     data: {
-      id: 'note-ts-3',
-      type: NoteType.TIMESHEET,
-      title: 'Homepage design continued',
-      content: '<p>Testimonials and footer sections</p>',
+      workDate: new Date('2026-02-19'),
+      hoursWorked: 5,
+      description: 'Homepage design continued',
       projectId: acmeWeb.id,
       clientId: acme.id,
-      timesheetDate: new Date('2026-02-19'),
-      timesheetHours: 5,
-      timesheetRate: 75,
-      timesheetState: TimesheetState.DRAFT,
-      timesheetTaskId: task2.id,
+      rate: 75,
+      state: TimesheetState.DRAFT,
+      taskId: task2.id,
     }
   })
 
-  await prisma.note.create({
+  await prisma.timesheet.create({
     data: {
-      id: 'note-ts-4',
-      type: NoteType.TIMESHEET,
-      title: 'API planning session',
-      content: '<p>Architecture review and planning</p>',
+      workDate: new Date('2026-02-17'),
+      hoursWorked: 3,
+      description: 'API planning session',
       projectId: acmeApi.id,
       clientId: acme.id,
-      timesheetDate: new Date('2026-02-17'),
-      timesheetHours: 3,
-      timesheetRate: 85,
-      timesheetState: TimesheetState.FINAL,
-      timesheetTaskId: task3.id,
+      rate: 85,
+      state: TimesheetState.FINAL,
+      taskId: task3.id,
     }
   })
 

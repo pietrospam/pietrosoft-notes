@@ -105,11 +105,10 @@ export async function hasTimesheetForDate(taskId: string, date: Date): Promise<b
   const endOfDay = new Date(date);
   endOfDay.setHours(23, 59, 59, 999);
   
-  const count = await prisma.note.count({
+  const count = await prisma.timesheet.count({
     where: {
-      type: 'TIMESHEET',
-      timesheetTaskId: taskId,
-      timesheetDate: {
+      taskId,
+      workDate: {
         gte: startOfDay,
         lte: endOfDay,
       },
@@ -142,18 +141,14 @@ export async function createPlaceholderTimesheet(
   if (!task) return;
   
   // Create placeholder timesheet
-  const timesheetId = `ts-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-  
-  await prisma.note.create({
+  await prisma.timesheet.create({
     data: {
-      id: timesheetId,
-      type: 'TIMESHEET',
-      title: `TimeSheet - ${task.title}`,
-      timesheetTaskId: taskId,
-      timesheetDate: today,
-      timesheetHours: 0,
-      timesheetState: 'DRAFT',
-      content: description,
+      workDate: today,
+      hoursWorked: 0,
+      description,
+      taskId,
+      projectId: task.projectId || undefined,
+      state: 'DRAFT',
     },
   });
 }

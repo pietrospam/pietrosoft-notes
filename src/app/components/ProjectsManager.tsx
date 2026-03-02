@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useApp } from '../context/AppContext';
 import { Plus, Pencil, Trash2, Check, X, Eye, EyeOff, ChevronDown } from 'lucide-react';
 import { DynamicIcon } from './IconPicker';
 import type { Client, Project } from '@/lib/types';
@@ -63,6 +64,15 @@ export function ProjectsManager() {
     resetForm();
     setIsCreating(true);
   };
+
+  // respond to global configRequest
+  const { configRequest, clearConfigRequest } = useApp();
+  useEffect(() => {
+    if (configRequest?.tab === 'projects' && configRequest.create) {
+      handleCreate();
+      clearConfigRequest();
+    }
+  }, [configRequest, handleCreate, clearConfigRequest]);
 
   const handleSave = async () => {
     if (!formName.trim() || !formClientId) return;

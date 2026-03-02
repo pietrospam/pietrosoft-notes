@@ -23,7 +23,7 @@ archivos físicos.
    - Generar un ZIP que contenga:
      * Una carpeta `data/` con los archivos actuales (como hoy).
      * Un archivo JSON/NDJSON por cada tabla relevante (`clients.json`,
-       `projects.json`, `notes.json`, `attachments.json`, `task_activity_logs.json`,
+       `projects.json`, `notes.json`, `timesheets.json`, `attachments.json`, `task_activity_logs.json`,
        etc.).
      * En `attachments.json` cada registro deberá incluir los datos BLOB codificados en
        base64.
@@ -37,12 +37,16 @@ en otros entornos o con herramientas de línea de comandos.
    - Antes de insertar datos, vaciar las tablas actuales (o recrear la base de
      datos) para evitar duplicados o inconsistencias.
    - Insertar los registros en el siguiente orden de dependencia:
-     `clients` → `projects` → `notes` → `notes` (timesheets) → `attachments` →
+     `clients` → `projects` → `notes` → `timesheets` → `attachments` →
      `task_activity_logs`.
    - Los blobs base64 de `attachments` se decodifican y guardan en la columna
      correspondiente.
    - Finalmente, sobrescribir la carpeta `DATA_DIR` con el contenido del ZIP.
    - Reportar en la respuesta cuántos registros de cada tipo fueron importados.
+   - **Interfaz:** después de una importación exitosa la aplicación mostrará un
+     modal informando al usuario que es necesario recargar la interfaz; al
+     pulsar "OK" se realizará un `location.reload()` para sincronizar el estado
+     de la UI con los datos recién restaurados.
 
 3. **API/UI**
    - Mantener las rutas existentes `/api/workspace/export` y

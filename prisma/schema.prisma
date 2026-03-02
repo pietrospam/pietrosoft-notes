@@ -19,6 +19,7 @@ model Client {
   updatedAt       DateTime  @updatedAt @map("updated_at")
   notes           Note[]    @relation("ClientNotes")
   projects        Project[]
+  timesheetEntries Timesheet[] @relation("TimesheetClient")
   
   // REQ-010: Hierarchical relations
   parentClient    Client?   @relation("ClientHierarchy", fields: [parentClientId], references: [id])
@@ -36,6 +37,7 @@ model Project {
   updatedAt   DateTime @updatedAt @map("updated_at")
   notes       Note[]   @relation("ProjectNotes")
   client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  timesheetEntries Timesheet[] @relation("TimesheetProject")
 
   @@index([clientId])
   @@map("projects")
@@ -58,11 +60,6 @@ model Note {
   connectionUrl         String?         @map("connection_url")
   connectionUsername    String?         @map("connection_username")
   connectionCredentials String?         @map("connection_credentials")
-  timesheetDate         DateTime?       @map("timesheet_date")
-  timesheetHours        Float?          @map("timesheet_hours")
-  timesheetRate         Float?          @map("timesheet_rate")
-  timesheetState        TimesheetState? @default(DRAFT) @map("timesheet_state")
-  timesheetTaskId       String?         @map("timesheet_task_id")
   createdAt             DateTime        @default(now()) @map("created_at")
   updatedAt             DateTime        @updatedAt @map("updated_at")
   contentJson           Json?           @map("content_json")
@@ -71,17 +68,15 @@ model Note {
   taskBudgetHours       Float?          @map("task_budget_hours")
   client                Client?         @relation("ClientNotes", fields: [clientId], references: [id])
   project               Project?        @relation("ProjectNotes", fields: [projectId], references: [id])
-  timesheetTask         Note?           @relation("TaskTimesheets", fields: [timesheetTaskId], references: [id])
-  timesheets            Note[]          @relation("TaskTimesheets")
   attachmentFiles       Attachment[]    // REQ-007: Relation to attachment files
   activityLogs          TaskActivityLog[] // REQ-010: Activity history
+  timesheetEntries      Timesheet[]     @relation("TimesheetTask")
 
   @@index([type])
   @@index([projectId])
   @@index([clientId])
   @@index([archived])
   @@index([isFavorite])
-  @@index([timesheetTaskId])
   @@map("notes")
 }
 
@@ -142,3 +137,25 @@ model TaskActivityLog {
   @@index([createdAt])
   @@map("task_activity_logs")
 }
+
+// new separate Timesheet table per REQ-012
+model Timesheet {
+  id          String   @id @default(uuid())
+  workDate    DateTime @map("work_date")
+  hoursWorked Float    @map("hours_worked")
+  description String?
+  taskId      String?  @map("task_id")
+  projectId   String?  @map("project_id")
+  clientId    String?  @map("client_id")
+  rate        Float?   @map("timesheet_rate")
+  state       TimesheetState @default(DRAFT) @map("timesheet_state")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  task        Note?    @relation("TimesheetTask", fields: [taskId], references: [id])
+  project     Project? @relation("TimesheetProject", fields: [projectId], references: [id])
+  client      Client?  @relation("TimesheetClient", fields: [clientId], references: [id])
+
+  @@map("timesheets")
+}
+

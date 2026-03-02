@@ -106,6 +106,15 @@ RESOLUCION : Se agregó un ref (`prevNoteIdRef`) para trackear el ID de la nota 
 
 
 ## Issue 14: Enter en título debe mover foco al body, Ctrl+Enter para salto de línea
+
+## Issue 16: Previsualizar archivos EML con adjuntos
+ESTADO : CANCELADO
+DESCRIPCION : Los anexos de notas pueden incluir archivos `.eml`. Se intentó implementar vista previa, pero resultó inestable y no aporta valor suficiente. Decidimos tratar estos ficheros como no soportados; el usuario sólo podrá descargarlos.
+
+## Issue 15: Mostrar cliente en grid de timesheets
+ESTADO : RESUELTO
+DESCRIPCION : La vista de TimeSheets no mostraba el nombre del cliente asociado, lo que dificultaba la identificación cuando se trabajaba con múltiples clientes. Debe existir una columna adicional a la izquierda del proyecto con un badge coloreado según el cliente.
+RESOLUCION : Se agregó columna "Cliente" en TimeSheetView con badge de color, encabezado sortable, y se ajustaron exportaciones CSV/PDF.
 ESTADO : RESUELTO
 DESCRIPCION : Cuando se está editando el título de una nota/tarea:
 - Al presionar Enter, debe mover el foco al body (editor TipTap)
@@ -235,3 +244,33 @@ RESOLUCION : Se actualizaron los siguientes componentes para buscar y auto-selec
 - NoteEditorModal.tsx
 - TaskFields.tsx
 - TaskEditorModal.tsx
+
+## Issue 27: Adjuntos requieren nota guardada
+ESTADO : RESUELTO
+DESCRIPCION : Al crear una nota nueva (temp ID), al intentar adjuntar un archivo o pegar una captura de pantalla el sistema mostraba un mensaje "Guarde antes" y no permitía añadir el adjunto. Una vez que la nota se guarda, la funcionalidad funcionaba correctamente. Esto ocurría en todas las notas nuevas en cualquier vista.
+RESOLUCION : Se extendió `AttachmentsPanel` para aceptar un callback opcional `onPersistNote`. Antes de subir un archivo, el panel comprueba si el `noteId` es temporal; si es así llama a la función para persistir la nota y obtener su ID definitivo, y luego procede con la carga. Los componentes que usan el panel (`BaseEditorModal`, `TaskEditorModal`, `EditorPanel`) pasan sus respectivas funciones de persistencia (`persistNote`, `persistTask`, `handlePersistForUpload`). Esto elimina la necesidad de guardar manualmente antes de adjuntar o pegar imágenes. Además, se mantiene la lógica de TipTapEditor para persistir notas en el clipboard.
+
+## Issue 28: Mostrar cliente en grid de timesheets
+ESTADO : RESUELTO
+DESCRIPCION : La vista de TimeSheets no mostraba el nombre del cliente asociado, lo que dificultaba la identificación cuando se trabajaba con múltiples clientes. Debía añadirse una columna adicional a la izquierda del proyecto con un badge coloreado según el cliente.
+RESOLUCION : Se agregó columna "Cliente" en `TimeSheetView` con badge de color, encabezado sortable, y se ajustaron las exportaciones CSV/PDF para incluirlo.
+
+## Issue 29: Formato de título en editor inline de tareas
+ESTADO : RESUELTO
+DESCRIPCION : Al editar una tarea en línea, el título mostrado siempre era el campo `title`. Cuando la tarea tenía un `ticketPhaseCode`, no coincidía con el formato usado en las tarjetas de la lista (`#<ticket> <descripción>`).
+RESOLUCION : Se ajustaron los encabezados de `TaskEditorModal` (tanto inline como popup) y otros lugares de visualización (dropdowns, listas) para calcular dinámicamente el texto usando `ticketPhaseCode` y `shortDescription`. La documentación fue actualizada y el formato ahora es consistente en toda la app.
+
+## Issue 30: Modal de creación se reinicia tras pegar adjuntos
+ESTADO : RESUELTO
+DESCRIPCION : Al crear una nota (task, connection o general) y pegar una imagen o archivo desde el portapapeles, el sistema persistía la nota (para generar el `noteId`) y llamaba a `refreshNotes()`. Eso ponía `isLoading=true` en el contexto, lo que provocaba que `NotesList` devolviera únicamente un spinner y desmontara el modal de creación. Cuando la carga terminaba la lista volvía a renderizarse con un nuevo modal vacío, dando la impresión de que la nota se cerró y se abrió otra, además la imagen no quedaba en el body porque el editor se había destruido.
+RESOLUCION : Se modificó `NotesList` para que el indicador de carga sea un overlay y no un early-return, evitando el desmontaje. Además se eliminó el `key={...}` en los componentes `TipTapEditor` dentro de los modales (`TaskEditorModal` y `BaseEditorModal`), ya que el cambio de `note.id` al persistir provocaba el remount que destruía el contenido del editor y rompía la inserción de la imagen. Con ambas correcciones el editor permanece activo durante el guardado, la imagen se inserta correctamente y no hay cierre inesperado. La explicación y pasos para reproducir quedaron documentados.  
+
+## Issue 31: Evitar duplicados de TimeSheet por eventos diarios
+ESTADO : RESUELTO
+DESCRIPCION : Algunas actividades de tarea disparan la creación automática de un placeholder Timesheet. Era crucial asegurarse de que **solo se cree uno por día por tarea**; eventos subsecuentes en la misma jornada no deben sumar otro registro. Esto se aplica a creación, actualización, cambio de estado, adjuntos, etc.
+RESOLUCION : La función `createPlaceholderTimesheet` ahora consulta `hasTimesheetForDate(taskId, today)` antes de insertar y retorna inmediatamente si ya existe. La documentación de la especificación (REQ-010) fue actualizada para dejar explícito este comportamiento. El backend ya usaba esta verificación en cada punto donde se invoca la creación de placeholder; se confirmó con pruebas manuales.
+
+## Issue 32: No mostrar nombre de cliente padre en cabecera de TimeSheets
+ESTADO : RESUELTO
+DESCRIPCION : Bajo el título "TimeSheets" se estaba mostrando el nombre del cliente padre cuando se estaba filtrando por él. El design requiere mantener ese filtro silencioso, sin repetir el nombre en el encabezado.
+RESOLUCION : Se eliminaron todas las referencias a `selectedParentClient` en la UI: el pequeño badge junto al título y el bloque superior encima de la tabla fueron retirados. El filtrado por cliente padre sigue funcionando internamente. La documentación no requiere cambios adicionales porque se trata de una mejora visual.

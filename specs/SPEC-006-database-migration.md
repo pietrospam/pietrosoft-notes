@@ -160,14 +160,18 @@ model Note {
   username          String?
   password          String?
   
-  // TimeSheet fields (when type = TIMESHEET)
-  taskId            String?
-  task              Note?     @relation("TaskTimesheets", fields: [taskId], references: [id])
-  timesheets        Note[]    @relation("TaskTimesheets")
-  workDate          DateTime?
-  hoursWorked       Decimal?  @db.Decimal(10, 2)
-  timesheetDescription String?
-  timesheetState    TimesheetState?
+  // **NOTE:** TimeSheet-specific columns were present in the original
+  // notes table but have been migrated to a separate `timesheets` model.
+  // The fields below remain for backwards compatibility in existing dumps,
+  // but the application no longer writes to them.
+  //
+  // taskId            String?
+  // task              Note?     @relation("TaskTimesheets", fields: [taskId], references: [id])
+  // timesheets        Note[]    @relation("TaskTimesheets")
+  // workDate          DateTime?
+  // hoursWorked       Decimal?  @db.Decimal(10, 2)
+  // timesheetDescription String?
+  // timesheetState    TimesheetState?
   
   // Attachments stored as JSON array
   attachments       Json      @default("[]")

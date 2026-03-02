@@ -77,7 +77,7 @@ D1. Main layout: sidebar + list + editor
 - AC: UI structure matches: left sidebar, center list, right editor/panel
 
 D2. Routing / views scaffold
-- All / General / Tasks / Connections / TimeSheet / Config
+- All / General / Tasks / Connections / Config  _(TimeSheet moved out of notes list)_
 - AC: switching views updates list
 
 D3. Top bar with global search input + "New"
@@ -162,7 +162,7 @@ H4. Connections view by Client
 
 ---
 
-## EPIC I — TimeSheet
+## EPIC I — TimeSheet (now backed by dedicated table)
 I1. TimeSheet entry form + validations
 - Required: taskId, workDate, hoursWorked, description, state
 - AC: cannot save invalid entry
@@ -171,7 +171,7 @@ I2. Add timesheet instantly from Task view
 - "Add timesheet" button in Task panel
 - AC: creates entry and links to task
 
-I3. TimeSheet views
+I3. TimeSheet views (separate page, independent of notes)
 - By day/week/month
 - Totals by client/project/task
 - AC: totals correct and update instantly

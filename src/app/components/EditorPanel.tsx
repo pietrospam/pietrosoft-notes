@@ -5,13 +5,12 @@ import { useApp } from '../context/AppContext';
 import { TipTapEditor, TipTapEditorHandle } from './TipTapEditor';
 import { TaskFields } from './TaskFields';
 import { ConnectionFields } from './ConnectionFields';
-import { TimeSheetFields } from './TimeSheetFields';
 import { AttachmentsPanel } from './AttachmentsPanel';
 import { Toast } from './Toast';
 import { UnsavedChangesModal } from './UnsavedChangesModal';
 import { Trash2, Save, Archive, ArchiveRestore, RotateCcw, Circle, Pencil, Clock } from 'lucide-react';
 import { TimeSheetModal } from './TimeSheetModal';
-import type { Note, TaskNote, ConnectionNote, TimeSheetNote, AttachmentMeta } from '@/lib/types';
+import type { Note, TaskNote, ConnectionNote, AttachmentMeta } from '@/lib/types';
 
 export function EditorPanel() {
   const { 
@@ -399,19 +398,11 @@ export function EditorPanel() {
           </div>
         )}
 
-        {selectedNote.type === 'timesheet' && localNote && (
-          <div className="mt-6 pt-6 border-t border-gray-800">
-            <h3 className="text-sm font-medium text-gray-400 mb-3">TimeSheet Details</h3>
-            <TimeSheetFields
-              note={localNote as TimeSheetNote}
-              onChange={(data) => trackChange(data)}
-            />
-          </div>
-        )}
 
         {/* Attachments Panel */}
         <AttachmentsPanel
           noteId={selectedNote.id}
+          onPersistNote={isNewNote ? handlePersistForUpload : undefined}
           attachments={selectedNote.attachments || []}
           onAttachmentAdded={(attachment: AttachmentMeta) => {
             const updatedAttachments = [...(selectedNote.attachments || []), attachment];

@@ -38,7 +38,7 @@ export function Sidebar() {
 
   const getCountForClient = (clientId: string | null) => {
     if (clientId === null) {
-      return notes.filter(n => !n.archivedAt && n.type !== 'timesheet').length;
+      return notes.filter(n => !n.archivedAt).length;
     }
     return null;
   };

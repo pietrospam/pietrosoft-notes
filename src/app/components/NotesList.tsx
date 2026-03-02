@@ -25,7 +25,6 @@ const typeColors: Record<NoteType, string> = {
   general: 'text-gray-400',
   task: 'text-blue-400',
   connection: 'text-green-400',
-  timesheet: 'text-orange-400',
 };
 
 const typeBgColors: Record<FilterableNoteType, { active: string; inactive: string }> = {
@@ -320,13 +319,14 @@ export function NotesList() {
     );
   }
 
-  if (isLoading) {
-    return (
-      <div style={{ width: panelWidth }} className="bg-gray-900 border-r border-gray-800 flex items-center justify-center">
-        <p className="text-gray-500 text-sm">Cargando...</p>
-      </div>
-    );
-  }
+  // when notes are being refreshed we normally show a loading indicator
+  // however unwinding the component at this point unmounts any open modals
+  // (create/edit) which leads to the behavior described in Issue 30: pasting
+  // an attachment causes the note to persist, triggers a refresh, and the
+  // modal disappears then reopens empty. To keep the editor visible we only
+  // collapse the list itself but continue rendering the modal overlay. A
+  // translucent spinner is shown over the list area when loading.
+
 
   // Filterable types (timesheet excluded per REQ-002)
   const allTypes: FilterableNoteType[] = ['task', 'connection', 'general'];
@@ -348,6 +348,11 @@ export function NotesList() {
 
   return (
     <div style={{ width: panelWidth }} className="bg-gray-900 border-r border-gray-800 overflow-hidden flex flex-col relative">
+      {isLoading && (
+        <div className="absolute inset-0 bg-gray-900/80 flex items-center justify-center z-10">
+          <p className="text-gray-500 text-sm">Cargando...</p>
+        </div>
+      )}
       {/* Resize handle */}
       <div
         onMouseDown={handleResizeStart}
@@ -475,8 +480,7 @@ export function NotesList() {
       ) : (
         <div ref={listRef} className="divide-y divide-gray-800 flex-1 overflow-y-auto notes-list-scrollbar">
           {filteredNotes.map((note, index) => {
-            // Note: timesheets are filtered out by AppContext, but handle type safety
-            const Icon = note.type !== 'timesheet' ? typeIcons[note.type] : Clock;
+            const Icon = typeIcons[note.type];
             const isSelected = note.id === selectedNoteId;
             const isTask = note.type === 'task';
             const isSavedTask = isTask && !note.id.startsWith('temp-');

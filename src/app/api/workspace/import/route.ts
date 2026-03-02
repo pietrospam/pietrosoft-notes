@@ -116,6 +116,7 @@ export async function POST(request: NextRequest) {
       // after writing files to data directory, also import database dumps if present
       const counts: Record<string, number> = {
         notes: 0,
+        timesheets: 0,
         clients: 0,
         projects: 0,
         attachments: 0,
@@ -124,12 +125,15 @@ export async function POST(request: NextRequest) {
 
       const dbDir = entries.some(e => e.entryName.startsWith('db/')) ? path.join(dataPath, 'db') : null;
       if (dbDir) {
+        let dbError: unknown = null;
         try {
           const { prisma } = await import('@/lib/db');
-          // wipe tables
+          // wipe tables: timesheets must be cleared before notes in case they reference
+          // taskId -> notes; otherwise note deletion will fail due to FK constraint.
           await prisma.$transaction([
             prisma.taskActivityLog.deleteMany(),
             prisma.attachment.deleteMany(),
+            prisma.timesheet.deleteMany(),
             prisma.note.deleteMany(),
             prisma.project.deleteMany(),
             prisma.client.deleteMany(),
@@ -160,6 +164,11 @@ export async function POST(request: NextRequest) {
             await prisma.note.createMany({ data: notes });
             counts.notes = notes.length;
           }
+          const timesheets = await readJson('timesheets.json');
+          if (timesheets) {
+            await prisma.timesheet.createMany({ data: timesheets });
+            counts.timesheets = timesheets.length;
+          }
           const attachments = await readJson('attachments.json');
           if (attachments) {
             // decode base64
@@ -180,6 +189,16 @@ export async function POST(request: NextRequest) {
           }
         } catch (err) {
           console.error('DB import error:', err);
+          dbError = err;
+        }
+        if (dbError) {
+          // propagate failure to caller so they know import wasn't fully successful
+          return NextResponse.json({
+            success: false,
+            error: 'Database import failed',
+            details: String(dbError),
+            imported: counts,
+          }, { status: 500 });
         }
       }
 

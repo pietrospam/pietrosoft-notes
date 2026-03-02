@@ -69,6 +69,15 @@ export function ClientsManager() {
     setTimeout(() => nameInputRef.current?.focus(), 0);
   };
 
+  // If configRequest asks to open clients tab with creation
+  const { configRequest, clearConfigRequest } = useApp();
+  useEffect(() => {
+    if (configRequest?.tab === 'clients' && configRequest.create) {
+      handleCreate();
+      clearConfigRequest();
+    }
+  }, [configRequest, handleCreate, clearConfigRequest]);
+
   const handleSave = async () => {
     if (!formName.trim()) return;
 

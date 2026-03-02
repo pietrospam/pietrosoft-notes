@@ -24,12 +24,39 @@
 
 ## 2. Cambios en Base de Datos
 
-### 2.1 Sin cambios estructurales
-La tabla de notas en PostgreSQL mantiene su estructura actual. El campo `type = 'TIMESHEET'` sigue existiendo, pero el tratamiento en la aplicación cambia.
+### 2.1 Nueva tabla dedicada
+Los registros de TimeSheet dejan de almacenarse en la tabla `notes`. Se ha
+agregado un modelo independiente `timesheets` con su propia migración y
+relaciones. **Recuerda ejecutar `npx prisma migrate deploy` o `npx prisma migrate dev` después de actualizar el schema**.
+
+```prisma
+model Timesheet {
+  id          String   @id @default(uuid())
+  workDate    DateTime @map("work_date")
+  hoursWorked Float    @map("hours_worked")
+  description String?
+  taskId      String?  @map("task_id")
+  projectId   String?  @map("project_id")
+  clientId    String?  @map("client_id")
+  rate        Float?   @map("timesheet_rate")
+  state       TimesheetState @default(DRAFT) @map("timesheet_state")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  task        Note?    @relation("TimesheetTask", fields: [taskId], references: [id])
+  project     Project? @relation(fields: [projectId], references: [id])
+  client      Client?  @relation(fields: [clientId], references: [id])
+}
+```
+
+Los campos específicos de TimeSheet han sido removidos de `notes` y la
+aplicación ya no escribe ni lee `type=TIMESHEET`.
 
 ### 2.2 Validación reforzada
-- Todo TimeSheet **debe** tener un `taskId` válido (referencia a una tarea existente)
-- No se permitirá crear TimeSheets sin tarea asociada
+- Cada fila en `timesheets` **debe** apuntar a un `taskId` válido si está
+  presente; en la API se obliga a registrar al menos la fecha y horas.
+- El antiguo campo `type` sobre `notes` ahora se ignora o se mapea a
+  `general` si aparece en importaciones heredadas.
 
 ---
 

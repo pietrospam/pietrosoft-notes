@@ -60,10 +60,12 @@ export async function GET() {
       const notes = await prisma.note.findMany();
       const attachments = await prisma.attachment.findMany();
       const activityLogs = await prisma.taskActivityLog.findMany();
+      const timesheets = await prisma.timesheet.findMany();
 
       archive.append(JSON.stringify(clients), { name: 'db/clients.json' });
       archive.append(JSON.stringify(projects), { name: 'db/projects.json' });
       archive.append(JSON.stringify(notes), { name: 'db/notes.json' });
+      archive.append(JSON.stringify(timesheets), { name: 'db/timesheets.json' });
 
       // encode attachment data to base64 to make JSON-safe
       const attachmentsWithData = attachments.map(a => ({

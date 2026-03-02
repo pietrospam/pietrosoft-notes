@@ -68,7 +68,10 @@ Reemplazar el texto estático "Bitácora" por un selector de tabs:
 - **Cuando Tab = TimeSheets:** El Sidebar muestra la lista de **Clientes Principales** para seleccionar
 
 ### 2.3 Vista de TimeSheets - Filtrado por Cliente Principal
-
+> **Nota de implementación:** los TimeSheets ahora residen en una tabla
+> separada (`timesheets`). La vista y los filtros consultan directamente esta
+> tabla en lugar de la tabla `notes`. El proceso de import/export/backup también
+> incluye la tabla de timesheets.
 #### 2.3.1 Importancia del Cliente Principal
 El cliente principal es el campo **más relevante** para la vista de TimeSheets porque:
 - Las horas se **acumulan por cliente principal**
@@ -163,6 +166,9 @@ Cuando se selecciona un cliente principal:
   * **Nuevo:** botón de "Wipe Workspace" que borra toda la información en la
     base de datos y elimina el contenido de la carpeta de datos. Requiere
     confirmación y no tiene deshacer.
+  * **UX:** tanto tras una importación exitosa como tras un wipe se mostrará
+    un modal informando que la interfaz debe recargarse. Un OK en dicho modal
+    fuerza un `location.reload()` para sincronizar la UI con los datos.
 
 
 - Nuevo estado: `activeTab: 'bitacora' | 'timesheets'`
@@ -323,7 +329,7 @@ Al final del día, el usuario puede ver en qué tareas trabajó y asignarles las
 #### 3.6.2 Comportamiento
 Al registrar un evento de actividad sobre una tarea:
 
-1. **Verificar** si existe un registro de TimeSheet para esa tarea con fecha de **hoy**
+1. **Verificar** si existe un registro de TimeSheet para esa tarea con fecha de **hoy**. (¡no debe insertarse uno nuevo si ya hay alguno! Este chequeo es crítico para evitar duplicados cuando se generan múltiples eventos el mismo día.)
 2. **Si NO existe:** Crear un registro de TimeSheet con:
    - `taskId`: ID de la tarea
    - `workDate`: Fecha de hoy

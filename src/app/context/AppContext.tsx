@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
 import type { Note, NoteType, Client, Project } from '@/lib/types';
+import type { ConfigTab } from '../components/ConfigPanel';
 
 // ============================================================================
 // Types
@@ -43,10 +44,14 @@ interface AppState {
   taskFilters: TaskFilters;
   timeSheetFilters: TimeSheetFilters;
   isNotesListCollapsed: boolean; // REQ-001.13.2: NotesList collapsed state
+  isSidebarVisible: boolean; // visibility of the left navigation sidebar
   // REQ-010: Tab navigation
   activeTab: ActiveTab;
   selectedTimesheetClientId: string | null; // null = all, string = specific client
   expandedClientIds: string[]; // Which client hierarchies are expanded
+  // REQ-012: floating action button helpers
+  configRequest: { tab: ConfigTab; create: boolean } | null;
+  globalTimeSheetRequest: boolean;
   // Editor modal state
   editorModal: {
     isOpen: boolean;
@@ -95,11 +100,22 @@ interface AppContextValue extends AppState {
   isNotesListCollapsed: boolean;
   setNotesListCollapsed: (collapsed: boolean) => void;
   toggleNotesListCollapsed: () => void;
+  // sidebar visibility control (needed when notes list collapses)
+  isSidebarVisible: boolean;
+  setSidebarVisible: (visible: boolean) => void;
+  toggleSidebarVisible: () => void;
   // REQ-010: Tab navigation
   setActiveTab: (tab: ActiveTab) => void;
   setSelectedTimesheetClientId: (clientId: string | null) => void;
   toggleClientExpanded: (clientId: string) => void;
   getParentClients: () => Client[]; // Get clients without parent (top-level or independent)
+  // REQ-012: helpers for floating action button triggers
+  configRequest: { tab: ConfigTab; create: boolean } | null;
+  openConfig: (tab: ConfigTab, create?: boolean) => void;
+  clearConfigRequest: () => void;
+  globalTimeSheetRequest: boolean;
+  requestTimeSheet: () => void;
+  clearTimeSheetRequest: () => void;
 }
 
 // ============================================================================
@@ -145,10 +161,14 @@ export function AppProvider({ children }: AppProviderProps) {
     taskFilters: { status: '', clientId: '', projectId: '' },
     timeSheetFilters: { startDate: '', endDate: '', clientId: '' },
     isNotesListCollapsed: false, // REQ-001.13.2: NotesList collapsed state
+    isSidebarVisible: true, // track sidebar visibility for collapse behaviour
     // REQ-010: Tab navigation
     activeTab: 'bitacora',
+    configRequest: null,
+    globalTimeSheetRequest: false,
     selectedTimesheetClientId: null,
     expandedClientIds: [],
+    // REQ-012: FAB helpers have been initialized above
     editorModal: {
       isOpen: false,
       mode: 'create',
@@ -156,6 +176,9 @@ export function AppProvider({ children }: AppProviderProps) {
       noteId: null,
     },
   });
+
+  // keep track of previous sidebar visibility so we can restore it
+  const prevSidebarVisibleRef = useRef<boolean>(state.isSidebarVisible);
 
   // Load auto-save preference from localStorage on mount
   useEffect(() => {
@@ -297,22 +320,6 @@ export function AppProvider({ children }: AppProviderProps) {
           createdAt: now,
           updatedAt: now,
         } as Note,
-        timesheet: { 
-          id: tempId,
-          type: 'timesheet', 
-          title: 'Nuevo TimeSheet', 
-          contentText: '',
-          contentJson: null,
-          attachments: [],
-          taskId: '',
-          workDate: new Date().toISOString().split('T')[0],
-          hoursWorked: 0,
-          description: '',
-          state: 'DRAFT',
-          isFavorite: false, // REQ-006
-          createdAt: now,
-          updatedAt: now,
-        } as Note,
       };
 
       const newNote = defaultData[type];
@@ -441,6 +448,23 @@ export function AppProvider({ children }: AppProviderProps) {
     }
     return false;
   }, []);
+
+  // REQ-012: support opening config panel and quick timesheet from FAB
+  const openConfig = useCallback((tab: ConfigTab, create: boolean = false) => {
+    setState(s => ({ ...s, currentView: 'config', configRequest: { tab, create } }));
+  }, [setState]);
+
+  const clearConfigRequest = useCallback(() => {
+    setState(s => ({ ...s, configRequest: null }));
+  }, [setState]);
+
+  const requestTimeSheet = useCallback(() => {
+    setState(s => ({ ...s, currentView: 'timesheets', globalTimeSheetRequest: true }));
+  }, [setState]);
+
+  const clearTimeSheetRequest = useCallback(() => {
+    setState(s => ({ ...s, globalTimeSheetRequest: false }));
+  }, [setState]);
 
   // REQ-006: Toggle favorite status with optimistic update
   // REQ-008.2: Handle favoriteOrder when toggling
@@ -656,16 +680,6 @@ export function AppProvider({ children }: AppProviderProps) {
       }
     }
     
-    // TimeSheetNote: get client via task -> project
-    if (note.type === 'timesheet' && anyNote.taskId) {
-      const task = state.notes.find(n => n.id === anyNote.taskId) as Note & { projectId?: string } | undefined;
-      if (task?.projectId) {
-        const project = state.projects.find(p => p.id === task.projectId);
-        if (project) {
-          return state.clients.find(c => c.id === project.clientId) || null;
-        }
-      }
-    }
     
     return null;
   }, [state.clients, state.projects, state.notes]);
@@ -696,9 +710,6 @@ export function AppProvider({ children }: AppProviderProps) {
   const selectedNote = state.notes.find(n => n.id === state.selectedNoteId) || null;
   
   const filteredNotes = state.notes.filter(note => {
-    // Always exclude timesheets from the notes list (REQ-002)
-    // TimeSheets are viewed in dedicated TimeSheetView
-    if (note.type === 'timesheet') return false;
     
     // When searching, ignore all filters except archived (search across everything)
     if (state.searchQuery) {
@@ -764,7 +775,7 @@ export function AppProvider({ children }: AppProviderProps) {
 
   // REQ-006: Count favorites (non-archived non-timesheets)
   const favoritesCount = state.notes.filter(n => 
-    n.isFavorite && !n.archivedAt && n.type !== 'timesheet'
+    n.isFavorite && !n.archivedAt
   ).length;
 
   const value: AppContextValue = {
@@ -828,8 +839,33 @@ export function AppProvider({ children }: AppProviderProps) {
       },
     })),
     // REQ-001.13.2: NotesList collapse control
-    setNotesListCollapsed: (collapsed) => setState(s => ({ ...s, isNotesListCollapsed: collapsed })),
-    toggleNotesListCollapsed: () => setState(s => ({ ...s, isNotesListCollapsed: !s.isNotesListCollapsed })),
+    setNotesListCollapsed: (collapsed) => {
+      setState(s => {
+        if (collapsed) {
+          // remember current sidebar visibility and hide it
+          prevSidebarVisibleRef.current = s.isSidebarVisible;
+          return { ...s, isNotesListCollapsed: true, isSidebarVisible: false };
+        } else {
+          // restore previous sidebar visibility
+          return { ...s, isNotesListCollapsed: false, isSidebarVisible: prevSidebarVisibleRef.current };
+        }
+      });
+    },
+    toggleNotesListCollapsed: () => {
+      setState(s => {
+        const willCollapse = !s.isNotesListCollapsed;
+        if (willCollapse) {
+          prevSidebarVisibleRef.current = s.isSidebarVisible;
+          return { ...s, isNotesListCollapsed: true, isSidebarVisible: false };
+        } else {
+          return { ...s, isNotesListCollapsed: false, isSidebarVisible: prevSidebarVisibleRef.current };
+        }
+      });
+    },
+    // sidebar visibility helpers
+    isSidebarVisible: state.isSidebarVisible,
+    setSidebarVisible: (visible) => setState(s => ({ ...s, isSidebarVisible: visible })),
+    toggleSidebarVisible: () => setState(s => ({ ...s, isSidebarVisible: !s.isSidebarVisible })),
     // REQ-010: Tab navigation
     setActiveTab: (tab) => {
       localStorage.setItem('bitacora-active-tab', tab);
@@ -856,6 +892,14 @@ export function AppProvider({ children }: AppProviderProps) {
       // Return clients without a parent (top-level clients)
       return state.clients.filter(c => !c.parentClientId && !c.disabled);
     },
+    // REQ-012: config/tab request helpers
+    configRequest: state.configRequest,
+    openConfig,
+    clearConfigRequest,
+    // REQ-012: timesheet request helpers
+    globalTimeSheetRequest: state.globalTimeSheetRequest,
+    requestTimeSheet,
+    clearTimeSheetRequest,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

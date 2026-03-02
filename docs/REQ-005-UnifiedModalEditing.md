@@ -29,7 +29,7 @@ Unificar las pantallas de creación y edición de notas utilizando exclusivament
 │  NoteEditorModal.tsx     - Para notas generales             │
 │  TaskEditorModal.tsx     - Para tareas (existente, adaptar) │
 │  ConnectionEditorModal.tsx - Para conexiones                │
-│  TimeSheetEditorModal.tsx  - Para timesheets (si aplica)    │
+│  TimeSheetEditorModal.tsx  - Para timesheets (si aplica; estos ahora se almacenan en tabla separada y se editan desde TimeSheetView)    │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -101,7 +101,10 @@ Unificar las pantallas de creación y edición de notas utilizando exclusivament
 
 ### 4. TimeSheets
 
-**Decisión:** Sin cambios. Los timesheets se mantienen con su flujo actual (edición desde TimeSheetView).
+**Decisión:** El concepto de timesheet se mantiene, pero ya no es un tipo de nota.
+El flujo de edición ocurre exclusivamente desde la vista de TimeSheets y la
+información persiste en la nueva tabla `timesheets`. No se muestran en la
+lista de notas.
 
 ## Cambios Requeridos
 

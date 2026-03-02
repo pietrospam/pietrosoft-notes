@@ -6,13 +6,13 @@ export { ConfigPanel } from './ConfigPanel';
 export { ClientsManager } from './ClientsManager';
 export { ProjectsManager } from './ProjectsManager';
 export { IconPicker, DynamicIcon, ICONS } from './IconPicker';
-export { TimeSheetFields } from './TimeSheetFields';
 export { ConnectionFields } from './ConnectionFields';
 export { AttachmentsPanel } from './AttachmentsPanel';
 export { QuickCreateModal } from './QuickCreateModal';
 export { UnsavedChangesModal } from './UnsavedChangesModal';
 export { TimeSheetView } from './TimeSheetView';
 export { TimeSheetModal } from './TimeSheetModal';
+export { FloatingActionButton } from './FloatingActionButton';
 // Editor Modals
 export { BaseEditorModal } from './BaseEditorModal';
 export { TaskEditorModal } from './TaskEditorModal';

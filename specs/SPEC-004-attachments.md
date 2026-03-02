@@ -5,6 +5,9 @@ Enable file attachments and clipboard image paste in notes. Attachments are stor
 
 ## Acceptance Criteria
 
+### AC-0: EML preview
+- [ ] (removed) Original plan to render `.eml` messages in-app was cancelled; these files are considered unsupported and should prompt for download only.
+
 ### AC-1: Upload API
 - [x] POST `/api/attachments` accepts multipart/form-data with `file` and `noteId`
 - [x] Returns `{ id, filename, originalName, mimeType, size, createdAt, url }`

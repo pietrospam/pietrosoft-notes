@@ -10,6 +10,7 @@ export async function POST() {
     await prisma.$transaction([
       prisma.taskActivityLog.deleteMany(),
       prisma.attachment.deleteMany(),
+      prisma.timesheet.deleteMany(),
       prisma.note.deleteMany(),
       prisma.project.deleteMany(),
       prisma.client.deleteMany(),

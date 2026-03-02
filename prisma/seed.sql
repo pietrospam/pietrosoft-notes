@@ -41,12 +41,21 @@ Password: staging_pass_2026', NOW(), NOW()),
 ('note-conn-3', 'CONNECTION', 'TechStart AWS Console', '<p>AWS management console access</p>', 'proj-techstart-mvp', 'client-techstart', false, 'https://techstart.signin.aws.amazon.com/console', 'User: dev@techstart.io
 Password: Aws#Dev2026!', NOW(), NOW());
 
--- Insert notes - Timesheets
-INSERT INTO notes (id, type, title, content, project_id, client_id, archived, timesheet_date, timesheet_hours, timesheet_rate, timesheet_state, timesheet_task_id, created_at, updated_at) VALUES
-('note-ts-1', 'TIMESHEET', 'Dev environment setup', '<p>Initial setup and configuration</p>', 'proj-acme-web', 'client-acme', false, '2026-02-15', 4, 75, 'FINAL', 'note-task-1', NOW(), NOW()),
-('note-ts-2', 'TIMESHEET', 'Homepage design work', '<p>Worked on hero section and feature grid</p>', 'proj-acme-web', 'client-acme', false, '2026-02-18', 6, 75, 'DRAFT', 'note-task-2', NOW(), NOW()),
-('note-ts-3', 'TIMESHEET', 'Homepage design continued', '<p>Testimonials and footer sections</p>', 'proj-acme-web', 'client-acme', false, '2026-02-19', 5, 75, 'DRAFT', 'note-task-2', NOW(), NOW()),
-('note-ts-4', 'TIMESHEET', 'API planning session', '<p>Architecture review and planning</p>', 'proj-acme-api', 'client-acme', false, '2026-02-17', 3, 85, 'FINAL', 'note-task-3', NOW(), NOW());
+-- Insert notes - Timesheets (legacy, replaced by separate timesheets table)
+-- the sample entries below have been migrated to the timesheets table
+-- but are kept here as reference.
+-- INSERT INTO notes (id, type, title, content, project_id, client_id, archived, timesheet_date, timesheet_hours, timesheet_rate, timesheet_state, timesheet_task_id, created_at, updated_at) VALUES
+--('note-ts-1', 'TIMESHEET', 'Dev environment setup', '<p>Initial setup and configuration</p>', 'proj-acme-web', 'client-acme', false, '2026-02-15', 4, 75, 'FINAL', 'note-task-1', NOW(), NOW()),
+--('note-ts-2', 'TIMESHEET', 'Homepage design work', '<p>Worked on hero section and feature grid</p>', 'proj-acme-web', 'client-acme', false, '2026-02-18', 6, 75, 'DRAFT', 'note-task-2', NOW(), NOW()),
+--('note-ts-3', 'TIMESHEET', 'Homepage design continued', '<p>Testimonials and footer sections</p>', 'proj-acme-web', 'client-acme', false, '2026-02-19', 5, 75, 'DRAFT', 'note-task-2', NOW(), NOW()),
+--('note-ts-4', 'TIMESHEET', 'API planning session', '<p>Architecture review and planning</p>', 'proj-acme-api', 'client-acme', false, '2026-02-17', 3, 85, 'FINAL', 'note-task-3', NOW(), NOW());
+
+-- Also insert into new timesheets table for compatibility
+INSERT INTO timesheets (id, work_date, hours_worked, description, task_id, project_id, client_id, timesheet_rate, timesheet_state, created_at, updated_at) VALUES
+('note-ts-1', '2026-02-15', 4, 'Dev environment setup', 'note-task-1', 'proj-acme-web', 'client-acme', 75, 'FINAL', NOW(), NOW()),
+('note-ts-2', '2026-02-18', 6, 'Homepage design work', 'note-task-2', 'proj-acme-web', 'client-acme', 75, 'DRAFT', NOW(), NOW()),
+('note-ts-3', '2026-02-19', 5, 'Homepage design continued', 'note-task-2', 'proj-acme-web', 'client-acme', 75, 'DRAFT', NOW(), NOW()),
+('note-ts-4', '2026-02-17', 3, 'API planning session', 'note-task-3', 'proj-acme-api', 'client-acme', 85, 'FINAL', NOW(), NOW());
 
 -- Summary
 SELECT 'Clients' as entity, COUNT(*) as count FROM clients

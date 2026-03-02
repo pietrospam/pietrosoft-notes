@@ -6,6 +6,7 @@ import { useApp } from '../context/AppContext';
 import { Toast } from './Toast';
 import { TaskEditorModal } from './TaskEditorModal';
 import type { TaskNote, Project } from '@/lib/types';
+import { getContrastTextColor } from '@/lib/colorPalette';
 
 interface TimeSheetGridEntry {
   id: string;
@@ -50,10 +51,9 @@ type SortDirection = 'asc' | 'desc';
 
 export function TimeSheetView() {
   const { refreshNotes, selectedTimesheetClientId, clients } = useApp();
-  // REQ-010: determine selected parent client for header display
-  const selectedParentClient = selectedTimesheetClientId
-    ? clients.find(c => c.id === selectedTimesheetClientId)
-    : null;
+  // NOTE: selectedTimesheetClientId is used for filtering; we previously
+  // displayed the parent client name in the header but that was removed.
+  // (kept here for potential future logic)
   const [timesheets, setTimesheets] = useState<TimeSheetGridEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -87,6 +87,15 @@ export function TimeSheetView() {
   
   // Create TimeSheet modal state - search based
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const { globalTimeSheetRequest, clearTimeSheetRequest } = useApp();
+
+  // if another part of app requests a quick timesheet, open modal
+  useEffect(() => {
+    if (globalTimeSheetRequest) {
+      setShowCreateModal(true);
+      clearTimeSheetRequest();
+    }
+  }, [globalTimeSheetRequest, clearTimeSheetRequest]);
   const [taskSearchQuery, setTaskSearchQuery] = useState('');
   const [taskSearchResults, setTaskSearchResults] = useState<Array<TaskNote & { clientName: string; projectName: string }>>([]);
   const [selectedSearchIndex, setSelectedSearchIndex] = useState(0);
@@ -242,7 +251,7 @@ export function TimeSheetView() {
   const handleDelete = async (id: string) => {
     setDeleting(true);
     try {
-      const res = await fetch(`/api/notes/${id}`, {
+      const res = await fetch(`/api/timesheets/${id}`, {
         method: 'DELETE',
       });
       
@@ -335,9 +344,13 @@ export function TimeSheetView() {
 
     const rows = sortedTimesheets.map((ts) => {
       const colorClass = dateColorMap[ts.workDate] === 0 ? 'row-even' : 'row-odd';
+      // compute client color for badge
+      const client = clients.find(c => c.id === ts.clientId);
+      const bg = client?.color || '#888';
+      const textColor = getContrastTextColor(bg);
       return `<tr class="${colorClass}">
         <td>${formatDateExport(ts.workDate)}</td>
-        <td>${ts.clientName}</td>
+        <td><span style="display:inline-block;padding:2px 6px;border-radius:4px;background:${bg};color:${textColor};font-size:10px;">${ts.clientName}</span></td>
         <td>${ts.projectName}</td>
         <td>${ts.taskTitle}</td>
         <td class="hours">${ts.hoursWorked.toFixed(1)}</td>
@@ -389,7 +402,7 @@ export function TimeSheetView() {
           </tbody>
           <tfoot>
             <tr class="total-row">
-              <td colspan="4">TOTAL GENERAL</td>
+              <td colspan="5">TOTAL GENERAL</td>
               <td class="hours">${totalHours.toFixed(1)}</td>
               <td></td>
             </tr>
@@ -609,7 +622,8 @@ export function TimeSheetView() {
         
         setToast({ message: 'TimeSheet creado - ingresa las horas', type: 'success' });
       } else {
-        throw new Error('Failed to create timesheet');
+        const errBody = await res.json().catch(() => null);
+        throw new Error(errBody?.error || 'Failed to create timesheet');
       }
     } catch (err) {
       console.error('Error creating timesheet:', err);
@@ -771,7 +785,7 @@ export function TimeSheetView() {
     
     setSavingRowId(id);
     try {
-      const res = await fetch(`/api/notes/${id}`, {
+      const res = await fetch(`/api/timesheets/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -902,15 +916,6 @@ export function TimeSheetView() {
           <Clock size={24} className="text-orange-400" />
           <h1 className="text-xl font-semibold text-white">
             TimeSheets
-            {selectedParentClient && (
-              <span className="ml-2 flex items-center text-sm font-medium">
-                <span
-                  className="w-2 h-2 rounded-full mr-1"
-                  style={{ backgroundColor: selectedParentClient.color || '#888' }}
-                />
-                {selectedParentClient.name}
-              </span>
-            )}
           </h1>
           <span className="text-sm text-gray-500">({filteredTimesheets.length})</span>
         </div>
@@ -1132,18 +1137,6 @@ export function TimeSheetView() {
         </div>
       ) : (
         <div className="flex-1 overflow-auto">
-          {/* Parent client title if filtered */}
-          {selectedParentClient && (
-            <div className="px-6 py-2">
-              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                <span
-                  className="w-2 h-2 rounded-full"
-                  style={{ backgroundColor: selectedParentClient.color || '#888' }}
-                />
-                {selectedParentClient.name}
-              </h2>
-            </div>
-          )}
           {/* Table */}
           <table className="w-full">
             <thead className="bg-gray-900 sticky top-0">
@@ -1153,6 +1146,13 @@ export function TimeSheetView() {
                   onClick={() => handleSort('workDate')}
                 >
                   Fecha <SortIndicator field="workDate" />
+                </th>
+                {/* new client column */}
+                <th 
+                  className="px-3 py-2 font-medium cursor-pointer hover:text-white transition-colors"
+                  onClick={() => handleSort('clientName')}
+                >
+                  Cliente <SortIndicator field="clientName" />
                 </th>
                 <th 
                   className="px-3 py-2 font-medium cursor-pointer hover:text-white transition-colors"
@@ -1205,6 +1205,23 @@ export function TimeSheetView() {
                       ) : (
                         formatDate(entry.workDate)
                       )}
+                    </td>
+                    {/* Cliente badge */}
+                    <td className="px-3 py-1.5 text-sm">
+                      {/* look up color from client list in context */}
+                      {(() => {
+                        const client = clients.find(c => c.id === entry.clientId);
+                        const bg = client?.color || '#888';
+                        const textColor = getContrastTextColor(bg);
+                        return (
+                          <span
+                            className="inline-block px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap"
+                            style={{ backgroundColor: bg, color: textColor }}
+                          >
+                            {entry.clientName}
+                          </span>
+                        );
+                      })()}
                     </td>
                     {/* Proyecto */}
                     <td className="px-3 py-1.5 text-sm">

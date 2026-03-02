@@ -36,9 +36,9 @@ export async function POST(request: Request) {
     const body = await request.json() as CreateNoteInput<Note>;
     
     // Validate required fields
-    if (!body.type || !['general', 'task', 'connection', 'timesheet'].includes(body.type)) {
+    if (!body.type || !['general', 'task', 'connection'].includes(body.type)) {
       return NextResponse.json(
-        { error: 'Valid type is required (general, task, connection, timesheet)' },
+        { error: 'Valid type is required (general, task, connection)' },
         { status: 400 }
       );
     }
@@ -56,10 +56,6 @@ export async function POST(request: Request) {
       // ticketPhaseCode and shortDescription have defaults
     }
     
-    if (body.type === 'timesheet') {
-      // All timesheet fields are optional at creation - can be assigned later
-      // taskId, workDate, hoursWorked, description
-    }
     
     const note = await createNote(body);
     

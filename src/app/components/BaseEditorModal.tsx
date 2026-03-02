@@ -472,7 +472,7 @@ export function BaseEditorModal({
             {renderedFields && <h3 className="text-sm font-medium text-gray-400 mb-3">Contenido</h3>}
             <TipTapEditor
               ref={editorRef}
-              key={note.id}
+
               content={note.contentJson}
               onChange={handleContentChange}
               noteId={note.id}
@@ -683,7 +683,7 @@ export function BaseEditorModal({
             {renderedFields && <h3 className="text-sm font-medium text-gray-400 mb-3">Contenido</h3>}
             <TipTapEditor
               ref={editorRef}
-              key={note.id}
+
               content={note.contentJson}
               onChange={handleContentChange}
               noteId={note.id}

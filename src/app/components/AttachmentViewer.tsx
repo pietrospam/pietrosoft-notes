@@ -11,6 +11,7 @@ interface AttachmentViewerProps {
   onNavigate?: (attachment: AttachmentMeta) => void;
 }
 
+
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/svg+xml'];
 const TEXT_TYPES = [
   'text/plain', 'text/markdown', 'text/html', 'text/css', 'text/csv',
@@ -36,10 +37,12 @@ function isPdfType(mimeType: string): boolean {
   return mimeType === 'application/pdf';
 }
 
+
 export function AttachmentViewer({ attachment, allAttachments, onClose, onNavigate }: AttachmentViewerProps) {
   const [zoom, setZoom] = useState(1);
   const [textContent, setTextContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
 
   const url = `/api/attachments/${attachment.id}`;
   const downloadUrl = `${url}?download=true`;
@@ -184,7 +187,6 @@ export function AttachmentViewer({ attachment, allAttachments, onClose, onNaviga
             )}
           </div>
         )}
-
         {/* PDF viewer */}
         {isPdfType(attachment.mimeType) && (
           <iframe
@@ -230,3 +232,5 @@ function formatFileSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
+
+// decode MIME encoded-words (e.g. =?utf-8?B?...?= or ?Q?)

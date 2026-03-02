@@ -728,7 +728,6 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
       <div className="mb-4 border-t border-gray-800 pt-3 -mx-4 px-4 py-3 bg-gray-950">
         <TipTapEditor
           ref={editorRef}
-          key={task.id}
           content={task.contentJson}
           onChange={handleContentChange}
           noteId={task.id}
@@ -741,6 +740,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
       <div className="border-t border-gray-800 pt-3">
         <AttachmentsPanel
           noteId={task.id}
+          onPersistNote={persistTask}
           attachments={task.attachments || []}
           onAttachmentAdded={(attachment: AttachmentMeta) => {
             const updatedAttachments = [...(task.attachments || []), attachment];
@@ -792,7 +792,16 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
               />
             ) : (
               <>
-                <h2 className="text-lg font-semibold text-white truncate">{title || 'Sin título'}</h2>
+                <h2 className="text-lg font-semibold text-white truncate">
+                  {task.ticketPhaseCode ? (
+                    <>
+                      <span className="text-blue-400 font-semibold">#{task.ticketPhaseCode}</span>{' '}
+                      {task.shortDescription || title || 'Sin título'}
+                    </>
+                  ) : (
+                    title || 'Sin título'
+                  )}
+                </h2>
                 <button
                   onClick={() => {
                     setIsEditingTitle(true);
@@ -1011,7 +1020,16 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
               />
             ) : (
               <>
-                <h2 className="text-lg font-semibold text-white truncate">{title || 'Sin título'}</h2>
+                <h2 className="text-lg font-semibold text-white truncate">
+                  {task.ticketPhaseCode ? (
+                    <>
+                      <span className="text-blue-400 font-semibold">#{task.ticketPhaseCode}</span>{' '}
+                      {task.shortDescription || title || 'Sin título'}
+                    </>
+                  ) : (
+                    title || 'Sin título'
+                  )}
+                </h2>
                 <button
                   onClick={() => {
                     setIsEditingTitle(true);

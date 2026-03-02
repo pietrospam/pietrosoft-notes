@@ -18,7 +18,6 @@ const typeLabels: Record<NoteType, string> = {
   general: 'Nota',
   task: 'Task',
   connection: 'Conexión',
-  timesheet: 'TimeSheet',
 };
 
 // REQ-010: Tab definitions

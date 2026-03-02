@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/db';
 import { listNotes } from '@/lib/repositories/notes-repo';
-import { listClients } from '@/lib/repositories/clients-repo';
-import { listProjects } from '@/lib/repositories/projects-repo';
-import type { TimeSheetNote, TaskNote, Client, Project } from '@/lib/types';
+import type { TimeSheet, TaskNote, Client, Project } from '@/lib/types';
+import { Prisma } from '@prisma/client';
 
 // Helper to escape CSV values
 function escapeCSV(value: string | undefined | null): string {
@@ -23,27 +23,39 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('endDate');
     const clientId = searchParams.get('clientId');
 
-    // Fetch all required data
-    const [allNotes, clients, projects] = await Promise.all([
+    // Fetch required related data
+    const [clients, projects, allNotes] = await Promise.all([
+      prisma.client.findMany(),
+      prisma.project.findMany(),
       listNotes(),
-      listClients(),
-      listProjects(),
     ]);
+    const tasks = (allNotes as TaskNote[]).filter(n => n.type === 'task');
 
-    // Get all timesheets and tasks
-    const timesheets = allNotes.filter((n): n is TimeSheetNote => n.type === 'timesheet');
-    const tasks = allNotes.filter((n): n is TaskNote => n.type === 'task');
+    // Fetch timesheets with optional filters
+    const where: Prisma.TimesheetWhereInput = {};
+    if (startDate || endDate) {
+      where.workDate = {};
+      if (startDate) {
+        where.workDate.gte = new Date(startDate);
+      }
+      if (endDate) {
+        where.workDate.lte = new Date(endDate);
+      }
+    }
+    if (clientId) where.clientId = clientId;
+    const rawTimesheets = await prisma.timesheet.findMany({ where });
+    const timesheets: TimeSheet[] = rawTimesheets as unknown as TimeSheet[];
 
-    // Create lookup maps
-    const clientMap = new Map(clients.map((c: Client) => [c.id, c]));
-    const projectMap = new Map(projects.map((p: Project) => [p.id, p]));
+    // Create lookup maps for related entities
+    const clientMap = new Map(clients.map(c => [c.id, c as unknown as Client]));
+    const projectMap = new Map(projects.map(p => [p.id, p as unknown as Project]));
     const taskMap = new Map(tasks.map((t: TaskNote) => [t.id, t]));
 
     // Build enriched timesheet data
-    let enrichedTimesheets = timesheets.map(ts => {
-      const task = taskMap.get(ts.taskId);
-      const project = task?.projectId ? projectMap.get(task.projectId) : null;
-      const client = project?.clientId ? clientMap.get(project.clientId) : null;
+    const enrichedTimesheets = timesheets.map(ts => {
+      const task = ts.taskId ? taskMap.get(ts.taskId) : undefined;
+      const project = ts.projectId ? projectMap.get(ts.projectId) : task?.projectId ? projectMap.get(task.projectId) : null;
+      const client = ts.clientId ? clientMap.get(ts.clientId) : project?.clientId ? clientMap.get(project.clientId) : task?.projectId ? clientMap.get(project?.clientId || '') : null;
 
       return {
         id: ts.id,
@@ -61,15 +73,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Apply filters
-    if (startDate) {
-      enrichedTimesheets = enrichedTimesheets.filter(ts => ts.workDate >= startDate);
-    }
-    if (endDate) {
-      enrichedTimesheets = enrichedTimesheets.filter(ts => ts.workDate <= endDate);
-    }
-    if (clientId) {
-      enrichedTimesheets = enrichedTimesheets.filter(ts => ts.clientId === clientId);
-    }
+    // filters applied at DB level already
 
     // Sort by date descending
     enrichedTimesheets.sort((a, b) => b.workDate.localeCompare(a.workDate));

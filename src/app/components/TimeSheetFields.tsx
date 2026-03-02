@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
-import type { TimeSheetNote, TaskNote, TimeSheetState } from '@/lib/types';
+import type { TimeSheet, TaskNote, TimeSheetState } from '@/lib/types';
 
 const STATES: { value: TimeSheetState; label: string; color: string }[] = [
   { value: 'NONE', label: 'None', color: 'bg-gray-500' },
@@ -11,8 +11,8 @@ const STATES: { value: TimeSheetState; label: string; color: string }[] = [
 ];
 
 interface TimeSheetFieldsProps {
-  note: TimeSheetNote;
-  onChange: (data: Partial<TimeSheetNote>) => void;
+  note: TimeSheet;
+  onChange: (data: Partial<TimeSheet>) => void;
 }
 
 export function TimeSheetFields({ note, onChange }: TimeSheetFieldsProps) {
@@ -40,7 +40,7 @@ export function TimeSheetFields({ note, onChange }: TimeSheetFieldsProps) {
             <option value="">Select task...</option>
             {tasks.map(t => (
               <option key={t.id} value={t.id}>
-                {t.ticketPhaseCode} - {t.title}
+                {t.ticketPhaseCode ? `#${t.ticketPhaseCode} ${t.shortDescription || t.title}` : t.title}
               </option>
             ))}
           </select>

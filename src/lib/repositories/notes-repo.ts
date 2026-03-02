@@ -1,9 +1,9 @@
 import prisma from '../db';
-import { NoteType as PrismaNoteType, TaskStatus as PrismaTaskStatus, TaskPriority as PrismaTaskPriority, TimesheetState as PrismaTimesheetState, Prisma } from '@prisma/client';
+import { NoteType as PrismaNoteType, TaskStatus as PrismaTaskStatus, TaskPriority as PrismaTaskPriority, Prisma } from '@prisma/client';
 import type { 
   Note, NoteType, CreateNoteInput, UpdateNoteInput,
-  GeneralNote, TaskNote, ConnectionNote, TimeSheetNote,
-  AttachmentMeta, TaskStatus, TaskPriority, TimeSheetState
+  GeneralNote, TaskNote, ConnectionNote,
+  AttachmentMeta, TaskStatus, TaskPriority
 } from '../types';
 
 // ============================================================================
@@ -14,14 +14,14 @@ const noteTypeToDb: Record<NoteType, PrismaNoteType> = {
   general: PrismaNoteType.GENERAL,
   task: PrismaNoteType.TASK,
   connection: PrismaNoteType.CONNECTION,
-  timesheet: PrismaNoteType.TIMESHEET,
 };
 
 const noteTypeFromDb: Record<PrismaNoteType, NoteType> = {
   [PrismaNoteType.GENERAL]: 'general',
   [PrismaNoteType.TASK]: 'task',
   [PrismaNoteType.CONNECTION]: 'connection',
-  [PrismaNoteType.TIMESHEET]: 'timesheet',
+  // if a legacy TIMESHEET record is ever encountered, treat it as general
+  [PrismaNoteType.TIMESHEET]: 'general',
 };
 
 const taskStatusToDb = (status: TaskStatus): PrismaTaskStatus | null => {
@@ -67,23 +67,7 @@ const taskPriorityFromDb = (priority: PrismaTaskPriority | null): TaskPriority =
   return map[priority];
 };
 
-const timesheetStateToDb = (state: TimeSheetState): PrismaTimesheetState | null => {
-  if (state === 'NONE') return null;
-  const map: Record<Exclude<TimeSheetState, 'NONE'>, PrismaTimesheetState> = {
-    DRAFT: PrismaTimesheetState.DRAFT,
-    FINAL: PrismaTimesheetState.FINAL,
-  };
-  return map[state];
-};
-
-const timesheetStateFromDb = (state: PrismaTimesheetState | null): TimeSheetState => {
-  if (!state) return 'NONE';
-  const map: Record<PrismaTimesheetState, TimeSheetState> = {
-    [PrismaTimesheetState.DRAFT]: 'DRAFT',
-    [PrismaTimesheetState.FINAL]: 'FINAL',
-  };
-  return map[state];
-};
+// timesheet state mapping removed since timesheets are now separate entities
 
 // ============================================================================
 // Prisma to Domain Converter
@@ -154,16 +138,8 @@ function toNote(p: PrismaNote): Note {
         password: p.connectionCredentials ?? undefined,
       } as ConnectionNote;
 
-    case 'timesheet':
-      return {
-        ...base,
-        type: 'timesheet',
-        taskId: p.timesheetTaskId || '',
-        workDate: p.timesheetDate?.toISOString().split('T')[0] || '',
-        hoursWorked: p.timesheetHours || 0,
-        description: p.content || '',
-        state: timesheetStateFromDb(p.timesheetState),
-      } as TimeSheetNote;
+    // timesheet notes no longer exist in this table (migrated to separate Timesheet model)
+    // fall through to default, treating as general note
 
     default:
       return {
@@ -278,18 +254,9 @@ export async function createNote<T extends Note>(input: CreateNoteInput<T>): Pro
     data.connectionCredentials = (connInput.password as string) || null;
   }
 
-  // Timesheet-specific fields
-  if (input.type === 'timesheet') {
-    const tsInput = anyInput;
-    data.timesheetTaskId = (tsInput.taskId as string) || null;
-    data.timesheetDate = tsInput.workDate ? new Date(tsInput.workDate as string) : null;
-    data.timesheetHours = (tsInput.hoursWorked as number) || null;
-    data.timesheetState = timesheetStateToDb((tsInput.state as TimeSheetState) || 'DRAFT');
-    // TimeSheet description is stored in the content field
-    if (tsInput.description) {
-      data.content = tsInput.description as string;
-    }
-  }
+  // timesheet notes are no longer stored here; any timesheet creation/update
+  // should use the dedicated timesheet APIs. The code path remains for legacy
+  // compatibility but will simply ignore timesheet-specific fields.
 
   const created = await prisma.note.create({ 
     data,
@@ -361,25 +328,8 @@ export async function updateNote<T extends Note>(
     data.connectionCredentials = (anyInput.password as string) || null;
   }
 
-  // Timesheet-specific fields
-  if ('taskId' in input) {
-    data.timesheetTaskId = (anyInput.taskId as string) || null;
-  }
-  if ('workDate' in input) {
-    data.timesheetDate = anyInput.workDate 
-      ? new Date(anyInput.workDate as string) 
-      : null;
-  }
-  if ('hoursWorked' in input) {
-    data.timesheetHours = (anyInput.hoursWorked as number) || null;
-  }
-  if ('state' in input) {
-    data.timesheetState = timesheetStateToDb(anyInput.state as TimeSheetState);
-  }
-  // TimeSheet description field
-  if ('description' in input) {
-    data.content = (anyInput.description as string) || '';
-  }
+  // ignore any leftover timesheet-specific fields; these are handled via the
+  // dedicated timesheet infrastructure now.
 
   // Archive field - convert archivedAt (string|undefined) to archived (boolean)
   if ('archivedAt' in input) {
@@ -489,43 +439,3 @@ export async function removeAttachment(noteId: string, attachmentId: string): Pr
 
 // ============================================================================
 // Timesheets Export
-// ============================================================================
-
-export interface TimesheetExportOptions {
-  clientId?: string;
-  projectId?: string;
-  from?: string;
-  to?: string;
-}
-
-export async function exportTimesheets(options: TimesheetExportOptions = {}): Promise<TimeSheetNote[]> {
-  const { clientId, projectId, from, to } = options;
-
-  const where: Prisma.NoteWhereInput = {
-    type: PrismaNoteType.TIMESHEET,
-  };
-
-  if (clientId) {
-    where.clientId = clientId;
-  }
-  if (projectId) {
-    where.projectId = projectId;
-  }
-  if (from || to) {
-    where.timesheetDate = {};
-    if (from) {
-      where.timesheetDate.gte = new Date(from);
-    }
-    if (to) {
-      where.timesheetDate.lte = new Date(to);
-    }
-  }
-
-  const notes = await prisma.note.findMany({
-    where,
-    orderBy: { timesheetDate: 'desc' },
-    include: { attachmentFiles: true }, // REQ-007
-  });
-
-  return notes.map(toNote) as TimeSheetNote[];
-}

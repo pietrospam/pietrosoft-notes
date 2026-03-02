@@ -28,7 +28,8 @@ Reemplazar el botón actual "New Note" por un botón compacto con solo el ícono
   - General
   - Task (Ticket)
   - Connection
-  - TimeSheet
+  - TimeSheet (moved to dedicated view/table)
+    - Tabla de TimeSheets debe mostrar columna "Cliente" a la izquierda del proyecto, con el nombre en un badge coloreado según el cliente
 - Al seleccionar un tipo, se crea la nota de ese tipo
 
 **Criterios de aceptación:**
@@ -91,7 +92,7 @@ Barra horizontal encima de la lista de notas (debajo del header, antes del lista
 
 ### 4.4 Diseño visual sugerido
 ```
-[General ●] [Task ●] [Connection ●] [TimeSheet ●]
+[General ●] [Task ●] [Connection ●]
 ```
 - Badge activo: color destacado (azul/blanco)
 - Badge inactivo: color tenue (gris oscuro)
@@ -302,7 +303,7 @@ Agregar un botón "+" en la sección donde se muestran las notas para crear nuev
 ```
 [Con cliente seleccionado]
 1. Usuario hace clic en "+"
-2. Se muestra dropdown: General | Task | Connection | TimeSheet
+2. Se muestra dropdown: General | Task | Connection (TimeSheets gestionados en otra vista)
 3. Usuario selecciona tipo
 4. Se crea nota local del tipo seleccionado, asociada al cliente activo
 5. Se abre el editor con la nueva nota
@@ -320,7 +321,7 @@ Agregar un botón "+" en la sección donde se muestran las notas para crear nuev
 ### 10.5 Diseño visual sugerido
 ```
 ┌────────────────────────────────────────────────────────────┐
-│ [General ●] [Task ●] [Connection ●] [TimeSheet ●]   [+]   │
+│ [General ●] [Task ●] [Connection ●]   [+]   │ (crear TimeSheet desde Task o TimeSheetView)
 ├────────────────────────────────────────────────────────────┤
 │ Lista de notas...                                          │
 └────────────────────────────────────────────────────────────┘
@@ -336,7 +337,7 @@ Agregar un botón "+" en la sección donde se muestran las notas para crear nuev
 
 ---
 
-## 11. Registro de TimeSheet desde una Tarea
+## 11. Registro de TimeSheet desde una Tarea (flujo inyectado en la nueva tabla)
 
 ### 11.1 Descripción
 Permitir registrar horas trabajadas (TimeSheet) directamente desde la vista de una Tarea, sin necesidad de navegar fuera de ella. El sistema debe detectar si ya existe un registro para la fecha seleccionada y esa tarea, entrando en modo edición si es el caso.
@@ -518,6 +519,8 @@ Agregar un botón pequeño con ícono de reloj (⏱️) en cada card de tarea de
 
 ### 14.1 Descripción
 En el editor inline de tareas (TaskEditorModal), los campos de cabecera deben estar **deshabilitados por defecto** para priorizar la visualización del contenido.
+
+- Si la tarea tiene valor en el campo **Ticket/Fase**, el título que aparece en la cabecera del editor (inline o popup) y en cualquier lista o selector debe formarse igual que en las tarjetas de la lista: `#<número> <descripción corta>` (o `#<número> <título>` si no existe descripción corta). En ausencia de ticket se muestra el título normal de la tarea.
 
 ### 14.2 Comportamiento esperado
 - **Campos siempre editables:** Estado y Prioridad (no dependen del lápiz)

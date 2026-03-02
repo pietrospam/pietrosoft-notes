@@ -11,6 +11,7 @@ interface AttachmentsPanelProps {
   onAttachmentAdded: (attachment: AttachmentMeta) => void;
   onAttachmentDeleted: (attachmentId: string) => void;
   onAttachmentRenamed?: (attachmentId: string, newName: string) => void;
+  onPersistNote?: () => Promise<string | null>; // called when note is unsaved temp
 }
 
 function formatFileSize(bytes: number): string {
@@ -31,6 +32,7 @@ export function AttachmentsPanel({
   onAttachmentAdded, 
   onAttachmentDeleted,
   onAttachmentRenamed,
+  onPersistNote,
 }: AttachmentsPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -41,17 +43,20 @@ export function AttachmentsPanel({
   const [isDragOver, setIsDragOver] = useState(false);
 
   const handleUpload = async (file: File) => {
-    // Skip if noteId is temporary (note not saved yet)
-    if (noteId.startsWith('temp-')) {
-      alert('Por favor guarda la nota antes de adjuntar archivos');
-      return;
+    let targetId = noteId;
+    // If temporary note, persist it if callback provided
+    if (targetId.startsWith('temp-') && onPersistNote) {
+      const newId = await onPersistNote();
+      if (newId) {
+        targetId = newId;
+      }
     }
-    
+
     setUploading(true);
     
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('noteId', noteId);
+    formData.append('noteId', targetId);
 
     try {
       const response = await fetch('/api/attachments', {
