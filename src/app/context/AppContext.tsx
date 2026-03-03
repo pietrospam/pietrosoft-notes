@@ -721,8 +721,20 @@ export function AppProvider({ children }: AppProviderProps) {
       const contentTextMatch = note.contentText.toLowerCase().includes(query);
       const contentJsonText = extractTextFromJson(note.contentJson).toLowerCase();
       const jsonMatch = contentJsonText.includes(query);
-      
-      return titleMatch || contentTextMatch || jsonMatch;
+
+      // REQ-009 & REQ-001: also search task-specific fields (ticket number and short description)
+      let ticketMatch = false;
+      let shortDescMatch = false;
+      if ('ticketPhaseCode' in note) {
+        const t = (note as any).ticketPhaseCode;
+        ticketMatch = !!t && t.toLowerCase().includes(query);
+      }
+      if ('shortDescription' in note) {
+        const s = (note as any).shortDescription;
+        shortDescMatch = !!s && s.toLowerCase().includes(query);
+      }
+
+      return titleMatch || contentTextMatch || jsonMatch || ticketMatch || shortDescMatch;
     }
     
     // Archived view shows only archived notes

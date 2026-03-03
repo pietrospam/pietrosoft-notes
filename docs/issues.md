@@ -198,6 +198,24 @@ ESTADO : RESUELTO
 DESCRIPCION : Las cards de notas, tareas y conexiones muestran un texto "sin contenido" de origen desconocido. Este texto no aporta valor y debería eliminarse. En su lugar, mostrar un icono con el número de archivos adjuntos que tiene cada nota (si tiene alguno).
 RESOLUCION : Se modificó NotesList.tsx para mostrar el contador de attachments con ícono Paperclip cuando la nota no tiene contentText pero sí tiene attachments. Si no tiene ninguno, no se muestra nada.
 
+## Issue 22: Búsqueda no abarca campos completos
+ESTADO : RESUELTO
+DESCRIPCION : Al usar el buscador global en la barra superior, la búsqueda solo inspecciona el título y un campo `content` que contiene el HTML. No se incluyen el cuerpo de la nota (texto plano/JSON), la descripción corta de las tareas ni el número de ticket/fase, por lo que muchos resultados relevantes no aparecen.
+RESOLUCION :
+1. Se amplió la función `filteredNotes` en `AppContext.tsx` para que, al haber texto de búsqueda, compare también con `contentText`, el contenido extraído del JSON, y chequeé los campos `ticketPhaseCode` y `shortDescription` cuando existan.
+2. Se mejoró el repositorio (`notes-repo.ts`) y la ruta GET `/api/notes` para aceptar un parámetro `search` y filtrar en el servidor usando los mismos campos (título, content HTML, ticket y descripción corta) para futuras optimizaciones.
+3. Aunque la búsqueda sigue aplicándose principalmente en el cliente, ahora los resultados capturan cuerpo, título, descripción y número de ticket como pretendido.
+
+## Issue 23: Falta fecha/hora de creación en lista de anexos
+ESTADO : RESUELTO
+DESCRIPCION : Los anexos y las imágenes pegadas desde el portapapeles se muestran correctamente en la lista de adjuntos, pero no se indicaba cuándo se agregaron. El usuario necesita saber la fecha/hora de creación para auditoría y soporte.
+RESOLUCION :
+1. Se añadió el campo `createdAt` al tipo `AttachmentMeta` (ya existente) y se mapeó desde la base de datos/API.
+2. `AttachmentsPanel.tsx` muestra ahora la marca temporal bajo el tamaño del archivo.
+3. `AttachmentViewer.tsx` incluye la fecha/hora en el encabezado del visor.
+4. Las rutas de upload (`/api/attachments`) ya devuelven `createdAt`, por lo que imágenes pegadas se ven con el timestamp inmediatamente.
+5. Se actualizó la nueva especificación REQ-013 para reflejar el cambio.
+
 
 ## Issue 22: Control de cambios incorrecto en notas tipo Conexión
 ESTADO : RESUELTO

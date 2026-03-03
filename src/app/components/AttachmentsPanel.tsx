@@ -20,6 +20,12 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function formatDateTime(iso: string): string {
+  const d = new Date(iso);
+  // Show local short format; could later be replaced with relative formatting
+  return d.toLocaleString();
+}
+
 function getFileIcon(mimeType: string) {
   if (mimeType.startsWith('image/')) return ImageIcon;
   if (mimeType.includes('pdf') || mimeType.includes('document')) return FileText;
@@ -270,6 +276,7 @@ export function AttachmentsPanel({
                     <>
                       <p className="text-sm text-gray-300 truncate">{attachment.originalName}</p>
                       <p className="text-xs text-gray-600">{formatFileSize(attachment.size)}</p>
+                      <p className="text-xs text-gray-500">{formatDateTime(attachment.createdAt)}</p>
                     </>
                   )}
                 </div>

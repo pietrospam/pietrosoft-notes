@@ -14,10 +14,12 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type') as NoteType | null;
     const includeArchived = searchParams.get('includeArchived') === 'true';
+    const search = searchParams.get('search') || undefined;
     
     const notes = await listNotes({
       type: type || undefined,
       includeArchived,
+      search,
     });
     
     return NextResponse.json(notes);

@@ -102,7 +102,10 @@ export function AttachmentViewer({ attachment, allAttachments, onClose, onNaviga
         className="flex items-center justify-between px-4 py-3 bg-gray-900/80"
         onClick={e => e.stopPropagation()}
       >
-        <h3 className="text-white font-medium truncate">{attachment.originalName}</h3>
+        <div className="flex flex-col">
+          <h3 className="text-white font-medium truncate">{attachment.originalName}</h3>
+          <span className="text-xs text-gray-400">{new Date(attachment.createdAt).toLocaleString()}</span>
+        </div>
         <div className="flex items-center gap-2">
           {isImageType(attachment.mimeType) && (
             <>

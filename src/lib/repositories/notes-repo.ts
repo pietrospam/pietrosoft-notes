@@ -180,9 +180,13 @@ export async function listNotes(options: ListNotesOptions = {}): Promise<Note[]>
     where.archived = false;
   }
   if (search) {
+    // search across title, raw content (HTML), and task-specific fields
+    // contentText is derived client-side so we keep searching the HTML blob as a proxy
     where.OR = [
       { title: { contains: search, mode: 'insensitive' } },
       { content: { contains: search, mode: 'insensitive' } },
+      { taskTicketPhaseCode: { contains: search, mode: 'insensitive' } },
+      { taskShortDescription: { contains: search, mode: 'insensitive' } },
     ];
   }
   if (taskStatus && taskStatus !== 'NONE') {
