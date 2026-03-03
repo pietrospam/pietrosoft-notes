@@ -172,6 +172,14 @@ export interface ConnectionNote extends NoteBase, ConnectionFields {
 
 export type Note = GeneralNote | TaskNote | ConnectionNote;
 
+export interface TaskComment {
+  id: UUID;
+  taskId: UUID;
+  author: string;
+  content: any; // TipTap JSON
+  createdAt: string; // ISO timestamp
+}
+
 // ============================================================================
 // Workspace Meta
 // ============================================================================

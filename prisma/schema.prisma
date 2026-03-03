@@ -159,3 +159,18 @@ model Timesheet {
   @@map("timesheets")
 }
 
+// Comments attached to tasks (REQ-016)
+model TaskComment {
+  id        String   @id @default(uuid())
+  taskId    String   @map("task_id")
+  author    String
+  content   Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  task      Note     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([createdAt])
+  @@map("task_comments")
+}
+

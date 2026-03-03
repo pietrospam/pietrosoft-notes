@@ -442,4 +442,67 @@ export async function removeAttachment(noteId: string, attachmentId: string): Pr
 }
 
 // ============================================================================
+// Task comment helpers (REQ-016)
+// ============================================================================
+
+export interface TaskCommentRecord {
+  id: string;
+  taskId: string;
+  author: string;
+  content: any;
+  createdAt: Date;
+}
+
+export async function listTaskComments(taskId: string): Promise<TaskCommentRecord[]> {
+  return prisma.taskComment.findMany({
+    where: { taskId },
+    orderBy: { createdAt: 'asc' },
+  });
+}
+
+export async function createTaskComment(data: {
+  taskId: string;
+  author: string;
+  content: any;
+}): Promise<TaskCommentRecord> {
+  const rec = await prisma.taskComment.create({ data });
+  // record in activity log
+  await prisma.taskActivityLog.create({
+    data: {
+      taskId: data.taskId,
+      eventType: 'COMMENT_CREATED',
+      description: data.author,
+    }
+  });
+  return rec;
+}
+
+export async function updateTaskComment(id: string, content: any): Promise<TaskCommentRecord> {
+  const rec = await prisma.taskComment.update({ where: { id }, data: { content } });
+  // log update (author not tracked here)
+  await prisma.taskActivityLog.create({
+    data: {
+      taskId: rec.taskId,
+      eventType: 'COMMENT_UPDATED',
+      description: id,
+    }
+  });
+  return rec;
+}
+
+export async function deleteTaskComment(id: string): Promise<void> {
+  const rec = await prisma.taskComment.findUnique({ where: { id } });
+  if (rec) {
+    await prisma.taskActivityLog.create({
+      data: {
+        taskId: rec.taskId,
+        eventType: 'COMMENT_DELETED',
+        description: id,
+      }
+    });
+  }
+  await prisma.taskComment.delete({ where: { id } });
+}
+
+// ============================================================================
 // Timesheets Export
