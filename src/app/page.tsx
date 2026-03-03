@@ -146,8 +146,8 @@ function AppLayout() {
     const handleKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
-        saveCurrentNote().then(saved => {
-          if (saved) setToast({ message: 'Cambios guardados' });
+        saveCurrentNote().then(() => {
+          setToast({ message: 'Cambios guardados' });
         });
       }
     };

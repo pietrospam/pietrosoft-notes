@@ -7,7 +7,7 @@ import { AttachmentsModal } from './AttachmentsModal';
 import { Toast } from './Toast';
 import { UnsavedChangesModal } from './UnsavedChangesModal';
 import { useApp } from '../context/AppContext';
-import type { Note, AttachmentMeta } from '@/lib/types';
+import type { Note } from '@/lib/types';
 
 interface BaseEditorModalProps {
   noteId?: string;      // undefined = create mode

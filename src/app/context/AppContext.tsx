@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
-import type { Note, NoteType, Client, Project } from '@/lib/types';
+import type { Note, NoteType, TaskNote, Client, Project } from '@/lib/types';
 import type { ConfigTab } from '../components/ConfigPanel';
 
 // ============================================================================
@@ -732,11 +732,12 @@ export function AppProvider({ children }: AppProviderProps) {
       let ticketMatch = false;
       let shortDescMatch = false;
       if ('ticketPhaseCode' in note) {
-        const t = (note as any).ticketPhaseCode;
+        // note must be a TaskNote when it has ticketPhaseCode
+        const t = (note as TaskNote).ticketPhaseCode;
         ticketMatch = !!t && t.toLowerCase().includes(query);
       }
       if ('shortDescription' in note) {
-        const s = (note as any).shortDescription;
+        const s = (note as TaskNote).shortDescription;
         shortDescMatch = !!s && s.toLowerCase().includes(query);
       }
 

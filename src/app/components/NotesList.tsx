@@ -3,6 +3,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { FileText, CheckSquare, Link, Link2, Clock, Plus, X, Star, Paperclip, GripVertical, ChevronRight, ChevronLeft, User, Key, Check } from 'lucide-react';
+import type { ConnectionNote } from '@/lib/types';
 import { TimeSheetModal } from './TimeSheetModal';
 import { TaskEditorModal } from './TaskEditorModal';
 import { NoteEditorModal } from './NoteEditorModal';
@@ -67,7 +68,7 @@ export function NotesList() {
   // track which connection field was copied for visual feedback
   const [copiedInfo, setCopiedInfo] = useState<{ id: string; field: 'url' | 'username' | 'password' } | null>(null);
 
-  const handleConnCopy = async (note: any, field: 'url' | 'username' | 'password') => {
+  const handleConnCopy = async (note: ConnectionNote, field: 'url' | 'username' | 'password') => {
     const value = note[field] || '';
     try {
       await navigator.clipboard.writeText(value);

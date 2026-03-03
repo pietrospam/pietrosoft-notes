@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Paperclip } from 'lucide-react';
 import { AttachmentsPanel } from './AttachmentsPanel';
 import { useApp } from '../context/AppContext';
-import type { AttachmentMeta, Note } from '@/lib/types';
+import type { AttachmentMeta } from '@/lib/types';
 
 export function AttachmentsSidebar() {
   const {
@@ -101,6 +101,7 @@ export function AttachmentsSidebar() {
             onAttachmentAdded={onAdded}
             onAttachmentDeleted={onDeleted}
             onAttachmentRenamed={onRenamed}
+            {...(isTemp ? { disabledUpload: true } : {})}
           />
         </div>
       )}

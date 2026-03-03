@@ -10,7 +10,7 @@ import { Toast } from './Toast';
 import { UnsavedChangesModal } from './UnsavedChangesModal';
 import { TaskActivityLogModal } from './TaskActivityLogModal';
 import { useApp } from '../context/AppContext';
-import type { TaskNote, AttachmentMeta, Client, Project, TaskStatus, TaskPriority } from '@/lib/types';
+import type { TaskNote, Client, Project, TaskStatus, TaskPriority } from '@/lib/types';
 
 const STATUSES: { value: TaskStatus; label: string; color: string }[] = [
   { value: 'NONE', label: 'None', color: 'bg-gray-500' },
@@ -36,7 +36,7 @@ interface TaskEditorModalProps {
   defaultClientId?: string;
 }
 
-export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onExpandToPopup, defaultClientId }: TaskEditorModalProps) {
+export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defaultClientId }: TaskEditorModalProps) {
   const { refreshNotes, refreshClients, toggleFavorite, autoSaveEnabled, setIsDirty: setGlobalIsDirty, setPendingChanges: setGlobalPendingChanges, updateNote, deleteNote, setSelectedNoteId, isNotesListCollapsed, setNotesListCollapsed } = useApp();
   const [showAttachmentsModal, setShowAttachmentsModal] = useState(false);
   const isCreatedRef = useRef(false);

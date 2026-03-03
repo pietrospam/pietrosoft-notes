@@ -19,3 +19,4 @@ export { BaseEditorModal } from './BaseEditorModal';
 export { TaskEditorModal } from './TaskEditorModal';
 export { NoteEditorModal } from './NoteEditorModal';
 export { ConnectionEditorModal } from './ConnectionEditorModal';
+export { Toast } from './Toast';
