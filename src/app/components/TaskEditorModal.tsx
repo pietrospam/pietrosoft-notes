@@ -9,6 +9,7 @@ import { QuickCreateModal } from './QuickCreateModal';
 import { Toast } from './Toast';
 import { UnsavedChangesModal } from './UnsavedChangesModal';
 import { TaskActivityLogModal } from './TaskActivityLogModal';
+import { TaskComments } from './TaskComments';
 import { useApp } from '../context/AppContext';
 import type { TaskNote, Client, Project, TaskStatus, TaskPriority } from '@/lib/types';
 
@@ -482,6 +483,8 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
   }
 
   // Inline mode content
+  const currentUser = 'usuario'; // TODO: replace with real user id
+
   const renderContent = () => (
     <>
       {/* Task Fields - Compact Header */}
@@ -741,6 +744,9 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
           placeholder="Descripción de la tarea..."
         />
       </div>
+
+      {/* Comments */}
+      <TaskComments taskId={taskId || task.id} currentUser={currentUser} />
 
     </>
   );

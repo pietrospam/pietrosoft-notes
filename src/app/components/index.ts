@@ -19,4 +19,5 @@ export { BaseEditorModal } from './BaseEditorModal';
 export { TaskEditorModal } from './TaskEditorModal';
 export { NoteEditorModal } from './NoteEditorModal';
 export { ConnectionEditorModal } from './ConnectionEditorModal';
+export { TaskComments } from './TaskComments';
 export { Toast } from './Toast';

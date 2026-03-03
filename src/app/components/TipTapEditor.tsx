@@ -26,13 +26,14 @@ interface TipTapEditorProps {
   placeholder?: string;
   noteId?: string; // Required for image uploads
   onPersistNote?: () => Promise<string | null>; // Called to persist temp notes before upload
+  readOnly?: boolean; // disable editing and hide toolbar
 }
 
 export interface TipTapEditorHandle {
   focus: () => void;
 }
 
-export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(function TipTapEditor({ content, onChange, placeholder = 'Start writing...', noteId, onPersistNote }, ref) {
+export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(function TipTapEditor({ content, onChange, placeholder = 'Start writing...', noteId, onPersistNote, readOnly = false }, ref) {
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -95,6 +96,7 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
 
   const editor = useEditor({
     immediatelyRender: false,
+    editable: !readOnly,
     extensions: [
       StarterKit.configure({
         heading: {
@@ -225,7 +227,8 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
   return (
     <div className="flex flex-col">
       {/* Toolbar */}
-      <div className="flex items-center gap-1 pb-3 mb-3 border-b border-gray-800 flex-wrap">
+      {!readOnly && (
+        <div className="flex items-center gap-1 pb-3 mb-3 border-b border-gray-800 flex-wrap">
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleBold().run()}
           isActive={editor.isActive('bold')}
@@ -323,7 +326,8 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
             />
           </>
         )}
-      </div>
+        </div>
+      )}
       
       {/* Editor */}
       <EditorContent editor={editor} />
