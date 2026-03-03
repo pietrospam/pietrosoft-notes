@@ -73,12 +73,11 @@ export function Sidebar() {
           `}
         >
           <Star size={18} className={`flex-shrink-0 ${currentView === 'favorites' ? 'fill-current' : ''}`} />
-          <span className="opacity-0 group-hover:opacity-100 transition-opacity">Favoritos</span>
+          <span className="opacity-0 lg:opacity-100 transition-opacity">Favoritos</span>
           {favoritesCount > 0 && (
-            <span className={`ml-auto text-xs opacity-0 group-hover:opacity-100 transition-opacity ${
+            <span className={`ml-auto text-xs opacity-0 group-hover:opacity-100 lg:opacity-100 transition-opacity ${
               currentView === 'favorites' ? 'text-yellow-200' : 'text-gray-500'
-            }`}>
-              {favoritesCount}
+            }`}>{favoritesCount}
             </span>
           )}
         </button>
@@ -98,8 +97,8 @@ export function Sidebar() {
           `}
         >
           <Layers size={18} className="flex-shrink-0" />
-          <span className="opacity-0 group-hover:opacity-100 transition-opacity">Todas</span>
-          <span className={`ml-auto text-xs opacity-0 group-hover:opacity-100 transition-opacity ${
+          <span className="opacity-0 lg:opacity-100 transition-opacity">Todas</span>
+          <span className={`ml-auto text-xs opacity-0 group-hover:opacity-100 lg:opacity-100 transition-opacity ${
             selectedClientId === null && currentView === 'all' ? 'text-blue-200' : 'text-gray-500'
           }`}>
             {getCountForClient(null)}
@@ -122,7 +121,7 @@ export function Sidebar() {
                 {hasChildren && (
                   <button
                     onClick={() => toggleClientExpanded(client.id)}
-                    className="p-1 text-gray-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100"
+                    className="p-1 text-gray-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100 lg:opacity-100"
                   >
                     {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                   </button>
@@ -150,7 +149,7 @@ export function Sidebar() {
                     />
                   )}
                   <Building2 size={18} className="flex-shrink-0" />
-                  <span className="opacity-0 group-hover:opacity-100 transition-opacity truncate">
+                  <span className="opacity-0 lg:opacity-100 transition-opacity truncate">
                     {client.name}
                   </span>
                 </button>
@@ -181,7 +180,7 @@ export function Sidebar() {
                         />
                       )}
                       <Building2 size={14} className="flex-shrink-0" />
-                      <span className="opacity-0 group-hover:opacity-100 transition-opacity truncate text-xs">
+                      <span className="opacity-0 lg:opacity-100 transition-opacity truncate text-xs">
                         {subClient.name}
                       </span>
                     </button>
@@ -210,7 +209,7 @@ export function Sidebar() {
           `}
         >
           <Users size={18} className="flex-shrink-0" />
-          <span className="opacity-0 group-hover:opacity-100 transition-opacity">Sin Cliente</span>
+          <span className="opacity-0 lg:opacity-100 transition-opacity">Sin Cliente</span>
         </button>
       </nav>
     </>
@@ -221,7 +220,7 @@ export function Sidebar() {
     <>
       <nav className="space-y-1 px-2">
         {/* Header */}
-        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-2 py-1 opacity-0 group-hover:opacity-100 lg:opacity-100 transition-opacity">
           TimeSheets
         </div>
         
@@ -237,9 +236,9 @@ export function Sidebar() {
           `}
         >
           <LayoutGrid size={18} className="flex-shrink-0" />
-          <span className="opacity-0 group-hover:opacity-100 transition-opacity">Todos</span>
+          <span className="opacity-0 group-hover:opacity-100 lg:opacity-100 transition-opacity">Todos</span>
           {selectedTimesheetClientId === null && (
-            <Check size={14} className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+            <Check size={14} className="ml-auto opacity-0 group-hover:opacity-100 lg:opacity-100 transition-opacity" />
           )}
         </button>
 
@@ -266,11 +265,11 @@ export function Sidebar() {
               />
             )}
             <Building2 size={18} className="flex-shrink-0" />
-            <span className="opacity-0 group-hover:opacity-100 transition-opacity truncate">
+            <span className="opacity-0 lg:opacity-100 transition-opacity truncate">
               {client.name}
             </span>
             {selectedTimesheetClientId === client.id && (
-              <Check size={14} className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+              <Check size={14} className="ml-auto opacity-0 group-hover:opacity-100 lg:opacity-100 transition-opacity" />
             )}
           </button>
         ))}
@@ -279,7 +278,9 @@ export function Sidebar() {
   );
 
   return (
-    <aside className="w-14 hover:w-48 bg-gray-900 border-r border-gray-800 flex flex-col transition-all duration-200 group overflow-hidden" style={{ overflowX: 'hidden' }}>
+    // desktop (lg+) always show expanded width; smaller screens keep narrow but
+    // we no longer auto-expand on hover to avoid unpredictable resizing.
+    <aside className="w-14 lg:w-48 bg-gray-900 border-r border-gray-800 flex flex-col transition-all duration-200 group overflow-hidden" style={{ overflowX: 'hidden' }}>
       <div className="flex-1 py-4" style={{ overflowY: 'auto', overflowX: 'hidden' }}>
         {/* REQ-010: Tab-aware navigation */}
         {activeTab === 'bitacora' ? renderBitacoraNav() : renderTimesheetsNav()}
@@ -300,9 +301,9 @@ export function Sidebar() {
               `}
             >
               <Archive size={18} className="flex-shrink-0" />
-              <span className="opacity-0 group-hover:opacity-100 transition-opacity">Archivados</span>
+              <span className="opacity-0 group-hover:opacity-100 lg:opacity-100 transition-opacity">Archivados</span>
               {archivedCount > 0 && (
-                <span className={`ml-auto text-xs opacity-0 group-hover:opacity-100 transition-opacity ${
+                <span className={`ml-auto text-xs opacity-0 group-hover:opacity-100 lg:opacity-100 transition-opacity ${
                   currentView === 'archived' ? 'text-blue-200' : 'text-gray-500'
                 }`}>
                   {archivedCount}
@@ -322,7 +323,7 @@ export function Sidebar() {
             `}
           >
             <Settings size={18} className="flex-shrink-0" />
-            <span className="opacity-0 group-hover:opacity-100 transition-opacity">Config</span>
+            <span className="opacity-0 group-hover:opacity-100 lg:opacity-100 transition-opacity">Config</span>
           </button>
         </nav>
       </div>

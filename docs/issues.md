@@ -216,6 +216,15 @@ RESOLUCION :
 4. Las rutas de upload (`/api/attachments`) ya devuelven `createdAt`, por lo que imágenes pegadas se ven con el timestamp inmediatamente.
 5. Se actualizó la nueva especificación REQ-013 para reflejar el cambio.
 
+## Issue 24: Sidebar no fija ancho en desktop
+ESTADO : RESUELTO
+DESCRIPCION : En modo escritorio la barra lateral izquierda se colapsa a 14px y sólo se expande a 48px cuando el cursor pasa por encima. Esto provoca un cambio de tamaño inesperado; el cliente quiere que el ancho permanezca constante en desktop.
+RESOLUCION :
+1. Modificado `Sidebar.tsx` para aplicar `w-14 lg:w-48` en lugar de `w-14 hover:w-48`, eliminando la expansión por hover en pantallas grandes.
+2. Ajustadas las clases de opacidad para que las etiquetas, contadores y iconos se muestren siempre en `lg` sin necesidad de hover (`lg:opacity-100`).
+3. La navegación mantiene el comportamiento compacto en dispositivos pequeños, pero en desktop la barra está siempre desplegada.
+4. No se requieren cambios adicionales en el backend ni en otros componentes.
+
 
 ## Issue 22: Control de cambios incorrecto en notas tipo Conexión
 ESTADO : RESUELTO
