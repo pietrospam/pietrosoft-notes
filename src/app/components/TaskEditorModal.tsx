@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Save, Loader2, Maximize2, Minimize2, Pencil, Clock, ChevronDown, Plus, Check, ExternalLink, Star, Archive, ArchiveRestore, Trash2, Copy, History } from 'lucide-react';
+import { X, Save, Loader2, Maximize2, Minimize2, Pencil, Clock, ChevronDown, Plus, Check, Star, Archive, ArchiveRestore, Trash2, Copy, History } from 'lucide-react';
 import { TipTapEditor, TipTapEditorHandle } from './TipTapEditor';
 import { AttachmentsPanel } from './AttachmentsPanel';
 import { TimeSheetModal } from './TimeSheetModal';
@@ -37,7 +37,7 @@ interface TaskEditorModalProps {
 }
 
 export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onExpandToPopup, defaultClientId }: TaskEditorModalProps) {
-  const { refreshNotes, refreshClients, toggleFavorite, autoSaveEnabled, setIsDirty: setGlobalIsDirty, setPendingChanges: setGlobalPendingChanges, updateNote, deleteNote, setSelectedNoteId } = useApp();
+  const { refreshNotes, refreshClients, toggleFavorite, autoSaveEnabled, setIsDirty: setGlobalIsDirty, setPendingChanges: setGlobalPendingChanges, updateNote, deleteNote, setSelectedNoteId, isNotesListCollapsed, setNotesListCollapsed } = useApp();
   
   // Create default task for new notes
   const now = new Date().toISOString();
@@ -899,14 +899,14 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
               </button>
             )}
             
-            {/* Expand to popup button */}
-            {onExpandToPopup && (
+            {/* Collapse to note list button (inline mode only) */}
+            {inline && (
               <button
-                onClick={onExpandToPopup}
+                onClick={() => setNotesListCollapsed(!isNotesListCollapsed)}
                 className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors"
-                title="Abrir en popup"
+                title={isNotesListCollapsed ? "Expandir lista (ESC)" : "Colapsar lista (Enter o doble clic)"}
               >
-                <ExternalLink size={20} />
+                {isNotesListCollapsed ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
               </button>
             )}
           </div>
@@ -917,16 +917,6 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
           {renderContent()}
         </div>
 
-        {/* Footer - simplified for inline */}
-        <div className="px-6 py-3 border-t border-gray-700 flex items-center justify-between text-xs text-gray-500">
-          <div>
-            {isDirty ? (
-              <span className="text-yellow-500">● Cambios sin guardar</span>
-            ) : (
-              <span>Último guardado: {new Date(task.updatedAt).toLocaleString()}</span>
-            )}
-          </div>
-        </div>
 
         {/* TimeSheet Modal */}
         {showTimeSheetModal && (taskId || isCreatedRef.current) && (
@@ -979,6 +969,15 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
           onCancel={() => setShowUnsavedModal(false)}
           onSave={handleSaveAndClose}
         />
+
+        {/* Activity Log Modal (inline mode) */}
+        {showActivityLog && (taskId || isCreatedRef.current) && (
+          <TaskActivityLogModal
+            taskId={taskId || task.id}
+            taskTitle={title}
+            onClose={() => setShowActivityLog(false)}
+          />
+        )}
       </div>
     );
   }
@@ -1147,14 +1146,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 border-t border-gray-700 flex items-center justify-between text-xs text-gray-500">
-          <div>
-            {isDirty ? (
-              <span className="text-yellow-500">● Cambios sin guardar</span>
-            ) : (
-              <span>Último guardado: {new Date(task.updatedAt).toLocaleString()}</span>
-            )}
-          </div>
+        <div className="px-6 py-3 border-t border-gray-700 flex items-center justify-end text-xs text-gray-500">
           <div className="flex items-center gap-4">
             <button
               onClick={handleClose}

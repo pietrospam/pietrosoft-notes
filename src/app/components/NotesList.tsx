@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { FileText, CheckSquare, Link, Clock, Plus, X, Star, Paperclip, GripVertical, ChevronRight, ChevronLeft } from 'lucide-react';
+import { FileText, CheckSquare, Link, Link2, Clock, Plus, X, Star, Paperclip, GripVertical, ChevronRight, ChevronLeft, User, Key, Check } from 'lucide-react';
 import { TimeSheetModal } from './TimeSheetModal';
 import { TaskEditorModal } from './TaskEditorModal';
 import { NoteEditorModal } from './NoteEditorModal';
@@ -63,6 +63,20 @@ export function NotesList() {
     isNotesListCollapsed,
     setNotesListCollapsed,
   } = useApp();
+
+  // track which connection field was copied for visual feedback
+  const [copiedInfo, setCopiedInfo] = useState<{ id: string; field: 'url' | 'username' | 'password' } | null>(null);
+
+  const handleConnCopy = async (note: any, field: 'url' | 'username' | 'password') => {
+    const value = note[field] || '';
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedInfo({ id: note.id, field });
+      setTimeout(() => setCopiedInfo(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy connection field:', err);
+    }
+  };
   
   const listRef = useRef<HTMLDivElement>(null);
   const noteRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
@@ -528,7 +542,7 @@ export function NotesList() {
                   />
                 )}
                 
-                {/* Top row: Drag handle, Client badge, Type icon, Position badge */}
+                {/* Top row: Drag handle, Client badge, spacer, position/favorite etc, then icon group */}
                 <div className="flex items-center gap-1 mb-1 -ml-3">
                   {/* Client badge */}
                   {showClientBadge && noteClient && (
@@ -553,27 +567,52 @@ export function NotesList() {
                   {isFavoritesView && (
                     <span className="text-xs font-mono text-yellow-500 flex-shrink-0">#{index + 1}</span>
                   )}
-                  {/* Favorite star in favorites view */}
-                  {isFavoritesView && (
+                  {/* Icon group: favoritos, timesheet, anexos, tipo */}
+                  <div className="flex items-center gap-1 ml-2">
+                    {/* favorites toggle */}
                     <button
-                      onDoubleClick={(e) => {
+                      onClick={(e) => {
                         e.stopPropagation();
                         toggleFavorite(note.id);
                       }}
-                      onClick={(e) => e.stopPropagation()}
-                      className="text-yellow-400 flex-shrink-0 transition-colors hover:text-yellow-300"
-                      title="Quitar de favoritos (doble clic)"
+                      className={`flex-shrink-0 transition-colors ${note.isFavorite ? 'text-yellow-400' : 'text-gray-600 hover:text-gray-400'}`}
+                      title={note.isFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos'}
                     >
-                      <Star size={14} className="fill-current" />
+                      <Star size={14} className={note.isFavorite ? 'fill-current' : ''} />
                     </button>
-                  )}
+
+                    {/* timesheet icon */}
+                    {isSavedTask && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setTimeSheetTask(note as TaskNote);
+                        }}
+                        className="p-1 rounded hover:bg-gray-700 text-gray-500 hover:text-green-400 transition-colors flex-shrink-0"
+                        title="Registrar horas"
+                      >
+                        <Clock size={14} />
+                      </button>
+                    )}
+
+                    {/* attachments count */}
+                    {note.attachments && note.attachments.length > 0 && (
+                      <span className="flex items-center gap-0.5 text-xs text-gray-500" title="Adjuntos">
+                        <Paperclip size={12} />
+                        {note.attachments.length}
+                      </span>
+                    )}
+
+                    {/* type icon */}
+                    <Icon size={14} className={`flex-shrink-0 ${typeColors[note.type]}`} />
+                  </div>
                 </div>
                 
                 {/* Content row: Title and actions */}
                 <div className="flex items-start gap-2 pl-1">
                   <div className="flex-1 min-w-0">
                     {/* REQ-001.13.1: Word wrap title */}
-                    <div className="flex items-start gap-2">
+                    <div className="flex items-start gap-2 w-full">
                       <h3 className="text-sm font-medium text-white flex-1 break-words">
                         {note.type === 'task' && (note as TaskNote).ticketPhaseCode ? (
                           <>
@@ -584,51 +623,53 @@ export function NotesList() {
                           note.title || 'Sin título'
                         )}
                       </h3>
-                      {/* REQ-006: Favorite star - always visible, double-click to toggle */}
-                      {!isFavoritesView && (
-                        <button
-                          onDoubleClick={(e) => {
-                            e.stopPropagation();
-                            toggleFavorite(note.id);
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                          className={`flex-shrink-0 mt-0.5 transition-colors ${
-                            note.isFavorite 
-                              ? 'text-yellow-400' 
-                              : 'text-gray-600 hover:text-gray-400'
-                          }`}
-                          title={note.isFavorite ? 'Quitar de favoritos (doble clic)' : 'Agregar a favoritos (doble clic)'}
-                        >
-                          <Star size={14} className={note.isFavorite ? 'fill-current' : ''} />
-                        </button>
+                      {/* connection-specific copy icons */}
+                      {note.type === 'connection' && (
+                        <div className="flex items-center gap-2 ml-auto text-gray-400">
+                          {note.url && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleConnCopy(note, 'url'); }}
+                              title="Copiar URL"
+                              className="p-1 hover:text-white transition-colors"
+                            >
+                              {copiedInfo?.id === note.id && copiedInfo.field === 'url' ? (
+                                <Check size={16} className="text-green-400" />
+                              ) : (
+                                <Link2 size={16} />
+                              )}
+                            </button>
+                          )}
+                          {note.username && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleConnCopy(note, 'username'); }}
+                              title="Copiar usuario"
+                              className="p-1 hover:text-white transition-colors"
+                            >
+                              {copiedInfo?.id === note.id && copiedInfo.field === 'username' ? (
+                                <Check size={16} className="text-green-400" />
+                              ) : (
+                                <User size={16} />
+                              )}
+                            </button>
+                          )}
+                          {note.password && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleConnCopy(note, 'password'); }}
+                              title="Copiar contraseña"
+                              className="p-1 hover:text-white transition-colors"
+                            >
+                              {copiedInfo?.id === note.id && copiedInfo.field === 'password' ? (
+                                <Check size={16} className="text-green-400" />
+                              ) : (
+                                <Key size={16} />
+                              )}
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
-                  {/* Right column: Type icon, Clock, Attachments */}
-                  <div className="flex flex-col items-center justify-center gap-1 flex-shrink-0">
-                    {/* Type icon */}
-                    <Icon size={14} className={`flex-shrink-0 ${typeColors[note.type]}`} />
-                    {/* Quick TimeSheet button for tasks */}
-                    {isSavedTask && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setTimeSheetTask(note as TaskNote);
-                        }}
-                        className="p-1 rounded hover:bg-gray-700 text-gray-500 hover:text-green-400 transition-colors"
-                        title="Registrar horas"
-                      >
-                        <Clock size={14} />
-                      </button>
-                    )}
-                    {/* Attachments */}
-                    {note.attachments && note.attachments.length > 0 && (
-                      <span className="flex items-center gap-0.5 text-xs text-gray-500" title="Adjuntos">
-                        <Paperclip size={12} />
-                        {note.attachments.length}
-                      </span>
-                    )}
-                  </div>
+                  {/* Previously right column icons moved into top row; nothing needed here */}
                 </div>
               </div>
             );

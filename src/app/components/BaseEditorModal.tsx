@@ -507,16 +507,6 @@ export function BaseEditorModal({
           </div>
         </div>
 
-        {/* Footer - simplified for inline */}
-        <div className="px-6 py-3 border-t border-gray-700 flex items-center justify-between text-xs text-gray-500">
-          <div>
-            {isDirty ? (
-              <span className="text-yellow-500">● Cambios sin guardar</span>
-            ) : (
-              <span>Último guardado: {new Date(note.updatedAt).toLocaleString()}</span>
-            )}
-          </div>
-        </div>
 
         {/* Toast */}
         {toast && (
@@ -719,14 +709,7 @@ export function BaseEditorModal({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 border-t border-gray-700 flex items-center justify-between text-xs text-gray-500">
-          <div>
-            {isDirty ? (
-              <span className="text-yellow-500">● Cambios sin guardar</span>
-            ) : (
-              <span>Último guardado: {new Date(note.updatedAt).toLocaleString()}</span>
-            )}
-          </div>
+        <div className="px-6 py-3 border-t border-gray-700 flex items-center justify-end text-xs text-gray-500">
           <div className="flex items-center gap-4">
             <button
               onClick={handleClose}

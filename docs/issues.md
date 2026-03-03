@@ -234,6 +234,39 @@ RESOLUCION :
 3. El hover y la selección conservan el radio; el indicador en degradado no interfiere con los bordes redondeados.
 4. El cambio es puramente de estilo y no afecta a la lógica del componente.
 
+## Issue 26: Iconos de notas reorganizados en fila
+ESTADO : RESUELTO
+DESCRIPCION : Los iconos de tipo, timesheet y anexos estaban en una columna a la derecha, separados del badge del cliente. El requerimiento pedía una sola fila de iconos alineada a la derecha del badge, en el orden favoritos, timesheet, anexos, tipo.
+RESOLUCION :
+1. Se movieron todos los iconos relevantes al `div` superior de cada nota en `NotesList.tsx`.
+2. Se construyó un grupo de iconos (`flex items-center gap-1`) a la derecha que aparece siempre y respeta el orden solicitado.
+3. Se eliminó el icono de favorito duplicado en la fila de contenido y se mantuvo el comportamiento de toggle por doble clic.
+4. La columna original con iconos fue retirada.
+5. El componente aún muestra el icono de timesheet (botón), el contador de anexos y el icono de tipo.
+6. No se tocaron otros componentes; el cambio es estrictamente de presentación.
+
+## Issue 27: Copia rápida en tarjetas de conexión
+ESTADO : RESUELTO
+DESCRIPCION : Para las notas de tipo conexión el usuario quería iconos para URL, usuario y contraseña que copien el campo al portapapeles al hacer clic. Los iconos debían aparecer en la misma línea que el título, alineados a la derecha y ser ligeramente más grandes que la estrella de favoritos.
+RESOLUCION :
+1. Añadidos iconos `Link2`, `User` y `Key` a `NotesList.tsx`, con tamaño 16px y la estética solicitada.  
+2. Cambiado el botón de favoritos dentro de la card para activarse con clic simple en lugar de doble clic (mejor UX).  
+2. Los iconos se colocan junto al título, dentro del mismo contenedor flexible, y se empujan a la derecha (`ml-auto`).
+3. Se creó un estado `copiedInfo` que guarda qué campo se copió para mostrar momentáneamente un `Check` verde en el icono correspondiente.
+4. Función `handleConnCopy` implementa la copia con `navigator.clipboard.writeText` y maneja el feedback. Se evita propagación del clic para no seleccionar la nota.
+5. Se actualizó el import de lucide-react y removed antigua columna derecha.
+6. Documento `issues.md` se actualizó con Issue 27 describiendo cambio.
+
+## Feature: Guardado con Ctrl+S
+ESTADO : IMPLEMENTADO
+DESCRIPCION : Añadir atajo de teclado global para guardar la nota en edición, mostrando un mensaje flotante al completarse.
+RESOLUCION :
+1. Se implementó `saveCurrentNote()` en `AppContext` que flushes any pending changes (o crea nota nueva) y actualiza el estado global.
+2. En `page.tsx` se añadió un listener de `keydown` que captura `Ctrl/Cmd+S`, previene el comportamiento por defecto y ejecuta la función anterior.
+3. Se agregó un `Toast` en `AppLayout` para indicar "Cambios guardados" cuando hay algo por guardar.
+4. El atajo no hace nada si no existen cambios (`state.isDirty` falso).
+
+
 
 ## Issue 22: Control de cambios incorrecto en notas tipo Conexión
 ESTADO : RESUELTO
@@ -310,3 +343,29 @@ RESOLUCION : La función `createPlaceholderTimesheet` ahora consulta `hasTimeshe
 ESTADO : RESUELTO
 DESCRIPCION : Bajo el título "TimeSheets" se estaba mostrando el nombre del cliente padre cuando se estaba filtrando por él. El design requiere mantener ese filtro silencioso, sin repetir el nombre en el encabezado.
 RESOLUCION : Se eliminaron todas las referencias a `selectedParentClient` en la UI: el pequeño badge junto al título y el bloque superior encima de la tabla fueron retirados. El filtrado por cliente padre sigue funcionando internamente. La documentación no requiere cambios adicionales porque se trata de una mejora visual.
+
+## Issue 33: Indicador "cambios sin guardar" persistente en pie de modales
+ESTADO : RESUELTO
+DESCRIPCION : Al editar una nota (inline o en popup) y guardar con el botón o Ctrl+S, aparece un toast con la hora de guardado pero la barra inferior sigue mostrando "● Cambios sin guardar" o "Último guardado". Este pie consume espacio y confunde al usuario cuando ya se ha guardado.
+RESOLUCION :
+1. Se eliminó el pie simplificado presente en el modo inline (BaseEditorModal y TaskEditorModal).
+2. En el footer de los modales popup se mantuvieron los botones Cancelar y Guardar y Cerrar, pero se retiró el área de estado a la izquierda; el contenedor se ajustó a `justify-end`.
+3. Ya no se muestra texto de estado en la parte inferior; la confirmación de guardado se maneja exclusivamente con el toast/ícono en el encabezado.
+
+## Issue 34: Cambiar botón inline de tarea a maximizar/colapsar lista
+ESTADO : RESUELTO
+DESCRIPCION : Cuando se edita una **tarea** en modo inline, el icono que aparece en el encabezado tenía la forma de un enlace externo y su tooltip decía "Abrir en popup". El cliente prefiere un control para **colapsar la lista de notas** (igual que ocurre al presionar Enter o doble clic en la lista). Además, una vez colapsada la lista, el mismo botón debe cambiar de icono para indicar cómo volver al estado anterior.
+RESOLUCION :
+1. En `TaskEditorModal.tsx` se reemplazó el botón que utilizaba `onExpandToPopup` por un botón que, cuando `inline=true`, alterna `isNotesListCollapsed` mediante `setNotesListCollapsed(...)` del contexto.
+2. El icono se muestra como `Maximize2` cuando la lista está desplegada y cambia a `Minimize2` al estar colapsada.
+3. El tooltip es dinámico: "Colapsar lista (Enter o doble clic)" o "Expandir lista (ESC)" según el estado.
+4. Se agregó `isNotesListCollapsed` y `setNotesListCollapsed` a la destructuración de `useApp()` en el modal de tarea.
+5. La funcionalidad de abrir en popup ya no se expone en este modal; la prop `onExpandToPopup` permanece por compatibilidad pero no se utiliza.
+
+## Issue 35: Botón historial no mostraba modal en vista inline
+ESTADO : RESUELTO
+DESCRIPCION : El icono "Ver historial de actividad" aparecía al editar una tarea inline pero al pulsarlo no sucedía nada. El modal de historial solo se renderizaba en la rama de popup, por lo que en la versión panel no había componente que apareciera.
+RESOLUCION :
+1. Se añadió la misma condición de renderizado de `<TaskActivityLogModal>` dentro de la rama `if (inline)` del componente `TaskEditorModal`.
+2. El modal ahora funciona tanto en modo inline como en popup, mostrando «No hay historial» si no hay registros.
+3. Se mantuvo el estado shared `showActivityLog` para la lógica.

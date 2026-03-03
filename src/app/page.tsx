@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
-import { TopBar, Sidebar, NotesList, ConfigPanel, TimeSheetView, UnsavedChangesModal, FloatingActionButton } from './components';
+import { TopBar, Sidebar, NotesList, ConfigPanel, TimeSheetView, UnsavedChangesModal, FloatingActionButton, Toast } from './components';
 import { TaskEditorModal } from './components/TaskEditorModal';
 import { NoteEditorModal } from './components/NoteEditorModal';
 import { ConnectionEditorModal } from './components/ConnectionEditorModal';
@@ -138,7 +138,22 @@ function MainContent() {
 
 // pull the visibility state inside a component that is a child of the provider
 function AppLayout() {
-  const { isSidebarVisible } = useApp();
+  const { isSidebarVisible, saveCurrentNote } = useApp();
+  const [toast, setToast] = useState<{ message: string } | null>(null);
+
+  // keyboard shortcut for save
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        saveCurrentNote().then(saved => {
+          if (saved) setToast({ message: 'Cambios guardados' });
+        });
+      }
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [saveCurrentNote]);
 
   return (
     <div className="h-screen flex flex-col bg-gray-950 text-white overflow-hidden">
@@ -148,6 +163,9 @@ function AppLayout() {
         <MainContent />
       </div>
       <FloatingActionButton />
+      {toast && (
+        <Toast message={toast.message} onClose={() => setToast(null)} />
+      )}
     </div>
   );
 }
