@@ -510,7 +510,7 @@ export function NotesList() {
                 onDrop={(e) => handleDrop(e, note.id)}
                 onDragEnd={handleDragEnd}
                 className={`
-                  w-full text-left pt-0 pb-3 px-3 transition-colors cursor-pointer relative outline-none
+                  w-full text-left pt-0 pb-3 px-3 transition-colors cursor-pointer relative outline-none rounded-lg mb-1
                   focus:ring-1 focus:ring-blue-500 focus:ring-inset
                   ${isSelected 
                     ? 'bg-gray-800' 
@@ -519,18 +519,13 @@ export function NotesList() {
                   ${isDragOver ? 'border-t-2 border-blue-500' : ''}
                 `}
               >
-                {/* REQ-001.13.3: Client color indicator - left and top borders */}
-                {noteClient?.color && (
-                  <>
-                    <div
-                      className="absolute left-0 top-0 bottom-0 w-1"
-                      style={{ backgroundColor: noteClient.color }}
-                    />
-                    <div
-                      className="absolute left-0 right-0 top-0 h-px"
-                      style={{ backgroundColor: noteClient.color }}
-                    />
-                  </>
+                {/* Client color indicator: subtle gradient bar instead of hard borders */}
+                {/* we remove the left/top colored borders because they interfered with rounded corners */}
+                {noteClient?.color && !isSelected && (
+                  <div
+                    className="absolute inset-0 rounded-lg pointer-events-none"
+                    style={{ background: `linear-gradient(90deg, ${noteClient.color}20, transparent)` }}
+                  />
                 )}
                 
                 {/* Top row: Drag handle, Client badge, Type icon, Position badge */}

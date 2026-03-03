@@ -225,6 +225,15 @@ RESOLUCION :
 3. La navegación mantiene el comportamiento compacto en dispositivos pequeños, pero en desktop la barra está siempre desplegada.
 4. No se requieren cambios adicionales en el backend ni en otros componentes.
 
+## Issue 25: Elementos de NotesList necesitan bordes redondeados
+ESTADO : RESUELTO
+DESCRIPCION : Las filas de la lista de notas se mostraban como bloques rectos sin separación visual; además, los bordes izquierdo y superior de color de cliente rompían la curvatura cuando no había selección. El usuario pidió un borde redondeado y un indicador menos intrusivo.
+RESOLUCION :
+1. `NotesList.tsx` fue actualizado para añadir `rounded-lg` y un pequeño `mb-1` a cada elemento de nota, generando espacios entre tarjetas.
+2. Se eliminaron las franjas color cliente en los bordes y, en su lugar, se añadió un degradado sutil (izquierda a derecha) usando la tonalidad del cliente cuando la nota no está seleccionada.
+3. El hover y la selección conservan el radio; el indicador en degradado no interfiere con los bordes redondeados.
+4. El cambio es puramente de estilo y no afecta a la lógica del componente.
+
 
 ## Issue 22: Control de cambios incorrecto en notas tipo Conexión
 ESTADO : RESUELTO
