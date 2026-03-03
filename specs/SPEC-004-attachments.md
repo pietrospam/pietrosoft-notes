@@ -35,6 +35,7 @@ Enable file attachments and clipboard image paste in notes. Attachments are stor
 - [x] When attachment uploaded, note's `attachments[]` is updated
 - [x] When attachment deleted, note's `attachments[]` is updated
 - [ ] Orphan cleanup: attachments without note reference can be deleted
+- [ ] **Collapsed sidebar**: attachments should be accessible via a right-edge collapsible panel with clip icon and count (see REQ-015)
 
 ## Technical Notes
 - Use `formidable` or native FormData for file parsing

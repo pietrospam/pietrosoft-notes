@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Save, Loader2, Maximize2, Minimize2, Pencil, Clock, ChevronDown, Plus, Check, Star, Archive, ArchiveRestore, Trash2, Copy, History } from 'lucide-react';
+import { X, Save, Loader2, Maximize2, Minimize2, Pencil, Clock, ChevronDown, Plus, Check, Star, Archive, ArchiveRestore, Trash2, Copy, History, Paperclip } from 'lucide-react';
 import { TipTapEditor, TipTapEditorHandle } from './TipTapEditor';
-import { AttachmentsPanel } from './AttachmentsPanel';
+import { AttachmentsModal } from './AttachmentsModal';
 import { TimeSheetModal } from './TimeSheetModal';
 import { QuickCreateModal } from './QuickCreateModal';
 import { Toast } from './Toast';
@@ -38,6 +38,11 @@ interface TaskEditorModalProps {
 
 export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onExpandToPopup, defaultClientId }: TaskEditorModalProps) {
   const { refreshNotes, refreshClients, toggleFavorite, autoSaveEnabled, setIsDirty: setGlobalIsDirty, setPendingChanges: setGlobalPendingChanges, updateNote, deleteNote, setSelectedNoteId, isNotesListCollapsed, setNotesListCollapsed } = useApp();
+  const [showAttachmentsModal, setShowAttachmentsModal] = useState(false);
+  const isCreatedRef = useRef(false);
+  useEffect(() => {
+    console.log('TaskEditorModal showAttachmentsModal changed', showAttachmentsModal, { taskId, isCreated: isCreatedRef.current });
+  }, [showAttachmentsModal, taskId]);
   
   // Create default task for new notes
   const now = new Date().toISOString();
@@ -59,6 +64,8 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
   };
 
   const [task, setTask] = useState<TaskNote>(defaultTask);
+  // compute attach count after task is defined
+  const attachmentCount = task.attachments?.length || 0;
   const [loading, setLoading] = useState(!!taskId);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -96,7 +103,6 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
   const titleInputRef = useRef<HTMLInputElement>(null);
   const pendingChangesRef = useRef<Partial<TaskNote>>({});
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isCreatedRef = useRef(false);
 
   // Persist task and return new ID (for attachments/images before first save)
   const persistTask = useCallback(async (): Promise<string | null> => {
@@ -736,31 +742,6 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
         />
       </div>
 
-      {/* Attachments */}
-      <div className="border-t border-gray-800 pt-3">
-        <AttachmentsPanel
-          noteId={task.id}
-          onPersistNote={persistTask}
-          attachments={task.attachments || []}
-          onAttachmentAdded={(attachment: AttachmentMeta) => {
-            const updatedAttachments = [...(task.attachments || []), attachment];
-            setTask(prev => ({ ...prev, attachments: updatedAttachments }));
-            trackChange({ attachments: updatedAttachments });
-          }}
-          onAttachmentDeleted={(attachmentId: string) => {
-            const updatedAttachments = (task.attachments || []).filter(a => a.id !== attachmentId);
-            setTask(prev => ({ ...prev, attachments: updatedAttachments }));
-            trackChange({ attachments: updatedAttachments });
-          }}
-          onAttachmentRenamed={(attachmentId: string, newName: string) => {
-            const updatedAttachments = (task.attachments || []).map(
-              a => a.id === attachmentId ? { ...a, originalName: newName } : a
-            );
-            setTask(prev => ({ ...prev, attachments: updatedAttachments }));
-            trackChange({ attachments: updatedAttachments });
-          }}
-        />
-      </div>
     </>
   );
 
@@ -899,6 +880,21 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
               </button>
             )}
             
+            {/* Attachments toggle */}
+            {(taskId || isCreatedRef.current) && (
+              <button
+                onClick={() => {
+                  console.log('Task attachments button clicked, showAttachmentsModal=', showAttachmentsModal);
+                  setShowAttachmentsModal(true);
+                }}
+                className="flex items-center p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors"
+                title={`Anexos (${attachmentCount})`}
+                aria-label={`Anexos (${attachmentCount})`}
+              >
+                <Paperclip size={20} />
+                <span className="ml-1 text-xs">{attachmentCount}</span>
+              </button>
+            )}
             {/* Collapse to note list button (inline mode only) */}
             {inline && (
               <button
@@ -976,6 +972,20 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
             taskId={taskId || task.id}
             taskTitle={title}
             onClose={() => setShowActivityLog(false)}
+          />
+        )}
+
+        {/* Attachments Modal (inline mode) */}
+        {showAttachmentsModal && (taskId || isCreatedRef.current) && (
+          <AttachmentsModal
+            noteId={taskId || task.id}
+            attachments={task.attachments || []}
+            onChange={(newList) => {
+              setTask(prev => ({ ...prev, attachments: newList }));
+              trackChange({ attachments: newList });
+            }}
+            onClose={() => setShowAttachmentsModal(false)}
+            disabledUpload={task.id.startsWith('temp-')}
           />
         )}
       </div>
@@ -1097,6 +1107,21 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
             
             {(taskId || isCreatedRef.current) && (
               <button
+                onClick={() => {
+                  console.log('Task attachments button clicked (popup), showAttachmentsModal=', showAttachmentsModal);
+                  setShowAttachmentsModal(true);
+                }}
+                className="flex items-center p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors"
+                title={`Anexos (${attachmentCount})`}
+                aria-label={`Anexos (${attachmentCount})`}
+              >
+                <Paperclip size={20} />
+                <span className="ml-1 text-xs">{attachmentCount}</span>
+              </button>
+            )}
+
+            {(taskId || isCreatedRef.current) && (
+              <button
                 onClick={() => setShowTimeSheetModal(true)}
                 className="p-2 text-gray-400 hover:text-orange-400 hover:bg-gray-800 rounded transition-colors"
                 title="Registrar horas"
@@ -1210,6 +1235,20 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, onEx
         <Toast
           message={toast.message}
           onClose={() => setToast(null)}
+        />
+      )}
+
+      {/* Attachments Modal */}
+      {showAttachmentsModal && (taskId || isCreatedRef.current) && (
+        <AttachmentsModal
+          noteId={taskId || task.id}
+          attachments={task.attachments || []}
+          onChange={(newList) => {
+            setTask(prev => ({ ...prev, attachments: newList }));
+            trackChange({ attachments: newList });
+          }}
+          onClose={() => setShowAttachmentsModal(false)}
+          disabledUpload={task.id.startsWith('temp-')}
         />
       )}
 

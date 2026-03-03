@@ -44,6 +44,7 @@ interface AppState {
   taskFilters: TaskFilters;
   timeSheetFilters: TimeSheetFilters;
   isNotesListCollapsed: boolean; // REQ-001.13.2: NotesList collapsed state
+  isAttachmentsSidebarOpen: boolean; // REQ-015: Collapsible attachments panel
   isSidebarVisible: boolean; // visibility of the left navigation sidebar
   // REQ-010: Tab navigation
   activeTab: ActiveTab;
@@ -100,6 +101,10 @@ interface AppContextValue extends AppState {
   isNotesListCollapsed: boolean;
   setNotesListCollapsed: (collapsed: boolean) => void;
   toggleNotesListCollapsed: () => void;
+  // REQ-015: Attachments sidebar control
+  isAttachmentsSidebarOpen: boolean;
+  setAttachmentsSidebarOpen: (open: boolean) => void;
+  toggleAttachmentsSidebar: () => void;
   // sidebar visibility control (needed when notes list collapses)
   isSidebarVisible: boolean;
   setSidebarVisible: (visible: boolean) => void;
@@ -161,6 +166,7 @@ export function AppProvider({ children }: AppProviderProps) {
     taskFilters: { status: '', clientId: '', projectId: '' },
     timeSheetFilters: { startDate: '', endDate: '', clientId: '' },
     isNotesListCollapsed: false, // REQ-001.13.2: NotesList collapsed state
+    isAttachmentsSidebarOpen: false, // REQ-015: sidebar collapsed by default
     isSidebarVisible: true, // track sidebar visibility for collapse behaviour
     // REQ-010: Tab navigation
     activeTab: 'bitacora',
@@ -873,6 +879,13 @@ export function AppProvider({ children }: AppProviderProps) {
           return { ...s, isNotesListCollapsed: false, isSidebarVisible: prevSidebarVisibleRef.current };
         }
       });
+    },
+    // REQ-015: Attachments sidebar control
+    setAttachmentsSidebarOpen: (open) => {
+      setState(s => ({ ...s, isAttachmentsSidebarOpen: open }));
+    },
+    toggleAttachmentsSidebar: () => {
+      setState(s => ({ ...s, isAttachmentsSidebarOpen: !s.isAttachmentsSidebarOpen }));
     },
     // sidebar visibility helpers
     isSidebarVisible: state.isSidebarVisible,

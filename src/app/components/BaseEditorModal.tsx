@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, ReactNode } from 'react';
-import { X, Save, Loader2, Maximize2, Minimize2, Pencil, Check, ExternalLink, Star, Archive, ArchiveRestore, Trash2 } from 'lucide-react';
+import { X, Save, Loader2, Maximize2, Minimize2, Pencil, Check, ExternalLink, Star, Archive, ArchiveRestore, Trash2, Paperclip } from 'lucide-react';
 import { TipTapEditor, TipTapEditorHandle } from './TipTapEditor';
-import { AttachmentsPanel } from './AttachmentsPanel';
+import { AttachmentsModal } from './AttachmentsModal';
 import { Toast } from './Toast';
 import { UnsavedChangesModal } from './UnsavedChangesModal';
 import { useApp } from '../context/AppContext';
@@ -33,6 +33,7 @@ export function BaseEditorModal({
   inline = false,
 }: BaseEditorModalProps) {
   const { updateNote, refreshNotes, toggleFavorite, autoSaveEnabled, setIsDirty: setGlobalIsDirty, setPendingChanges: setGlobalPendingChanges, deleteNote, setSelectedNoteId } = useApp();
+  const [showAttachmentsModal, setShowAttachmentsModal] = useState(false);
   
   const [note, setNote] = useState<Note>(defaultNote);
   const [loading, setLoading] = useState(!!noteId);
@@ -445,6 +446,21 @@ export function BaseEditorModal({
               </button>
             )}
             
+            {/* Attachments sidebar toggle */}
+            {(noteId || isCreatedRef.current) && (
+              <button
+                onClick={() => {
+                  console.log('Attachments button clicked, showAttachmentsModal=', showAttachmentsModal);
+                  setShowAttachmentsModal(true);
+                }}
+                className="flex items-center p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors"
+                title={`Anexos (${note.attachments?.length || 0})`}
+                aria-label={`Anexos (${note.attachments?.length || 0})`}
+              >
+                <Paperclip size={20} />
+                <span className="ml-1 text-xs">{note.attachments?.length || 0}</span>
+              </button>
+            )}
             {/* Expand to popup button */}
             {onExpandToPopup && (
               <button
@@ -481,30 +497,6 @@ export function BaseEditorModal({
             />
           </div>
 
-          {/* Attachments */}
-          <div className="border-t border-gray-800 pt-6">
-            <AttachmentsPanel
-              noteId={note.id}
-              attachments={note.attachments || []}
-              onAttachmentAdded={(attachment: AttachmentMeta) => {
-                const updatedAttachments = [...(note.attachments || []), attachment];
-                setNote(prev => ({ ...prev, attachments: updatedAttachments }));
-                trackChange({ attachments: updatedAttachments });
-              }}
-              onAttachmentDeleted={(attachmentId: string) => {
-                const updatedAttachments = (note.attachments || []).filter(a => a.id !== attachmentId);
-                setNote(prev => ({ ...prev, attachments: updatedAttachments }));
-                trackChange({ attachments: updatedAttachments });
-              }}
-              onAttachmentRenamed={(attachmentId: string, newName: string) => {
-                const updatedAttachments = (note.attachments || []).map(
-                  a => a.id === attachmentId ? { ...a, originalName: newName } : a
-                );
-                setNote(prev => ({ ...prev, attachments: updatedAttachments }));
-                trackChange({ attachments: updatedAttachments });
-              }}
-            />
-          </div>
         </div>
 
 
@@ -523,6 +515,20 @@ export function BaseEditorModal({
           onCancel={() => setShowUnsavedModal(false)}
           onSave={handleSaveAndClose}
         />
+
+        {/* Attachments Modal */}
+        {showAttachmentsModal && (noteId || isCreatedRef.current) && (
+          <AttachmentsModal
+            noteId={noteId || note.id}
+            attachments={note.attachments || []}
+            onChange={(newList) => {
+              setNote(prev => ({ ...prev, attachments: newList }));
+              trackChange({ attachments: newList });
+            }}
+            onClose={() => setShowAttachmentsModal(false)}
+            disabledUpload={note.id.startsWith('temp-')}
+          />
+        )}
       </div>
     );
   }
@@ -535,6 +541,19 @@ export function BaseEditorModal({
         if (e.target === e.currentTarget) handleClose();
       }}
     >
+      {/* Attachments Modal (popup) */}
+      {showAttachmentsModal && (noteId || isCreatedRef.current) && (
+        <AttachmentsModal
+          noteId={noteId || note.id}
+          attachments={note.attachments || []}
+          onChange={(newList) => {
+            setNote(prev => ({ ...prev, attachments: newList }));
+            trackChange({ attachments: newList });
+          }}
+          onClose={() => setShowAttachmentsModal(false)}
+          disabledUpload={note.id.startsWith('temp-')}
+        />
+      )}
       <div className={`bg-gray-900 rounded-lg border border-gray-700 flex flex-col shadow-2xl transition-all duration-200 ${
         isMaximized 
           ? 'w-full h-full max-w-none max-h-none m-0 rounded-none' 
@@ -682,30 +701,6 @@ export function BaseEditorModal({
             />
           </div>
 
-          {/* Attachments */}
-          <div className="border-t border-gray-800 pt-6">
-            <AttachmentsPanel
-              noteId={note.id}
-              attachments={note.attachments || []}
-              onAttachmentAdded={(attachment: AttachmentMeta) => {
-                const updatedAttachments = [...(note.attachments || []), attachment];
-                setNote(prev => ({ ...prev, attachments: updatedAttachments }));
-                trackChange({ attachments: updatedAttachments });
-              }}
-              onAttachmentDeleted={(attachmentId: string) => {
-                const updatedAttachments = (note.attachments || []).filter(a => a.id !== attachmentId);
-                setNote(prev => ({ ...prev, attachments: updatedAttachments }));
-                trackChange({ attachments: updatedAttachments });
-              }}
-              onAttachmentRenamed={(attachmentId: string, newName: string) => {
-                const updatedAttachments = (note.attachments || []).map(
-                  a => a.id === attachmentId ? { ...a, originalName: newName } : a
-                );
-                setNote(prev => ({ ...prev, attachments: updatedAttachments }));
-                trackChange({ attachments: updatedAttachments });
-              }}
-            />
-          </div>
         </div>
 
         {/* Footer */}

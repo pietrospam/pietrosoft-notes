@@ -158,7 +158,7 @@ function AppLayout() {
   return (
     <div className="h-screen flex flex-col bg-gray-950 text-white overflow-hidden">
       <TopBar />
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden relative">
         {isSidebarVisible && <Sidebar />}
         <MainContent />
       </div>

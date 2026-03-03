@@ -13,6 +13,7 @@ export { UnsavedChangesModal } from './UnsavedChangesModal';
 export { TimeSheetView } from './TimeSheetView';
 export { TimeSheetModal } from './TimeSheetModal';
 export { FloatingActionButton } from './FloatingActionButton';
+export { AttachmentsSidebar } from './AttachmentsSidebar';
 // Editor Modals
 export { BaseEditorModal } from './BaseEditorModal';
 export { TaskEditorModal } from './TaskEditorModal';

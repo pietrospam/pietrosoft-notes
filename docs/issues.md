@@ -369,3 +369,14 @@ RESOLUCION :
 1. Se añadió la misma condición de renderizado de `<TaskActivityLogModal>` dentro de la rama `if (inline)` del componente `TaskEditorModal`.
 2. El modal ahora funciona tanto en modo inline como en popup, mostrando «No hay historial» si no hay registros.
 3. Se mantuvo el estado shared `showActivityLog` para la lógica.
+
+## Issue 36: Panel lateral de anexos colapsable
+ESTADO : RESUELTO
+DESCRIPCION : El usuario pidió poder acceder a los archivos adjuntos en una sección lateral que no interfiera con la edición. El requisito describía un botón de clip con contador, que al pulsarlo abre un panel sobre el contenido y que se cierra al hacer clic fuera o pulsar de nuevo.
+RESOLUCION :
+1. Se creó el componente `AttachmentsSidebar` que muestra un botón fijo en el margen derecho y, al estar abierto, renderiza un panel de 288px con `AttachmentsPanel` dentro.
+2. Se añadió el estado `isAttachmentsSidebarOpen` a `AppContext` junto con los métodos `setAttachmentsSidebarOpen` y `toggleAttachmentsSidebar`.
+3. El sidebar sólo aparece cuando hay una nota seleccionada y ésta no es temporal (sin guardar).
+4. El panel se cierra automáticamente si se cambia de nota o si el usuario hace clic fuera de él; el botón alterna el estado cuando se pulsa.
+5. Se actualizó `page.tsx` para incluir el componente y ajustar el layout, y se exportó desde el índice de componentes.
+6. Se añadió `REQ-015` al directorio de requerimientos con especificaciones detalladas.
