@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { TipTapEditor } from './TipTapEditor';
+import { Pencil, Trash2 } from 'lucide-react';
 import type { TaskComment } from '@/lib/types';
 
 interface TaskCommentsProps {
@@ -63,15 +64,15 @@ export function TaskComments({ taskId, currentUser }: TaskCommentsProps) {
   };
 
   return (
-    <div className="mt-6">
-      <h3 className="text-lg font-semibold mb-2">Comentarios</h3>
+    <div className="mt-4">
+      <h3 className="text-base font-semibold mb-1">Comentarios</h3>
       {loading && <p>cargando...</p>}
       {comments.length === 0 && !loading && <p className="text-gray-500">Sin comentarios</p>}
-      <div className="space-y-4">
+      <div className="space-y-1">
         {comments.map(c => (
-          <div key={c.id} className="bg-gray-800 p-3 rounded">
-            <div className="flex justify-between text-xs text-gray-400 mb-1">
-              <span>{c.author}</span>
+          <div key={c.id} className="bg-gray-800 p-1 rounded text-xs">
+            <div className="flex justify-between text-[10px] text-gray-400 mb-1">
+              <span className="truncate max-w-[120px]">{c.author}</span>
               <span>{new Date(c.createdAt).toLocaleString()}</span>
             </div>
             <TipTapEditor
@@ -80,15 +81,21 @@ export function TaskComments({ taskId, currentUser }: TaskCommentsProps) {
               readOnly={true}
             />
             {c.author === currentUser && (
-              <div className="flex gap-2 mt-2">
+              <div className="flex gap-2 mt-1 text-gray-400">
                 <button
                   onClick={() => setEditing({ id: c.id, content: c.content as object })}
-                  className="text-blue-400 text-sm"
-                >editar</button>
+                  className="p-1 hover:text-white"
+                  title="Editar"
+                >
+                  <Pencil size={14} />
+                </button>
                 <button
                   onClick={() => handleDelete(c.id)}
-                  className="text-red-400 text-sm"
-                >eliminar</button>
+                  className="p-1 hover:text-white"
+                  title="Eliminar"
+                >
+                  <Trash2 size={14} />
+                </button>
               </div>
             )}
           </div>
@@ -97,7 +104,7 @@ export function TaskComments({ taskId, currentUser }: TaskCommentsProps) {
 
       {/* New / edit form */}
       {(editing || newContent !== null) && (
-        <div className="mt-4 bg-gray-800 p-3 rounded">
+        <div className="mt-2 bg-gray-800 p-2 rounded">
           <h4 className="text-sm font-medium mb-1">
             {editing ? 'Editar comentario' : 'Nuevo comentario'}
           </h4>
@@ -129,7 +136,7 @@ export function TaskComments({ taskId, currentUser }: TaskCommentsProps) {
       {!editing && newContent === null && (
         <button
           onClick={() => setNewContent({ type: 'doc', content: [] })}
-          className="mt-4 text-blue-400 text-sm"
+          className="mt-2 text-blue-400 text-sm"
         >Agregar comentario</button>
       )}
     </div>
