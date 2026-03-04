@@ -62,6 +62,8 @@ export function BaseEditorModal({
   const pendingChangesRef = useRef<Partial<Note>>({});
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isCreatedRef = useRef(false); // Track if note was created
+  // Track if editor content has been initialized (to ignore TipTap's initial onChange)
+  const contentInitializedRef = useRef(!noteId); // New notes start initialized
 
   // Persist note and return new ID (for attachments/images before first save)
   const persistNote = useCallback(async (): Promise<string | null> => {
@@ -137,6 +139,9 @@ export function BaseEditorModal({
   // Load existing note data
   useEffect(() => {
     if (noteId) {
+      // Reset initialization flag while loading (to ignore TipTap's initial onChange)
+      contentInitializedRef.current = false;
+      
       const loadNote = async () => {
         try {
           const res = await fetch(`/api/notes/${noteId}`);
@@ -147,6 +152,11 @@ export function BaseEditorModal({
             // Sync fields with loaded data (for Connection, Note editors)
             onFieldsChange?.(data);
             setIsDirty(false);
+            
+            // Wait for TipTap to initialize before enabling change tracking
+            setTimeout(() => {
+              contentInitializedRef.current = true;
+            }, 150);
           }
         } catch (err) {
           console.error('Error loading note:', err);
@@ -227,7 +237,15 @@ export function BaseEditorModal({
   };
 
   const handleContentChange = (contentJson: object) => {
-    trackChange({ contentJson });
+    // Ignore TipTap's initial onChange events during load
+    if (!contentInitializedRef.current) return;
+    
+    // Only mark dirty if content actually changed
+    const currentJson = JSON.stringify(note.contentJson);
+    const newJson = JSON.stringify(contentJson);
+    if (currentJson !== newJson) {
+      trackChange({ contentJson });
+    }
   };
 
   // Manual save (or create for new notes)

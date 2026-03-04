@@ -106,6 +106,8 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
   const titleInputRef = useRef<HTMLInputElement>(null);
   const pendingChangesRef = useRef<Partial<TaskNote>>({});
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track if editor content has been initialized (to ignore TipTap's initial onChange)
+  const contentInitializedRef = useRef(!taskId); // New tasks start initialized
 
   // Persist task and return new ID (for attachments/images before first save)
   const persistTask = useCallback(async (): Promise<string | null> => {
@@ -198,6 +200,9 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
   // Load task data (edit mode)
   useEffect(() => {
     if (taskId) {
+      // Reset initialization flag while loading (to ignore TipTap's initial onChange)
+      contentInitializedRef.current = false;
+      
       const loadTask = async () => {
         try {
           const res = await fetch(`/api/notes/${taskId}`);
@@ -206,6 +211,11 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
             setTask(data);
             setTitle(data.title);
             setIsDirty(false);
+            
+            // Wait for TipTap to initialize before enabling change tracking
+            setTimeout(() => {
+              contentInitializedRef.current = true;
+            }, 150);
             
             // Find client for this project
             if (data.projectId) {
@@ -378,7 +388,15 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
   }, [title, task.ticketPhaseCode, task.shortDescription, parseTaskTitle, trackChange]);
 
   const handleContentChange = (contentJson: object) => {
-    trackChange({ contentJson });
+    // Ignore TipTap's initial onChange events during load
+    if (!contentInitializedRef.current) return;
+    
+    // Only mark dirty if content actually changed
+    const currentJson = JSON.stringify(task.contentJson);
+    const newJson = JSON.stringify(contentJson);
+    if (currentJson !== newJson) {
+      trackChange({ contentJson });
+    }
   };
 
   const handleSave = async () => {

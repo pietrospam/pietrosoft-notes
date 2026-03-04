@@ -45,6 +45,8 @@ export function EditorPanel() {
   // Track pending changes
   const pendingChangesRef = useRef<Partial<Note>>({});
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track if editor content has been initialized (to ignore TipTap's initial onChange)
+  const contentInitializedRef = useRef(false);
 
   // Track the previous note ID to detect actual note changes
   const prevNoteIdRef = useRef<string | null>(null);
@@ -57,6 +59,12 @@ export function EditorPanel() {
         setTitle(selectedNote.title);
         setLocalNote(selectedNote);
         prevNoteIdRef.current = selectedNote.id;
+        
+        // Reset initialization flag for new note (to ignore TipTap's initial onChange)
+        contentInitializedRef.current = false;
+        setTimeout(() => {
+          contentInitializedRef.current = true;
+        }, 150);
       }
       // For new notes (temp IDs), keep dirty state - they need to be saved
       const isTemp = selectedNote.id.startsWith('temp-');
@@ -65,6 +73,9 @@ export function EditorPanel() {
         // Reset dirty state and pending changes when switching to existing notes
         pendingChangesRef.current = {};
         setIsDirty(false);
+      } else if (isTemp) {
+        // New notes start with content tracking enabled
+        contentInitializedRef.current = true;
       }
       // For new notes, keep isDirty true so save button is enabled
     }
@@ -181,8 +192,16 @@ export function EditorPanel() {
   };
 
   const handleContentChange = (contentJson: object) => {
+    // Ignore TipTap's initial onChange events during load
+    if (!contentInitializedRef.current) return;
+    
     if (selectedNote) {
-      trackChange({ contentJson });
+      // Only mark dirty if content actually changed
+      const currentJson = JSON.stringify(localNote?.contentJson);
+      const newJson = JSON.stringify(contentJson);
+      if (currentJson !== newJson) {
+        trackChange({ contentJson });
+      }
     }
   };
 
