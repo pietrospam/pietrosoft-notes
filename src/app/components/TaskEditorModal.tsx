@@ -88,6 +88,8 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
   const [showCreateClient, setShowCreateClient] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
+  const [commentsCount, setCommentsCount] = useState(0);
+  const [bodyCollapsed, setBodyCollapsed] = useState(false); // collapse body when comments exist
   
   // Sync local isDirty with global context (for inline mode navigation protection)
   const setIsDirty = useCallback((dirty: boolean) => {
@@ -733,20 +735,67 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
         </div>
       </div>
 
-      {/* Editor */}
+      {/* Editor - collapsible only when comments exist */}
       <div className="mb-4 border-t border-gray-800 pt-3 -mx-4 px-4 py-3 bg-gray-950">
-        <TipTapEditor
-          ref={editorRef}
-          content={task.contentJson}
-          onChange={handleContentChange}
-          noteId={task.id}
-          onPersistNote={persistTask}
-          placeholder="Descripción de la tarea..."
-        />
+        {bodyCollapsed && commentsCount > 0 ? (
+          <>
+            <div 
+              className="overflow-hidden cursor-pointer"
+              style={{ maxHeight: '7.5rem' }}
+              onClick={() => setBodyCollapsed(false)}
+            >
+              <TipTapEditor
+                content={task.contentJson}
+                onChange={() => {}}
+                readOnly={true}
+                placeholder=""
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setBodyCollapsed(false)}
+              className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 mt-2 font-semibold"
+            >
+              <span>Ver más...</span>
+            </button>
+          </>
+        ) : (
+          <>
+            <TipTapEditor
+              ref={editorRef}
+              content={task.contentJson}
+              onChange={handleContentChange}
+              noteId={task.id}
+              onPersistNote={persistTask}
+              placeholder="Descripción de la tarea..."
+            />
+            {commentsCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setBodyCollapsed(true)}
+                className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 mt-2 font-semibold"
+              >
+                <span>Ver menos...</span>
+              </button>
+            )}
+          </>
+        )}
       </div>
 
       {/* Comments */}
-      <TaskComments taskId={taskId || task.id} currentUser={currentUser} />
+      <TaskComments 
+        taskId={taskId || task.id} 
+        currentUser={currentUser} 
+        onAttachmentsChange={refreshNotes}
+        onSaveTask={handleSave}
+        onCommentsLoaded={(count) => {
+          setCommentsCount(count);
+          // Auto-collapse body when comments exist (only on first load)
+          if (count > 0 && commentsCount === 0) {
+            setBodyCollapsed(true);
+          }
+        }}
+      />
 
     </>
   );
@@ -789,6 +838,19 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
                     title || 'Sin título'
                   )}
                 </h2>
+                <button
+                  onClick={() => {
+                    const titleText = task.ticketPhaseCode 
+                      ? `#${task.ticketPhaseCode} ${task.shortDescription || title || ''}`.trim()
+                      : (title || '');
+                    navigator.clipboard.writeText(titleText);
+                    setToast({ message: 'Título copiado' });
+                  }}
+                  className="p-1 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors"
+                  title="Copiar título"
+                >
+                  <Copy size={16} />
+                </button>
                 <button
                   onClick={() => {
                     setIsEditingTitle(true);
@@ -1045,6 +1107,19 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
                     title || 'Sin título'
                   )}
                 </h2>
+                <button
+                  onClick={() => {
+                    const titleText = task.ticketPhaseCode 
+                      ? `#${task.ticketPhaseCode} ${task.shortDescription || title || ''}`.trim()
+                      : (title || '');
+                    navigator.clipboard.writeText(titleText);
+                    setToast({ message: 'Título copiado' });
+                  }}
+                  className="p-1 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors"
+                  title="Copiar título"
+                >
+                  <Copy size={16} />
+                </button>
                 <button
                   onClick={() => {
                     setIsEditingTitle(true);

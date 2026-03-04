@@ -141,3 +141,13 @@ body {
   scrollbar-width: thin;
   scrollbar-color: #374151 transparent;
 }
+
+/* Compact prose for comments - remove excess spacing */
+.prose-compact p {
+  margin: 0;
+}
+.prose-compact ul,
+.prose-compact ol {
+  margin: 0;
+  padding-left: 1rem;
+}

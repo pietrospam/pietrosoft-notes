@@ -1,24 +1,12 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { Search, Plus, Save, FileText, CheckSquare, Link, ChevronDown, X, Clock, BookOpen } from 'lucide-react';
-import { Toast } from './Toast';
-import type { NoteType } from '@/lib/types';
+import { Search, Save, X, Clock, BookOpen } from 'lucide-react';
 import type { ActiveTab } from '../context/AppContext';
 
-const noteTypes: { type: NoteType; label: string; icon: React.ElementType }[] = [
-  { type: 'general', label: 'General', icon: FileText },
-  { type: 'task', label: 'Task', icon: CheckSquare },
-  { type: 'connection', label: 'Connection', icon: Link },
-  // timesheet removed per REQ-002 - created only from tasks
-];
+// top-right "new note" dropdown removed, FAB handles creation
 
-const typeLabels: Record<NoteType, string> = {
-  general: 'Nota',
-  task: 'Task',
-  connection: 'Conexión',
-};
 
 // REQ-010: Tab definitions
 const tabs: { id: ActiveTab; label: string; icon: React.ElementType }[] = [
@@ -27,33 +15,11 @@ const tabs: { id: ActiveTab; label: string; icon: React.ElementType }[] = [
 ];
 
 export function TopBar() {
-  const { searchQuery, setSearchQuery, createNote, currentView, isSaving, lastSaved, selectedNote, confirmNavigation, filteredNotes, setSelectedNoteId, activeTab, setActiveTab } = useApp();
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [toast, setToast] = useState<{ message: string } | null>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const { searchQuery, setSearchQuery, isSaving, lastSaved, selectedNote, confirmNavigation, filteredNotes, setSelectedNoteId, activeTab, setActiveTab } = useApp();
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setDropdownOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  // top-right dropdown removed; no additional state or effects
 
-  const handleCreateNote = async (type: NoteType) => {
-    setDropdownOpen(false);
-    // Check for unsaved changes before creating
-    confirmNavigation(async () => {
-      const note = await createNote(type);
-      if (note) {
-        setToast({ message: `${typeLabels[type]} creada` });
-      }
-    });
-  };
 
   const handleSearchKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
@@ -148,41 +114,7 @@ export function TopBar() {
         </div>
       )}
 
-      {/* New Note Dropdown */}
-      {currentView !== 'config' && (
-        <div className="relative" ref={dropdownRef}>
-          <button
-            onClick={() => setDropdownOpen(!dropdownOpen)}
-            className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            <Plus size={18} />
-            <ChevronDown size={14} />
-          </button>
-          
-          {dropdownOpen && (
-            <div className="absolute right-0 mt-2 w-48 bg-gray-800 border border-gray-700 rounded-lg shadow-lg z-50 py-1">
-              {noteTypes.map(({ type, label, icon: Icon }) => (
-                <button
-                  key={type}
-                  onClick={() => handleCreateNote(type)}
-                  className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
-                >
-                  <Icon size={16} />
-                  <span>{label}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
 
-      {/* Toast notification */}
-      {toast && (
-        <Toast
-          message={toast.message}
-          onClose={() => setToast(null)}
-        />
-      )}
     </header>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { FileText, CheckSquare, Link, Link2, Clock, Plus, X, Star, Paperclip, GripVertical, ChevronRight, ChevronLeft, User, Key, Check } from 'lucide-react';
+import { FileText, CheckSquare, Link, Link2, Clock, Plus, X, Star, Paperclip, GripVertical, ChevronRight, ChevronLeft, User, Key, Check, Copy } from 'lucide-react';
 import type { ConnectionNote } from '@/lib/types';
 import { TimeSheetModal } from './TimeSheetModal';
 import { TaskEditorModal } from './TaskEditorModal';
@@ -10,7 +10,7 @@ import { NoteEditorModal } from './NoteEditorModal';
 import { ConnectionEditorModal } from './ConnectionEditorModal';
 import { Toast } from './Toast';
 import { getContrastTextColor } from '@/lib/colorPalette';
-import type { NoteType, TaskNote } from '@/lib/types';
+import type { NoteType, TaskNote, Note } from '@/lib/types';
 
 // Note: timesheet is excluded from NotesList filters as per REQ-002
 // TimeSheets are now viewed in a dedicated view
@@ -66,7 +66,7 @@ export function NotesList() {
   } = useApp();
 
   // track which connection field was copied for visual feedback
-  const [copiedInfo, setCopiedInfo] = useState<{ id: string; field: 'url' | 'username' | 'password' } | null>(null);
+  const [copiedInfo, setCopiedInfo] = useState<{ id: string; field: 'url' | 'username' | 'password' | 'title' } | null>(null);
 
   const handleConnCopy = async (note: ConnectionNote, field: 'url' | 'username' | 'password') => {
     const value = note[field] || '';
@@ -76,6 +76,27 @@ export function NotesList() {
       setTimeout(() => setCopiedInfo(null), 2000);
     } catch (err) {
       console.error('Failed to copy connection field:', err);
+    }
+  };
+
+  const handleCopyTitle = async (note: Note) => {
+    let titleText = '';
+    if (note.type === 'task') {
+      const taskNote = note as TaskNote;
+      if (taskNote.ticketPhaseCode) {
+        titleText = `#${taskNote.ticketPhaseCode} ${taskNote.shortDescription || note.title || ''}`;
+      } else {
+        titleText = note.title || '';
+      }
+    } else {
+      titleText = note.title || '';
+    }
+    try {
+      await navigator.clipboard.writeText(titleText.trim());
+      setCopiedInfo({ id: note.id, field: 'title' });
+      setTimeout(() => setCopiedInfo(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy title:', err);
     }
   };
   
@@ -624,6 +645,18 @@ export function NotesList() {
                           note.title || 'Sin título'
                         )}
                       </h3>
+                      {/* Copy title button */}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleCopyTitle(note); }}
+                        title="Copiar título"
+                        className="p-1 text-gray-400 hover:text-white transition-colors flex-shrink-0"
+                      >
+                        {copiedInfo?.id === note.id && copiedInfo.field === 'title' ? (
+                          <Check size={14} className="text-green-400" />
+                        ) : (
+                          <Copy size={14} />
+                        )}
+                      </button>
                       {/* connection-specific copy icons */}
                       {note.type === 'connection' && (
                         <div className="flex items-center gap-2 ml-auto text-gray-400">

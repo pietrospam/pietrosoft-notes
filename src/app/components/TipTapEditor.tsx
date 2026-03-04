@@ -27,13 +27,14 @@ interface TipTapEditorProps {
   noteId?: string; // Required for image uploads
   onPersistNote?: () => Promise<string | null>; // Called to persist temp notes before upload
   readOnly?: boolean; // disable editing and hide toolbar
+  compact?: boolean; // reduce height for inline comment inputs
 }
 
 export interface TipTapEditorHandle {
   focus: () => void;
 }
 
-export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(function TipTapEditor({ content, onChange, placeholder = 'Start writing...', noteId, onPersistNote, readOnly = false }, ref) {
+export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(function TipTapEditor({ content, onChange, placeholder = 'Start writing...', noteId, onPersistNote, readOnly = false, compact = false }, ref) {
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -121,7 +122,11 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
     content: content || undefined,
     editorProps: {
       attributes: {
-        class: 'prose prose-invert prose-sm max-w-none focus:outline-none min-h-[200px]',
+        class: readOnly 
+          ? 'prose prose-invert prose-sm prose-compact max-w-none' 
+          : compact
+            ? 'prose prose-invert prose-sm max-w-none focus:outline-none min-h-[60px]'
+            : 'prose prose-invert prose-sm max-w-none focus:outline-none min-h-[200px]',
       },
       handlePaste: (view, event) => {
         const items = event.clipboardData?.items;
@@ -185,6 +190,17 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
       editor?.chain().focus().run();
     },
   }), [editor]);
+
+  // Sync editable state with readOnly prop
+  useEffect(() => {
+    if (editor) {
+      editor.setEditable(!readOnly);
+      if (!readOnly) {
+        // Focus editor when switching to edit mode
+        setTimeout(() => editor.chain().focus().run(), 50);
+      }
+    }
+  }, [editor, readOnly]);
 
   // Update content when it changes externally
   useEffect(() => {

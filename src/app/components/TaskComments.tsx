@@ -8,12 +8,15 @@ import type { TaskComment } from '@/lib/types';
 interface TaskCommentsProps {
   taskId: string;
   currentUser: string;
+  onAttachmentsChange?: () => void; // Called when images are added via paste
+  onCommentsLoaded?: (count: number) => void; // Reports comments count to parent
+  onSaveTask?: () => void; // Called on Ctrl+S to also save the parent task
 }
 
-export function TaskComments({ taskId, currentUser }: TaskCommentsProps) {
+export function TaskComments({ taskId, currentUser, onAttachmentsChange, onCommentsLoaded, onSaveTask }: TaskCommentsProps) {
   const [comments, setComments] = useState<TaskComment[]>([]);
   const [loading, setLoading] = useState(false);
-  const [newContent, setNewContent] = useState<object | null>(null);
+  const [newContent, setNewContent] = useState<object>({ type: 'doc', content: [] });
   const [editing, setEditing] = useState<{ id: string; content: object } | null>(null);
 
   const load = async () => {
@@ -21,7 +24,9 @@ export function TaskComments({ taskId, currentUser }: TaskCommentsProps) {
     try {
       const res = await fetch(`/api/tasks/${taskId}/comments`);
       if (res.ok) {
-        setComments(await res.json());
+        const data = await res.json();
+        setComments(data);
+        onCommentsLoaded?.(data.length);
       }
     } finally {
       setLoading(false);
@@ -33,15 +38,21 @@ export function TaskComments({ taskId, currentUser }: TaskCommentsProps) {
   }, [taskId]);
 
   const handleAdd = async () => {
-    if (!newContent) return;
+    // Check if there's actual content (not just empty doc)
+    const hasContent = newContent && 
+      (newContent as { content?: unknown[] }).content && 
+      (newContent as { content: unknown[] }).content.length > 0;
+    if (!hasContent) return;
+    
     const res = await fetch(`/api/tasks/${taskId}/comments`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ author: currentUser, content: newContent }),
     });
     if (res.ok) {
-      setNewContent(null);
+      setNewContent({ type: 'doc', content: [] }); // Reset to empty doc
       load();
+      onAttachmentsChange?.(); // Refresh attachments in case images were pasted
     }
   };
 
@@ -55,6 +66,7 @@ export function TaskComments({ taskId, currentUser }: TaskCommentsProps) {
     if (res.ok) {
       setEditing(null);
       load();
+      onAttachmentsChange?.(); // Refresh attachments in case images were pasted
     }
   };
 
@@ -68,77 +80,103 @@ export function TaskComments({ taskId, currentUser }: TaskCommentsProps) {
       <h3 className="text-base font-semibold mb-1">Comentarios</h3>
       {loading && <p>cargando...</p>}
       {comments.length === 0 && !loading && <p className="text-gray-500">Sin comentarios</p>}
-      <div className="space-y-1">
+      <div className="divide-y divide-gray-700 text-xs">
         {comments.map(c => (
-          <div key={c.id} className="bg-gray-800 p-1 rounded text-xs">
-            <div className="flex justify-between text-[10px] text-gray-400 mb-1">
+          <div key={c.id} className="py-0.5">
+            <div className="flex justify-between text-[10px] text-gray-400">
               <span className="truncate max-w-[120px]">{c.author}</span>
               <span>{new Date(c.createdAt).toLocaleString()}</span>
             </div>
-            <TipTapEditor
-              content={c.content as object}
-              onChange={() => {}}
-              readOnly={true}
-            />
-            {c.author === currentUser && (
-              <div className="flex gap-2 mt-1 text-gray-400">
-                <button
-                  onClick={() => setEditing({ id: c.id, content: c.content as object })}
-                  className="p-1 hover:text-white"
-                  title="Editar"
-                >
-                  <Pencil size={14} />
-                </button>
-                <button
-                  onClick={() => handleDelete(c.id)}
-                  className="p-1 hover:text-white"
-                  title="Eliminar"
-                >
-                  <Trash2 size={14} />
-                </button>
+            {editing?.id === c.id ? (
+              <div
+                onKeyDown={(e) => {
+                  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                    e.preventDefault();
+                    handleUpdate();
+                    onSaveTask?.();
+                  }
+                }}
+              >
+                <TipTapEditor
+                  content={editing.content}
+                  onChange={json => setEditing(prev => prev ? { ...prev, content: json } : null)}
+                  placeholder="Escribe tu comentario..."
+                  readOnly={false}
+                  noteId={taskId}
+                  compact
+                />
+                <div className="flex gap-2 mt-1">
+                  <button
+                    onClick={handleUpdate}
+                    className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 rounded text-xs"
+                  >guardar</button>
+                  <button
+                    onClick={() => setEditing(null)}
+                    className="px-2 py-0.5 bg-gray-700 hover:bg-gray-600 rounded text-xs"
+                  >cancelar</button>
+                </div>
               </div>
+            ) : (
+              <>
+                <TipTapEditor
+                  content={c.content as object}
+                  onChange={() => {}}
+                  readOnly={true}
+                />
+                {c.author === currentUser && (
+                  <div className="flex gap-2 mt-1 text-gray-400">
+                    <button
+                      onClick={() => setEditing({ id: c.id, content: c.content as object })}
+                      className="p-1 hover:text-white"
+                      title="Editar"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(c.id)}
+                      className="p-1 hover:text-white"
+                      title="Eliminar"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         ))}
       </div>
 
-      {/* New / edit form */}
-      {(editing || newContent !== null) && (
-        <div className="mt-2 bg-gray-800 p-2 rounded">
-          <h4 className="text-sm font-medium mb-1">
-            {editing ? 'Editar comentario' : 'Nuevo comentario'}
-          </h4>
-          <TipTapEditor
-            content={(editing ? editing.content : newContent) as object | null}
-            onChange={json => {
-              if (editing) setEditing(prev => prev ? { ...prev, content: json } : null);
-              else setNewContent(json);
-            }}
-            placeholder="Escribe tu comentario..."
-            readOnly={false}
-          />
-          <div className="flex gap-2 mt-2">
-            <button
-              onClick={editing ? handleUpdate : handleAdd}
-              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm"
-            >guardar</button>
-            <button
-              onClick={() => {
-                setEditing(null);
-                setNewContent(null);
-              }}
-              className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm"
-            >cancelar</button>
-          </div>
+      {/* New comment input - always visible */}
+      <div 
+        className="mt-3 border border-gray-600 rounded-lg p-2 bg-gray-800/50"
+        onKeyDown={(e) => {
+          if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+            e.preventDefault();
+            handleAdd();
+            onSaveTask?.();
+          }
+        }}
+      >
+        <TipTapEditor
+          content={newContent}
+          onChange={json => setNewContent(json)}
+          placeholder="Escribe un comentario... (Ctrl+S para guardar)"
+          readOnly={false}
+          noteId={taskId}
+          compact
+        />
+        <div className="flex gap-2 mt-1">
+          <button
+            onClick={handleAdd}
+            className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 rounded text-xs"
+          >guardar</button>
+          <button
+            onClick={() => setNewContent({ type: 'doc', content: [] })}
+            className="px-2 py-0.5 bg-gray-700 hover:bg-gray-600 rounded text-xs"
+          >cancelar</button>
         </div>
-      )}
-
-      {!editing && newContent === null && (
-        <button
-          onClick={() => setNewContent({ type: 'doc', content: [] })}
-          className="mt-2 text-blue-400 text-sm"
-        >Agregar comentario</button>
-      )}
+      </div>
     </div>
   );
 }
