@@ -176,7 +176,7 @@ export interface TaskComment {
   id: UUID;
   taskId: UUID;
   author: string;
-  content: any; // TipTap JSON
+  content: unknown; // TipTap JSON
   createdAt: string; // ISO timestamp
 }
 

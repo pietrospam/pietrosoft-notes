@@ -71,6 +71,7 @@ model Note {
   attachmentFiles       Attachment[]    // REQ-007: Relation to attachment files
   activityLogs          TaskActivityLog[] // REQ-010: Activity history
   timesheetEntries      Timesheet[]     @relation("TimesheetTask")
+  comments             TaskComment[]   @relation("TaskComments")
 
   @@index([type])
   @@index([projectId])
@@ -167,7 +168,7 @@ model TaskComment {
   content   Json
   createdAt DateTime @default(now()) @map("created_at")
 
-  task      Note     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task      Note     @relation("TaskComments", fields: [taskId], references: [id], onDelete: Cascade)
 
   @@index([taskId])
   @@index([createdAt])

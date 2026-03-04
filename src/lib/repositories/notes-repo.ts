@@ -449,7 +449,7 @@ export interface TaskCommentRecord {
   id: string;
   taskId: string;
   author: string;
-  content: any;
+  content: unknown;
   createdAt: Date;
 }
 
@@ -463,7 +463,7 @@ export async function listTaskComments(taskId: string): Promise<TaskCommentRecor
 export async function createTaskComment(data: {
   taskId: string;
   author: string;
-  content: any;
+  content: Prisma.InputJsonValue;
 }): Promise<TaskCommentRecord> {
   const rec = await prisma.taskComment.create({ data });
   // record in activity log
@@ -477,7 +477,7 @@ export async function createTaskComment(data: {
   return rec;
 }
 
-export async function updateTaskComment(id: string, content: any): Promise<TaskCommentRecord> {
+export async function updateTaskComment(id: string, content: Prisma.InputJsonValue): Promise<TaskCommentRecord> {
   const rec = await prisma.taskComment.update({ where: { id }, data: { content } });
   // log update (author not tracked here)
   await prisma.taskActivityLog.create({

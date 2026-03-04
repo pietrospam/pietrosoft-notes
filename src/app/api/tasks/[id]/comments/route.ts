@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { listTaskComments, createTaskComment, updateTaskComment, deleteTaskComment } from '@/lib/repositories/notes-repo';
-import type { TaskCommentRecord } from '@/lib/repositories/notes-repo';
 
 // GET /api/tasks/[id]/comments
 export async function GET(request: Request, { params }: { params: { id: string } }) {
@@ -22,7 +21,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
 }
 
 // PUT to update comment
-export async function PUT(request: Request, { params }: { params: { id: string } }) {
+export async function PUT(request: Request) {
   const body = await request.json();
   const { id, content } = body;
   if (!id || content === undefined) {
@@ -33,7 +32,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
 }
 
 // DELETE comment
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(request: Request) {
   const url = new URL(request.url);
   const id = url.searchParams.get('id');
   if (!id) {
