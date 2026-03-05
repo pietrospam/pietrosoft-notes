@@ -53,6 +53,8 @@ interface AppState {
   // REQ-012: floating action button helpers
   configRequest: { tab: ConfigTab; create: boolean } | null;
   globalTimeSheetRequest: boolean;
+  // Cargar Horas modal
+  showCargarHorasModal: boolean;
   // Editor modal state
   editorModal: {
     isOpen: boolean;
@@ -121,6 +123,10 @@ interface AppContextValue extends AppState {
   globalTimeSheetRequest: boolean;
   requestTimeSheet: () => void;
   clearTimeSheetRequest: () => void;
+  // Cargar Horas modal
+  showCargarHorasModal: boolean;
+  openCargarHorasModal: () => void;
+  closeCargarHorasModal: () => void;
 }
 
 // ============================================================================
@@ -172,6 +178,7 @@ export function AppProvider({ children }: AppProviderProps) {
     activeTab: 'bitacora',
     configRequest: null,
     globalTimeSheetRequest: false,
+    showCargarHorasModal: false,
     selectedTimesheetClientId: null,
     expandedClientIds: [],
     // REQ-012: FAB helpers have been initialized above
@@ -470,6 +477,15 @@ export function AppProvider({ children }: AppProviderProps) {
 
   const clearTimeSheetRequest = useCallback(() => {
     setState(s => ({ ...s, globalTimeSheetRequest: false }));
+  }, [setState]);
+
+  // Cargar Horas modal controls
+  const openCargarHorasModal = useCallback(() => {
+    setState(s => ({ ...s, showCargarHorasModal: true }));
+  }, [setState]);
+
+  const closeCargarHorasModal = useCallback(() => {
+    setState(s => ({ ...s, showCargarHorasModal: false }));
   }, [setState]);
 
   // REQ-006: Toggle favorite status with optimistic update
@@ -926,6 +942,10 @@ export function AppProvider({ children }: AppProviderProps) {
     globalTimeSheetRequest: state.globalTimeSheetRequest,
     requestTimeSheet,
     clearTimeSheetRequest,
+    // Cargar Horas modal
+    showCargarHorasModal: state.showCargarHorasModal,
+    openCargarHorasModal,
+    closeCargarHorasModal,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

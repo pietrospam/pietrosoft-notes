@@ -5,6 +5,7 @@ import { Clock, Trash2, Download, ChevronUp, ChevronDown, AlertCircle, X, Folder
 import { useApp } from '../context/AppContext';
 import { Toast } from './Toast';
 import { TaskEditorModal } from './TaskEditorModal';
+import { CargarHorasModal } from './CargarHorasModal';
 import type { TaskNote, Project } from '@/lib/types';
 import { getContrastTextColor } from '@/lib/colorPalette';
 
@@ -50,7 +51,7 @@ type SortField = 'workDate' | 'clientName' | 'projectName' | 'taskTitle' | 'hour
 type SortDirection = 'asc' | 'desc';
 
 export function TimeSheetView() {
-  const { refreshNotes, selectedTimesheetClientId, clients } = useApp();
+  const { refreshNotes, selectedTimesheetClientId, clients, showCargarHorasModal, closeCargarHorasModal } = useApp();
   // NOTE: selectedTimesheetClientId is used for filtering; we previously
   // displayed the parent client name in the header but that was removed.
   // (kept here for potential future logic)
@@ -203,6 +204,15 @@ export function TimeSheetView() {
   }, [timesheets, selectedMonthStr, filterDateFrom, filterDateTo, filterClient, filterProject, selectedTimesheetClientId, clients]);
 
   const totalHours = filteredTimesheets.reduce((sum, ts) => sum + ts.hoursWorked, 0);
+  const totalImputadas = filteredTimesheets.filter(ts => ts.state === 'FINAL').reduce((sum, ts) => sum + ts.hoursWorked, 0);
+  const totalPendientes = filteredTimesheets.filter(ts => ts.state === 'DRAFT').reduce((sum, ts) => sum + ts.hoursWorked, 0);
+
+  // Spanish month names
+  const MONTH_NAMES = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+  ];
+  const monthName = MONTH_NAMES[selectedMonth - 1];
 
   // Sort filtered timesheets
   const sortedTimesheets = [...filteredTimesheets].sort((a, b) => {
@@ -1351,13 +1361,18 @@ export function TimeSheetView() {
             {/* Footer with totals */}
             <tfoot className="bg-gray-900 border-t-2 border-gray-700">
               <tr className="text-sm font-medium">
-                <td className="px-3 py-2 text-white" colSpan={3}>
-                  Total General
+                <td className="px-3 py-2 text-white" colSpan={2}>
+                  Total horas <span className="text-gray-500">({monthName} {selectedYear})</span>
                 </td>
                 <td className="px-3 py-2 text-white text-right font-mono">
                   {totalHours.toFixed(1)}
                 </td>
-                <td colSpan={3}></td>
+                <td className="px-3 py-2 text-gray-400">
+                  Imputadas: <span className="text-green-400 font-mono">{totalImputadas.toFixed(1)}</span>
+                </td>
+                <td className="px-3 py-2 text-gray-400" colSpan={2}>
+                  Pendientes: <span className="text-yellow-400 font-mono">{totalPendientes.toFixed(1)}</span>
+                </td>
               </tr>
             </tfoot>
           </table>
@@ -1575,6 +1590,24 @@ export function TimeSheetView() {
           }}
         />
       )}
+
+      {/* Cargar Horas Modal */}
+      <CargarHorasModal
+        isOpen={showCargarHorasModal}
+        onClose={closeCargarHorasModal}
+        timesheets={sortedTimesheets.map(ts => ({
+          id: ts.id,
+          workDate: ts.workDate,
+          hoursWorked: ts.hoursWorked,
+          description: ts.description,
+          projectName: ts.projectName,
+          taskCode: ts.taskCode,
+          state: ts.state,
+        }))}
+        onRefresh={fetchTimesheets}
+        selectedMonth={selectedMonth}
+        selectedYear={selectedYear}
+      />
     </div>
   );
 }

@@ -12,6 +12,7 @@ export { QuickCreateModal } from './QuickCreateModal';
 export { UnsavedChangesModal } from './UnsavedChangesModal';
 export { TimeSheetView } from './TimeSheetView';
 export { TimeSheetModal } from './TimeSheetModal';
+export { CargarHorasModal } from './CargarHorasModal';
 export { FloatingActionButton } from './FloatingActionButton';
 export { AttachmentsSidebar } from './AttachmentsSidebar';
 // Editor Modals
