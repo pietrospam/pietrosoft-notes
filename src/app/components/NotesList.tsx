@@ -230,7 +230,13 @@ export function NotesList() {
     
     confirmNavigation(() => {
       setSelectedNoteId(noteId);
-      // Do NOT collapse on selection - user navigates with arrows
+      // Focus the selected note card to enable keyboard navigation
+      setTimeout(() => {
+        const noteEl = noteRefs.current.get(noteId);
+        if (noteEl) {
+          noteEl.focus();
+        }
+      }, 0);
     });
   }, [setSelectedNoteId, selectedNoteId, confirmNavigation]);
 
@@ -329,18 +335,20 @@ export function NotesList() {
         newIndex = currentIndex > 0 ? currentIndex - 1 : (currentIndex === -1 ? 0 : 0);
       }
       
-      if (newIndex >= 0 && newIndex < filteredNotes.length) {
+      if (newIndex >= 0 && newIndex < filteredNotes.length && newIndex !== currentIndex) {
         const newNote = filteredNotes[newIndex];
-        handleSelectNote(newNote.id);
+        // Direct selection without confirmNavigation for fluid keyboard navigation
+        setSelectedNoteId(newNote.id);
         
-        // Scroll into view
+        // Scroll into view and focus
         const noteEl = noteRefs.current.get(newNote.id);
         if (noteEl) {
           noteEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          noteEl.focus();
         }
       }
     }
-  }, [filteredNotes, selectedNoteId, handleSelectNote, currentView, editorModal.isOpen, isNotesListCollapsed, handleEnterOnNote]);
+  }, [filteredNotes, selectedNoteId, setSelectedNoteId, currentView, editorModal.isOpen, isNotesListCollapsed, handleEnterOnNote]);
 
   useEffect(() => {
     document.addEventListener('keydown', handleKeyDown);
@@ -514,7 +522,39 @@ export function NotesList() {
           <p className="text-gray-500 text-sm">No hay notas</p>
         </div>
       ) : (
-        <div ref={listRef} className="divide-y divide-gray-800 flex-1 overflow-y-auto notes-list-scrollbar">
+        <div 
+          ref={listRef} 
+          className="divide-y divide-gray-800 flex-1 overflow-y-auto notes-list-scrollbar"
+          onKeyDown={(e) => {
+            // Handle keyboard navigation when a note card is focused
+            if (e.key === 'Enter' && selectedNoteId && !isNotesListCollapsed) {
+              e.preventDefault();
+              e.stopPropagation();
+              handleEnterOnNote();
+              return;
+            }
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+              e.preventDefault();
+              e.stopPropagation();
+              const currentIndex = filteredNotes.findIndex(n => n.id === selectedNoteId);
+              let newIndex: number;
+              if (e.key === 'ArrowDown') {
+                newIndex = currentIndex < filteredNotes.length - 1 ? currentIndex + 1 : currentIndex;
+              } else {
+                newIndex = currentIndex > 0 ? currentIndex - 1 : (currentIndex === -1 ? 0 : 0);
+              }
+              if (newIndex >= 0 && newIndex < filteredNotes.length && newIndex !== currentIndex) {
+                const newNote = filteredNotes[newIndex];
+                setSelectedNoteId(newNote.id);
+                const noteEl = noteRefs.current.get(newNote.id);
+                if (noteEl) {
+                  noteEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                  noteEl.focus();
+                }
+              }
+            }
+          }}
+        >
           {filteredNotes.map((note, index) => {
             const Icon = typeIcons[note.type];
             const isSelected = note.id === selectedNoteId;

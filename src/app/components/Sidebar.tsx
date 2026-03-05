@@ -24,6 +24,7 @@ export function Sidebar() {
     notes,
     favoritesCount, // REQ-006
     confirmNavigation,
+    setSearchQuery, // Clear search when navigating
     // REQ-010: Tab navigation
     activeTab,
     selectedTimesheetClientId,
@@ -33,7 +34,10 @@ export function Sidebar() {
   } = useApp();
 
   const handleNavigate = (action: () => void) => {
-    confirmNavigation(action);
+    confirmNavigation(() => {
+      setSearchQuery(''); // Clear search when navigating
+      action();
+    });
   };
 
   const getCountForClient = (clientId: string | null) => {
