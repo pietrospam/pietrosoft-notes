@@ -17,6 +17,7 @@ interface TimeSheetGridEntry {
   taskId: string;
   taskTitle: string;
   taskCode: string;
+  taskShortDescription: string;
   projectId: string;
   projectName: string;
   clientId: string;
@@ -1407,6 +1408,9 @@ export function TimeSheetView() {
                         title="Click para editar | Hover 1s para info"
                       >
                         {entry.taskCode || entry.taskTitle.substring(0, 12)}
+                        {entry.taskShortDescription && (
+                          <span className="text-gray-500 ml-1">- {entry.taskShortDescription}</span>
+                        )}
                       </button>
                     </td>
                     {/* Horas */}
@@ -1754,6 +1758,7 @@ export function TimeSheetView() {
           description: ts.description,
           projectName: ts.projectName,
           taskCode: ts.taskCode,
+          taskShortDescription: ts.taskShortDescription,
           state: ts.state,
           clientName: ts.clientName,
         }))}

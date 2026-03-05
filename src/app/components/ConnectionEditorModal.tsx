@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ChevronDown, Plus, Copy, Check, Eye, EyeOff } from 'lucide-react';
+import { ChevronDown, Plus, Copy, Check, Eye, EyeOff, ExternalLink } from 'lucide-react';
 import { BaseEditorModal } from './BaseEditorModal';
 import { QuickCreateModal } from './QuickCreateModal';
 import { useApp } from '../context/AppContext';
@@ -203,7 +203,20 @@ export function ConnectionEditorModal({ noteId, onClose, onSaved, inline = false
             className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
             placeholder="https://..."
           />
-          {url && <CopyButton field="url" value={url} />}
+          {url && (
+            <>
+              <CopyButton field="url" value={url} />
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Ir al enlace"
+                className="p-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-400 hover:text-blue-400 transition-colors"
+              >
+                <ExternalLink size={14} />
+              </a>
+            </>
+          )}
         </div>
       </div>
 

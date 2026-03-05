@@ -10,7 +10,7 @@ import type { ConfigTab } from '../components/ConfigPanel';
 
 export type ViewType = 'all' | 'general' | 'task' | 'connection' | 'timesheets' | 'archived' | 'config' | 'favorites'; // REQ-006: Added favorites
 
-export type ActiveTab = 'bitacora' | 'timesheets'; // REQ-010: Main navigation tabs
+export type ActiveTab = 'bitacora' | 'conexiones' | 'timesheets'; // REQ-010: Main navigation tabs
 
 export interface TaskFilters {
   status: string;
@@ -156,7 +156,7 @@ export function AppProvider({ children }: AppProviderProps) {
     currentView: 'all',
     selectedNoteId: null,
     selectedClientId: null,
-    activeTypeFilters: [], // Empty = no filter, show all types
+    activeTypeFilters: ['task', 'general'], // Default for bitacora tab (excludes connections)
     notes: [],
     clients: [],
     projects: [],
@@ -202,11 +202,12 @@ export function AppProvider({ children }: AppProviderProps) {
     
     // REQ-010: Load tab preferences from localStorage
     const savedTab = localStorage.getItem('bitacora-active-tab') as ActiveTab | null;
-    if (savedTab && (savedTab === 'bitacora' || savedTab === 'timesheets')) {
+    if (savedTab && (savedTab === 'bitacora' || savedTab === 'conexiones' || savedTab === 'timesheets')) {
       setState(s => ({ 
         ...s, 
         activeTab: savedTab,
-        currentView: savedTab === 'timesheets' ? 'timesheets' : s.currentView
+        currentView: savedTab === 'timesheets' ? 'timesheets' : s.currentView,
+        activeTypeFilters: savedTab === 'conexiones' ? ['connection'] : savedTab === 'bitacora' ? ['task', 'general'] : []
       }));
     }
     
@@ -760,14 +761,24 @@ export function AppProvider({ children }: AppProviderProps) {
       return titleMatch || contentTextMatch || jsonMatch || ticketMatch || shortDescMatch;
     }
     
-    // Archived view shows only archived notes
+    // Archived view shows only archived notes (but still applies type filters)
     if (state.currentView === 'archived') {
-      return !!note.archivedAt;
+      if (!note.archivedAt) return false;
+      // Apply type filters in archived view too (for conexiones tab)
+      if (state.activeTypeFilters.length > 0 && !state.activeTypeFilters.includes(note.type)) {
+        return false;
+      }
+      return true;
     }
     
     // REQ-006: Favorites view shows only favorites (non-archived)
     if (state.currentView === 'favorites') {
-      return !!note.isFavorite && !note.archivedAt;
+      if (!note.isFavorite || note.archivedAt) return false;
+      // Apply type filters in favorites view too (for conexiones tab)
+      if (state.activeTypeFilters.length > 0 && !state.activeTypeFilters.includes(note.type)) {
+        return false;
+      }
+      return true;
     }
     
     // Other views exclude archived notes by default
@@ -914,7 +925,8 @@ export function AppProvider({ children }: AppProviderProps) {
       setState(s => ({ 
         ...s, 
         activeTab: tab,
-        currentView: tab === 'timesheets' ? 'timesheets' : (s.currentView === 'timesheets' ? 'all' : s.currentView)
+        currentView: tab === 'timesheets' ? 'timesheets' : (s.currentView === 'timesheets' ? 'all' : s.currentView),
+        activeTypeFilters: tab === 'conexiones' ? ['connection'] : tab === 'bitacora' ? ['task', 'general'] : []
       }));
     },
     setSelectedTimesheetClientId: (clientId) => {

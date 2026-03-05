@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { FileText, CheckSquare, Link, Link2, Clock, Plus, X, Star, Paperclip, GripVertical, ChevronRight, ChevronLeft, User, Key, Check, Copy } from 'lucide-react';
+import { FileText, CheckSquare, Link, Link2, Clock, Plus, X, Star, Paperclip, GripVertical, ChevronRight, ChevronLeft, User, Key, Check, Copy, ExternalLink } from 'lucide-react';
 import type { ConnectionNote } from '@/lib/types';
 import { TimeSheetModal } from './TimeSheetModal';
 import { TaskEditorModal } from './TaskEditorModal';
@@ -63,6 +63,7 @@ export function NotesList() {
     getClientForNote,
     isNotesListCollapsed,
     setNotesListCollapsed,
+    activeTab,
   } = useApp();
 
   // track which connection field was copied for visual feedback
@@ -372,8 +373,8 @@ export function NotesList() {
   // translucent spinner is shown over the list area when loading.
 
 
-  // Filterable types (timesheet excluded per REQ-002)
-  const allTypes: FilterableNoteType[] = ['task', 'connection', 'general'];
+  // Filterable types - in bitacora show task/general, in conexiones show no type filters
+  const allTypes: FilterableNoteType[] = activeTab === 'bitacora' ? ['task', 'general'] : [];
 
   // Collapsed state: minimal view with just expand button
   if (isNotesListCollapsed && selectedNoteId) {
@@ -685,33 +686,47 @@ export function NotesList() {
                           note.title || 'Sin título'
                         )}
                       </h3>
-                      {/* Copy title button */}
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleCopyTitle(note); }}
-                        title="Copiar título"
-                        className="p-1 text-gray-400 hover:text-white transition-colors flex-shrink-0"
-                      >
-                        {copiedInfo?.id === note.id && copiedInfo.field === 'title' ? (
-                          <Check size={14} className="text-green-400" />
-                        ) : (
-                          <Copy size={14} />
-                        )}
-                      </button>
+                      {/* Copy title button - only for task notes */}
+                      {note.type === 'task' && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleCopyTitle(note); }}
+                          title="Copiar título"
+                          className="p-1 text-gray-400 hover:text-white transition-colors flex-shrink-0"
+                        >
+                          {copiedInfo?.id === note.id && copiedInfo.field === 'title' ? (
+                            <Check size={14} className="text-green-400" />
+                          ) : (
+                            <Copy size={14} />
+                          )}
+                        </button>
+                      )}
                       {/* connection-specific copy icons */}
                       {note.type === 'connection' && (
                         <div className="flex items-center gap-2 ml-auto text-gray-400">
                           {note.url && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleConnCopy(note, 'url'); }}
-                              title="Copiar URL"
-                              className="p-1 hover:text-white transition-colors"
-                            >
-                              {copiedInfo?.id === note.id && copiedInfo.field === 'url' ? (
-                                <Check size={16} className="text-green-400" />
-                              ) : (
-                                <Link2 size={16} />
-                              )}
-                            </button>
+                            <>
+                              <a
+                                href={note.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                title="Ir al enlace"
+                                className="p-1 hover:text-blue-400 transition-colors"
+                              >
+                                <ExternalLink size={16} />
+                              </a>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleConnCopy(note, 'url'); }}
+                                title="Copiar URL"
+                                className="p-1 hover:text-white transition-colors"
+                              >
+                                {copiedInfo?.id === note.id && copiedInfo.field === 'url' ? (
+                                  <Check size={16} className="text-green-400" />
+                                ) : (
+                                  <Link2 size={16} />
+                                )}
+                              </button>
+                            </>
                           )}
                           {note.username && (
                             <button

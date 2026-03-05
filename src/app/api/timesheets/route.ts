@@ -11,6 +11,7 @@ export interface TimeSheetGridEntry {
   taskId: string;
   taskTitle: string;
   taskCode: string; // Ticket/Phase code from the task (taskTicketPhaseCode)
+  taskShortDescription: string; // Short description from the task
   projectId: string;
   projectName: string;
   clientId: string;
@@ -92,6 +93,7 @@ export async function GET(request: Request) {
       taskId: ts.taskId || '',
       taskTitle: ts.task?.title || 'Sin tarea',
       taskCode: ts.task?.taskTicketPhaseCode || '',
+      taskShortDescription: ts.task?.taskShortDescription || '',
       projectId: ts.projectId || ts.task?.projectId || '',
       projectName: ts.project?.name || ts.task?.project?.name || 'Sin proyecto',
       clientId: ts.clientId || ts.task?.project?.clientId || '',

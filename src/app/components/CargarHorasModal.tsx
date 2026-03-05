@@ -12,6 +12,7 @@ interface TimeSheetEntry {
   description: string;
   projectName: string;
   taskCode: string; // Ticket/Fase
+  taskShortDescription: string; // Descripción corta del ticket
   state: string; // DRAFT or FINAL
   clientName: string; // Cliente hijo
 }
@@ -143,16 +144,18 @@ export function CargarHorasModal({ isOpen, onClose, timesheets, onRefresh, selec
   const ClickableCell = ({ 
     value, 
     fieldId, 
-    className = '' 
+    className = '',
+    copyValue
   }: { 
     value: string; 
     fieldId: string; 
     className?: string;
+    copyValue?: string;
   }) => {
     const isCopied = copiedField === fieldId;
     return (
       <div 
-        onClick={() => handleCopy(value, fieldId)}
+        onClick={() => handleCopy(copyValue ?? value, fieldId)}
         className={`cursor-pointer hover:bg-gray-700 px-2 py-1 rounded transition-colors flex items-center gap-1 group ${className}`}
         title="Click para copiar"
       >
@@ -305,7 +308,8 @@ export function CargarHorasModal({ isOpen, onClose, timesheets, onRefresh, selec
                         {/* Ticket/Fase */}
                         <td className="px-2 py-2">
                           <ClickableCell 
-                            value={ts.taskCode} 
+                            value={ts.taskShortDescription ? `${ts.taskCode} - ${ts.taskShortDescription}` : ts.taskCode} 
+                            copyValue={ts.taskCode}
                             fieldId={`${ts.id}-ticket`}
                             className="text-blue-400 font-mono"
                           />
