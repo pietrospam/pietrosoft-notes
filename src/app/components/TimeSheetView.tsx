@@ -752,7 +752,7 @@ export function TimeSheetView() {
       // Direct save if not editing
       setSavingRowId(id);
       try {
-        const res = await fetch(`/api/notes/${id}`, {
+        const res = await fetch(`/api/timesheets/${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
