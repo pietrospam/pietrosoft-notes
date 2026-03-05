@@ -63,8 +63,8 @@ export function TimeSheetView() {
   const [sortField, setSortField] = useState<SortField>('workDate');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   
-  // Inline editing - support multiple rows
-  const [editingRows, setEditingRows] = useState<Map<string, { hours: number; state: string; description: string; workDate: string }>>(new Map());
+  // Inline editing - support multiple rows (hours as string to allow decimal input)
+  const [editingRows, setEditingRows] = useState<Map<string, { hours: string; state: string; description: string; workDate: string }>>(new Map());
   const [savingRowId, setSavingRowId] = useState<string | null>(null);
   
   // Delete confirmation
@@ -117,6 +117,15 @@ export function TimeSheetView() {
   // Month and Year selectors (always visible, separated)
   const [selectedMonth, setSelectedMonth] = useState(() => (new Date().getMonth() + 1));
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
+  
+  // Selected day filter (click on calendar day)
+  const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  
+  // Selected week filter (click on week label)
+  const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
+  
+  // Initialize to current week on first load
+  const [initializedWeek, setInitializedWeek] = useState(false);
 
   // Refs for auto-selecting hours input
   const hoursInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
@@ -177,12 +186,41 @@ export function TimeSheetView() {
     return clients.filter(c => c.parentClientId === parentId).map(c => c.id);
   };
   
+  // Get days range for a specific week index
+  const getWeekDaysRange = useCallback((weekIndex: number): { start: number; end: number } | null => {
+    const firstDay = new Date(selectedYear, selectedMonth - 1, 1);
+    let startDayOfWeek = firstDay.getDay();
+    startDayOfWeek = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
+    const lastDay = new Date(selectedYear, selectedMonth, 0).getDate();
+    
+    // Calculate start day of week (1-based day of month)
+    const weekStartDay = weekIndex * 7 - startDayOfWeek + 1;
+    const start = Math.max(1, weekStartDay);
+    const end = Math.min(lastDay, weekStartDay + 6);
+    
+    if (start > lastDay) return null;
+    return { start, end };
+  }, [selectedYear, selectedMonth]);
+  
   const filteredTimesheets = useMemo(() => {
     return timesheets.filter(ts => {
       // Month filter (always active)
       if (selectedMonthStr) {
         const tsMonth = ts.workDate.slice(0, 7); // YYYY-MM
         if (tsMonth !== selectedMonthStr) return false;
+      }
+      // Day filter (from calendar click)
+      if (selectedDay !== null) {
+        const tsDay = parseInt(ts.workDate.slice(8, 10), 10);
+        if (tsDay !== selectedDay) return false;
+      }
+      // Week filter (from week label click)
+      if (selectedWeek !== null && selectedDay === null) {
+        const weekRange = getWeekDaysRange(selectedWeek);
+        if (weekRange) {
+          const tsDay = parseInt(ts.workDate.slice(8, 10), 10);
+          if (tsDay < weekRange.start || tsDay > weekRange.end) return false;
+        }
       }
       // Date from filter
       if (filterDateFrom && ts.workDate < filterDateFrom) return false;
@@ -201,7 +239,7 @@ export function TimeSheetView() {
       
       return true;
     });
-  }, [timesheets, selectedMonthStr, filterDateFrom, filterDateTo, filterClient, filterProject, selectedTimesheetClientId, clients]);
+  }, [timesheets, selectedMonthStr, selectedDay, selectedWeek, getWeekDaysRange, filterDateFrom, filterDateTo, filterClient, filterProject, selectedTimesheetClientId, clients]);
 
   const totalHours = filteredTimesheets.reduce((sum, ts) => sum + ts.hoursWorked, 0);
   const totalImputadas = filteredTimesheets.filter(ts => ts.state === 'FINAL').reduce((sum, ts) => sum + ts.hoursWorked, 0);
@@ -617,7 +655,7 @@ export function TimeSheetView() {
         setTimeout(() => {
           setEditingRows(prev => {
             const newMap = new Map(prev);
-            newMap.set(newTimesheet.id, { hours: 0, state: 'DRAFT', description: task.title, workDate: today });
+            newMap.set(newTimesheet.id, { hours: '', state: 'DRAFT', description: task.title, workDate: today });
             return newMap;
           });
           // Focus hours input after state update
@@ -674,12 +712,40 @@ export function TimeSheetView() {
     }
   };
 
+  // Convert YYYY-MM-DD to DD/MM/YYYY for input display
+  const isoToDisplayDate = (isoDate: string): string => {
+    if (!isoDate) return '';
+    const [year, month, day] = isoDate.split('-');
+    return `${day}/${month}/${year}`;
+  };
+
+  // Convert DD/MM/YYYY to YYYY-MM-DD for storage
+  const displayToIsoDate = (displayDate: string): string => {
+    if (!displayDate) return '';
+    // Handle various input formats
+    const cleaned = displayDate.replace(/[^0-9]/g, '');
+    if (cleaned.length === 8) {
+      // DDMMYYYY
+      const day = cleaned.slice(0, 2);
+      const month = cleaned.slice(2, 4);
+      const year = cleaned.slice(4, 8);
+      return `${year}-${month}-${day}`;
+    }
+    // Try parsing DD/MM/YYYY
+    const parts = displayDate.split('/');
+    if (parts.length === 3) {
+      const [day, month, year] = parts;
+      return `${year.padStart(4, '20')}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+    return displayDate; // Return as-is if can't parse
+  };
+
   // Inline editing handlers (multiple rows)
   const handleRowDoubleClick = (entry: TimeSheetGridEntry) => {
     if (editingRows.has(entry.id)) return; // Already editing
     setEditingRows(prev => {
       const newMap = new Map(prev);
-      newMap.set(entry.id, { hours: entry.hoursWorked, state: entry.state, description: entry.description || '', workDate: entry.workDate });
+      newMap.set(entry.id, { hours: entry.hoursWorked.toString(), state: entry.state, description: entry.description || '', workDate: entry.workDate });
       return newMap;
     });
     // Auto-select hours input after a short delay
@@ -691,14 +757,13 @@ export function TimeSheetView() {
     }, 50);
   };
 
-  // Update hours for a specific row
+  // Update hours for a specific row (keep as string to allow decimal input)
   const handleEditHoursChange = (id: string, value: string) => {
-    const numValue = parseFloat(value) || 0;
     setEditingRows(prev => {
       const newMap = new Map(prev);
       const current = newMap.get(id);
       if (current) {
-        newMap.set(id, { ...current, hours: numValue });
+        newMap.set(id, { ...current, hours: value });
       }
       return newMap;
     });
@@ -716,13 +781,15 @@ export function TimeSheetView() {
     });
   };
 
-  // Update work date for a specific row
+  // Update work date for a specific row (accepts DD/MM/YYYY format)
   const handleEditDateChange = (id: string, value: string) => {
+    // Convert to ISO format for storage
+    const isoDate = displayToIsoDate(value);
     setEditingRows(prev => {
       const newMap = new Map(prev);
       const current = newMap.get(id);
       if (current) {
-        newMap.set(id, { ...current, workDate: value });
+        newMap.set(id, { ...current, workDate: isoDate });
       }
       return newMap;
     });
@@ -799,7 +866,7 @@ export function TimeSheetView() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          hoursWorked: editData.hours,
+          hoursWorked: parseFloat(editData.hours) || 0,
           state: editData.state,
           description: editData.description,
           workDate: editData.workDate,
@@ -908,6 +975,29 @@ export function TimeSheetView() {
     
     return weeks;
   }, [selectedYear, selectedMonth, hoursByDate]);
+  
+  // Initialize to current week when calendar weeks are calculated
+  useEffect(() => {
+    if (!initializedWeek && calendarWeeks.length > 0) {
+      const today = new Date();
+      const currentDay = today.getDate();
+      const currentMonth = today.getMonth() + 1;
+      const currentYear = today.getFullYear();
+      
+      // Only set current week if we're viewing the current month
+      if (selectedMonth === currentMonth && selectedYear === currentYear) {
+        // Find which week contains today
+        for (let weekIdx = 0; weekIdx < calendarWeeks.length; weekIdx++) {
+          const week = calendarWeeks[weekIdx];
+          if (week.some(cell => cell.day === currentDay)) {
+            setSelectedWeek(weekIdx);
+            break;
+          }
+        }
+      }
+      setInitializedWeek(true);
+    }
+  }, [calendarWeeks, initializedWeek, selectedMonth, selectedYear]);
 
   // Month names for selector
   const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -935,7 +1025,7 @@ export function TimeSheetView() {
           {/* Year selector */}
           <select
             value={selectedYear}
-            onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+            onChange={(e) => { setSelectedYear(parseInt(e.target.value)); setSelectedDay(null); setSelectedWeek(null); }}
             className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
           >
             {yearOptions.map(y => (
@@ -946,7 +1036,7 @@ export function TimeSheetView() {
           {/* Month selector */}
           <select
             value={selectedMonth}
-            onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+            onChange={(e) => { setSelectedMonth(parseInt(e.target.value)); setSelectedDay(null); setSelectedWeek(null); }}
             className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
           >
             {monthNames.map((name, idx) => (
@@ -956,6 +1046,26 @@ export function TimeSheetView() {
           
           {/* Compact Calendar - all days in one horizontal line with day headers */}
           <div className="flex flex-col bg-gray-900/50 px-2 py-1.5 rounded-lg overflow-x-auto">
+            {/* Week labels row */}
+            <div className="flex items-center gap-0.5 mb-1">
+              {calendarWeeks.map((week, weekIdx) => (
+                <div key={weekIdx} className="flex items-center">
+                  {weekIdx > 0 && <div className="w-px h-4 mx-1" />}
+                  <button
+                    onClick={() => {
+                      setSelectedDay(null);
+                      setSelectedWeek(selectedWeek === weekIdx ? null : weekIdx);
+                    }}
+                    className={`w-[140px] h-4 flex items-center justify-center text-[10px] font-semibold cursor-pointer transition-colors ${
+                      selectedWeek === weekIdx ? 'text-orange-400' : 'text-blue-300 hover:text-blue-200'
+                    }`}
+                    title={`Filtrar por Semana ${weekIdx + 1}`}
+                  >
+                    Semana {weekIdx + 1}
+                  </button>
+                </div>
+              ))}
+            </div>
             {/* Day headers row */}
             <div className="flex items-center gap-0.5 mb-0.5">
               {calendarWeeks.map((week, weekIdx) => (
@@ -982,12 +1092,17 @@ export function TimeSheetView() {
                   {week.map((cell, dayIdx) => (
                     <div 
                       key={dayIdx}
-                      className={`w-5 h-5 flex items-center justify-center rounded-sm ${
-                        cell.isWeekend ? 'bg-gray-800' : ''
+                      className={`w-5 h-5 flex items-center justify-center rounded-sm transition-colors ${
+                        cell.day ? 'cursor-pointer hover:bg-gray-700' : ''
+                      } ${
+                        cell.isWeekend && cell.day ? 'bg-gray-800' : ''
+                      } ${
+                        cell.day && cell.day === selectedDay ? 'ring-1 ring-orange-500' : ''
                       }`}
                       title={cell.day && cell.hours > 0 ? `${cell.hours.toFixed(1)}h` : undefined}
+                      onClick={() => cell.day && setSelectedDay(selectedDay === cell.day ? null : cell.day)}
                     >
-                      {cell.day && (
+                      {cell.day ? (
                         <span className={`w-4 h-4 flex items-center justify-center rounded-full text-[9px] ${
                           cell.color === 'green' ? 'bg-green-600 text-white font-bold' :
                           cell.color === 'yellow' ? 'bg-yellow-500 text-white font-bold' :
@@ -995,6 +1110,8 @@ export function TimeSheetView() {
                         }`}>
                           {cell.day}
                         </span>
+                      ) : (
+                        <span className="w-4 h-4" />
                       )}
                     </div>
                   ))}
@@ -1002,6 +1119,17 @@ export function TimeSheetView() {
               ))}
             </div>
           </div>
+          
+          {/* Ver todo el mes link */}
+          {(selectedDay !== null || selectedWeek !== null) && (
+            <button
+              onClick={() => { setSelectedDay(null); setSelectedWeek(null); }}
+              className="text-xs text-orange-400 hover:text-orange-300 transition-colors whitespace-nowrap"
+              title="Ver todo el mes"
+            >
+              (ver mes)
+            </button>
+          )}
         </div>
         
         {/* Right section: Action buttons */}
@@ -1147,6 +1275,22 @@ export function TimeSheetView() {
         </div>
       ) : (
         <div className="flex-1 overflow-auto">
+          {/* Title */}
+          <div className="px-4 py-3 border-b border-gray-800">
+            <h3 className="text-lg font-medium text-gray-300">
+              {selectedDay !== null 
+                ? `Horas del ${selectedDay} de ${monthName} ${selectedYear}`
+                : selectedWeek !== null
+                  ? (() => {
+                      const range = getWeekDaysRange(selectedWeek);
+                      return range 
+                        ? `Horas Semana ${selectedWeek + 1} (${range.start}-${range.end} ${monthName} ${selectedYear})`
+                        : `Horas Semana ${selectedWeek + 1} ${monthName} ${selectedYear}`;
+                    })()
+                  : `Horas ${monthName} ${selectedYear}`
+              }
+            </h3>
+          </div>
           {/* Table */}
           <table className="w-full">
             <thead className="bg-gray-900 sticky top-0">
@@ -1205,11 +1349,19 @@ export function TimeSheetView() {
                     <td className="px-3 py-1.5 text-sm text-white whitespace-nowrap">
                       {isEditing ? (
                         <input
-                          type="date"
-                          value={editData?.workDate ?? entry.workDate}
-                          onChange={(e) => handleEditDateChange(entry.id, e.target.value)}
-                          onKeyDown={(e) => handleKeyDown(e, entry.id)}
-                          className="bg-gray-800 border border-orange-500 rounded px-2 py-0.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
+                          type="text"
+                          defaultValue={isoToDisplayDate(editData?.workDate ?? entry.workDate)}
+                          onBlur={(e) => handleEditDateChange(entry.id, e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleEditDateChange(entry.id, (e.target as HTMLInputElement).value);
+                              handleKeyDown(e, entry.id);
+                            } else if (e.key === 'Escape') {
+                              handleKeyDown(e, entry.id);
+                            }
+                          }}
+                          placeholder="DD/MM/YYYY"
+                          className="bg-gray-800 border border-orange-500 rounded px-2 py-0.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-orange-500 w-28"
                           onClick={(e) => e.stopPropagation()}
                         />
                       ) : (
@@ -1603,10 +1755,12 @@ export function TimeSheetView() {
           projectName: ts.projectName,
           taskCode: ts.taskCode,
           state: ts.state,
+          clientName: ts.clientName,
         }))}
         onRefresh={fetchTimesheets}
         selectedMonth={selectedMonth}
         selectedYear={selectedYear}
+        parentClientName={selectedTimesheetClientId ? clients.find(c => c.id === selectedTimesheetClientId)?.name : undefined}
       />
     </div>
   );

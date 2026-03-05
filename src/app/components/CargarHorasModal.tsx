@@ -13,6 +13,7 @@ interface TimeSheetEntry {
   projectName: string;
   taskCode: string; // Ticket/Fase
   state: string; // DRAFT or FINAL
+  clientName: string; // Cliente hijo
 }
 
 interface CargarHorasModalProps {
@@ -22,6 +23,7 @@ interface CargarHorasModalProps {
   onRefresh: () => Promise<void>;
   selectedMonth: number;
   selectedYear: number;
+  parentClientName?: string; // Cliente padre seleccionado
 }
 
 // Spanish month names
@@ -30,7 +32,7 @@ const MONTH_NAMES = [
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
 ];
 
-export function CargarHorasModal({ isOpen, onClose, timesheets, onRefresh, selectedMonth, selectedYear }: CargarHorasModalProps) {
+export function CargarHorasModal({ isOpen, onClose, timesheets, onRefresh, selectedMonth, selectedYear, parentClientName }: CargarHorasModalProps) {
   const [toast, setToast] = useState<{ message: string } | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
@@ -180,7 +182,12 @@ export function CargarHorasModal({ isOpen, onClose, timesheets, onRefresh, selec
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700 bg-gray-800">
           <div className="flex items-center gap-3">
             <Clock className="text-blue-400" size={24} />
-            <h2 className="text-xl font-semibold text-white">Cargar Horas</h2>
+            <div>
+              <h2 className="text-xl font-semibold text-white">Cargar Horas</h2>
+              {parentClientName && (
+                <span className="text-base font-medium text-blue-400">{parentClientName}</span>
+              )}
+            </div>
             <span className="text-gray-400 text-sm">
               ({filteredTimesheets.length} de {timesheets.length} entrada{timesheets.length !== 1 ? 's' : ''})
             </span>
@@ -260,6 +267,7 @@ export function CargarHorasModal({ isOpen, onClose, timesheets, onRefresh, selec
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-gray-800 z-10">
                 <tr className="text-gray-400 text-left">
+                  <th className="px-4 py-3 font-medium">Cliente</th>
                   <th className="px-4 py-3 font-medium">Proyecto</th>
                   <th className="px-4 py-3 font-medium">Ticket/Fase</th>
                   <th className="px-4 py-3 font-medium text-right">Horas</th>
@@ -277,6 +285,15 @@ export function CargarHorasModal({ isOpen, onClose, timesheets, onRefresh, selec
                         key={ts.id} 
                         className={`${idx % 2 === 0 ? 'bg-gray-900' : 'bg-gray-900/50'} hover:bg-gray-800/50 transition-colors`}
                       >
+                        {/* Cliente */}
+                        <td className="px-2 py-2">
+                          <ClickableCell 
+                            value={ts.clientName} 
+                            fieldId={`${ts.id}-client`}
+                            className="text-gray-300"
+                          />
+                        </td>
+                        
                         {/* Proyecto */}
                         <td className="px-2 py-2">
                           <ClickableCell 
@@ -351,7 +368,7 @@ export function CargarHorasModal({ isOpen, onClose, timesheets, onRefresh, selec
                     
                     {/* Daily subtotal row */}
                     <tr className="bg-gray-800/80 border-t-2 border-gray-600">
-                      <td colSpan={2} className="px-4 py-2 text-right text-gray-400 text-xs font-medium italic">
+                      <td colSpan={3} className="px-4 py-2 text-right text-gray-400 text-xs font-medium italic">
                         Subtotal {formatDate(date)}
                       </td>
                       <td className="px-4 py-2 text-right">
