@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Save, Loader2, Maximize2, Minimize2, Pencil, Clock, ChevronDown, Plus, Check, Star, Archive, ArchiveRestore, Trash2, Copy, History, Paperclip } from 'lucide-react';
+import { X, Save, Loader2, Maximize2, Minimize2, Pencil, Clock, ChevronDown, Plus, Check, Star, Archive, ArchiveRestore, Trash2, Copy, History, Paperclip, Code } from 'lucide-react';
 import { TipTapEditor, TipTapEditorHandle } from './TipTapEditor';
 import { AttachmentsModal } from './AttachmentsModal';
 import { TimeSheetModal } from './TimeSheetModal';
@@ -77,6 +77,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
   const [toast, setToast] = useState<{ message: string } | null>(null);
   const [showTimeSheetModal, setShowTimeSheetModal] = useState(false);
   const [showActivityLog, setShowActivityLog] = useState(false); // REQ-010: Activity log modal
+  const [showCoderHintsModal, setShowCoderHintsModal] = useState(false);
   
   // Header fields edit mode - enabled by default for NEW tasks, disabled for existing
   const [isHeaderEditing, setIsHeaderEditing] = useState(!taskId);
@@ -180,6 +181,38 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
     }
   };
 
+  // Copy coder hints to clipboard
+  const getCoderHintsData = useCallback(() => {
+    // Find client for this task
+    const selectedClient = clients.find(c => c.id === selectedClientId);
+    // Find parent client if exists
+    let clientName = '';
+    if (selectedClient) {
+      if (selectedClient.parentClientId) {
+        const parentClient = clients.find(c => c.id === selectedClient.parentClientId);
+        clientName = parentClient?.name || selectedClient.name;
+      } else {
+        clientName = selectedClient.name;
+      }
+    }
+    
+    // Format date as DD/MM/YYYY
+    const today = new Date();
+    const dateStr = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
+    
+    const ticket = task.ticketPhaseCode || '';
+    const beginLine = `BEGIN MODIFICATION PPIETRO ${clientName} ${ticket} ${dateStr}`;
+    const endLine = `END MODIFICATION PPIETRO ${clientName} ${ticket} ${dateStr}`;
+    
+    return { beginLine, endLine };
+  }, [clients, selectedClientId, task.ticketPhaseCode]);
+
+  const handleCopyCoderHint = useCallback((line: string) => {
+    navigator.clipboard.writeText(line);
+    setToast({ message: 'Copiado al clipboard' });
+    setShowCoderHintsModal(false);
+  }, []);
+
   // Load clients and projects
   useEffect(() => {
     fetch('/api/clients').then(r => r.json()).then(setClients);
@@ -237,9 +270,40 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
       };
       loadTask();
     } else {
-      // New note - focus title after mount
-      setTimeout(() => {
+      // New note - focus title after mount and try to read clipboard
+      setTimeout(async () => {
         titleInputRef.current?.focus();
+        
+        // Try to read clipboard and auto-fill if pattern found
+        try {
+          const clipboardText = await navigator.clipboard.readText();
+          if (clipboardText) {
+            const text = clipboardText.substring(0, 200); // Max 200 chars
+            const TICKET_PATTERN = /#(\d{5})#?/;  // #<5 digits>
+            const ticketMatch = text.match(TICKET_PATTERN);
+            
+            if (ticketMatch) {
+              // Found ticket pattern - auto-fill fields
+              const ticketCode = ticketMatch[1];
+              // Extract description: text after the pattern, clean and limit
+              let description = text.replace(TICKET_PATTERN, '').replace(/\s+/g, ' ').trim();
+              if (description.length > 100) description = description.substring(0, 100);
+              
+              const newTitle = description ? `#${ticketCode} - ${description}` : `#${ticketCode}`;
+              
+              setTitle(newTitle);
+              setTask(prev => ({
+                ...prev,
+                title: newTitle,
+                ticketPhaseCode: ticketCode,
+                shortDescription: description || ticketCode,
+              }));
+            }
+          }
+        } catch {
+          // Clipboard access denied or not available - ignore silently
+        }
+        
         titleInputRef.current?.select();
       }, 100);
     }
@@ -266,12 +330,29 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
     if (inline) return; // Don't handle Escape in inline mode
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        // Close CoderHints modal first if open
+        if (showCoderHintsModal) {
+          setShowCoderHintsModal(false);
+          return;
+        }
         handleClose();
       }
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [inline]);
+  }, [inline, showCoderHintsModal]);
+
+  // Handle Escape for CoderHints modal in inline mode
+  useEffect(() => {
+    if (!inline || !showCoderHintsModal) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowCoderHintsModal(false);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [inline, showCoderHintsModal]);
 
   // Cleanup
   useEffect(() => {
@@ -946,6 +1027,15 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
               </button>
             )}
             
+            {/* Coder Hints button */}
+            <button
+              onClick={() => setShowCoderHintsModal(true)}
+              className="p-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-800 rounded transition-colors"
+              title="Copiar Coder Hints"
+            >
+              <Code size={20} />
+            </button>
+            
             {/* Save status indicator */}
             {saved && (
               <span className="flex items-center gap-1 text-green-400 text-sm">
@@ -1073,6 +1163,47 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
             onClose={() => setShowAttachmentsModal(false)}
             disabledUpload={task.id.startsWith('temp-')}
           />
+        )}
+
+        {/* Coder Hints Modal (inline mode) */}
+        {showCoderHintsModal && (
+          <div 
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]"
+            onClick={() => setShowCoderHintsModal(false)}
+          >
+            <div 
+              className="bg-gray-900 rounded-lg border border-gray-700 shadow-xl p-4 max-w-lg w-full mx-4 z-[101]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                  <Code size={20} className="text-cyan-400" />
+                  Coder Hints
+                </h3>
+                <button
+                  onClick={() => setShowCoderHintsModal(false)}
+                  className="p-1 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="space-y-3">
+                <button
+                  onClick={() => handleCopyCoderHint(getCoderHintsData().beginLine)}
+                  className="w-full text-left px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm font-mono text-green-400 transition-colors"
+                >
+                  {getCoderHintsData().beginLine}
+                </button>
+                <button
+                  onClick={() => handleCopyCoderHint(getCoderHintsData().endLine)}
+                  className="w-full text-left px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm font-mono text-red-400 transition-colors"
+                >
+                  {getCoderHintsData().endLine}
+                </button>
+              </div>
+              <p className="mt-3 text-xs text-gray-500 text-center">Click para copiar • ESC para cerrar</p>
+            </div>
+          </div>
         )}
       </div>
     );
@@ -1229,6 +1360,15 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
               </button>
             )}
             
+            {/* Coder Hints button */}
+            <button
+              onClick={() => setShowCoderHintsModal(true)}
+              className="p-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-800 rounded transition-colors"
+              title="Copiar Coder Hints"
+            >
+              <Code size={20} />
+            </button>
+            
             {/* Save status indicator */}
             {saved && (
               <span className="flex items-center gap-1 text-green-400 text-sm">
@@ -1366,6 +1506,47 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
           taskTitle={title}
           onClose={() => setShowActivityLog(false)}
         />
+      )}
+
+      {/* Coder Hints Modal */}
+      {showCoderHintsModal && (
+        <div 
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]"
+          onClick={() => setShowCoderHintsModal(false)}
+        >
+          <div 
+            className="bg-gray-900 rounded-lg border border-gray-700 shadow-xl p-4 max-w-lg w-full mx-4 z-[101]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                <Code size={20} className="text-cyan-400" />
+                Coder Hints
+              </h3>
+              <button
+                onClick={() => setShowCoderHintsModal(false)}
+                className="p-1 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <button
+                onClick={() => handleCopyCoderHint(getCoderHintsData().beginLine)}
+                className="w-full text-left px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm font-mono text-green-400 transition-colors"
+              >
+                {getCoderHintsData().beginLine}
+              </button>
+              <button
+                onClick={() => handleCopyCoderHint(getCoderHintsData().endLine)}
+                className="w-full text-left px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm font-mono text-red-400 transition-colors"
+              >
+                {getCoderHintsData().endLine}
+              </button>
+            </div>
+            <p className="mt-3 text-xs text-gray-500 text-center">Click para copiar • ESC para cerrar</p>
+          </div>
+        </div>
       )}
     </div>
   );

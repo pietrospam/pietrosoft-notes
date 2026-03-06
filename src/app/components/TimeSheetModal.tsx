@@ -1,8 +1,24 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { X, Clock, Save, AlertCircle } from 'lucide-react';
-import type { TaskNote, Client, Project } from '@/lib/types';
+import { X, Clock, Save, AlertCircle, Calendar } from 'lucide-react';
+import type { TaskNote } from '@/lib/types';
+
+// DD/MM/YYYY <-> YYYY-MM-DD conversions
+function toDisplayDate(isoDate: string): string {
+  // isoDate: "2026-03-06" -> "06/03/2026"
+  const [y, m, d] = isoDate.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function toIsoDate(displayDate: string): string | null {
+  // displayDate: "06/03/2026" -> "2026-03-06"
+  const parts = displayDate.split('/');
+  if (parts.length !== 3) return null;
+  const [d, m, y] = parts;
+  if (!d || !m || !y || d.length !== 2 || m.length !== 2 || y.length !== 4) return null;
+  return `${y}-${m}-${d}`;
+}
 
 interface FetchedTimeSheet {
   id: string;
@@ -22,6 +38,7 @@ interface TimeSheetModalProps {
 
 export function TimeSheetModal({ task, initialDate, onClose, onSaved }: TimeSheetModalProps) {
   const [date, setDate] = useState(() => initialDate || new Date().toISOString().split('T')[0]);
+  const [displayDate, setDisplayDate] = useState(() => toDisplayDate(initialDate || new Date().toISOString().split('T')[0]));
   const [hours, setHours] = useState<string>('');
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
@@ -31,14 +48,17 @@ export function TimeSheetModal({ task, initialDate, onClose, onSaved }: TimeShee
   // Existing timesheet for edit mode
   const [existingTimeSheet, setExistingTimeSheet] = useState<FetchedTimeSheet | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
-  
-  // Task context info
-  const [client, setClient] = useState<Client | null>(null);
-  const [project, setProject] = useState<Project | null>(null);
 
   // Refs for focus management
   const hoursRef = useRef<HTMLInputElement>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
+  const dateInputRef = useRef<HTMLInputElement>(null);
+  const hiddenDateRef = useRef<HTMLInputElement>(null);
+
+  // Build task display: ticketPhaseCode + "-" + shortDescription
+  const taskDisplayName = task.ticketPhaseCode
+    ? `${task.ticketPhaseCode} - ${task.shortDescription || task.title || 'Sin título'}`
+    : task.shortDescription || task.title || 'Sin título';
 
   // Handle Escape key to close modal
   useEffect(() => {
@@ -51,34 +71,6 @@ export function TimeSheetModal({ task, initialDate, onClose, onSaved }: TimeShee
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
-
-  // Load client and project info
-  useEffect(() => {
-    const loadContext = async () => {
-      try {
-        // Get project
-        if (task.projectId) {
-          const projectRes = await fetch(`/api/projects/${task.projectId}`);
-          if (projectRes.ok) {
-            const projectData = await projectRes.json();
-            setProject(projectData);
-            
-            // Get client from project
-            if (projectData.clientId) {
-              const clientRes = await fetch(`/api/clients/${projectData.clientId}`);
-              if (clientRes.ok) {
-                setClient(await clientRes.json());
-              }
-            }
-          }
-        }
-      } catch (err) {
-        console.error('Error loading context:', err);
-      }
-    };
-    
-    loadContext();
-  }, [task.projectId]);
 
   // Check for existing timesheet when date changes
   const checkExistingTimeSheet = useCallback(async (selectedDate: string) => {
@@ -128,6 +120,19 @@ export function TimeSheetModal({ task, initialDate, onClose, onSaved }: TimeShee
 
   const handleDateChange = (newDate: string) => {
     setDate(newDate);
+    setDisplayDate(toDisplayDate(newDate));
+  };
+
+  const handleDisplayDateChange = (value: string) => {
+    setDisplayDate(value);
+    const iso = toIsoDate(value);
+    if (iso) {
+      setDate(iso);
+    }
+  };
+
+  const openNativeDatePicker = () => {
+    hiddenDateRef.current?.showPicker?.();
   };
 
   const handleSave = async () => {
@@ -216,61 +221,68 @@ export function TimeSheetModal({ task, initialDate, onClose, onSaved }: TimeShee
           )}
 
           {/* Task info (readonly) */}
-          <div className="space-y-2 p-3 bg-gray-800/50 rounded-lg">
-            <div className="grid grid-cols-3 gap-2 text-sm">
-              <div>
-                <span className="text-gray-500">Tarea:</span>
-                <p className="text-white font-medium truncate">
-                  {task.title || task.shortDescription || 'Sin título'}
-                </p>
-              </div>
-              <div>
-                <span className="text-gray-500">Cliente:</span>
-                <p className="text-white font-medium truncate">
-                  {client?.name || '—'}
-                </p>
-              </div>
-              <div>
-                <span className="text-gray-500">Proyecto:</span>
-                <p className="text-white font-medium truncate">
-                  {project?.name || '—'}
-                </p>
+          <div className="p-3 bg-gray-800/50 rounded-lg">
+            <span className="text-gray-500 text-sm">Tarea:</span>
+            <p className="text-white font-medium truncate">
+              {taskDisplayName}
+            </p>
+          </div>
+
+          {/* Date and Hours on same line */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Date picker DD/MM/YYYY */}
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Fecha</label>
+              <div className="relative">
+                <input
+                  ref={dateInputRef}
+                  type="text"
+                  value={displayDate}
+                  onChange={(e) => handleDisplayDateChange(e.target.value)}
+                  placeholder="DD/MM/YYYY"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={openNativeDatePicker}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                >
+                  <Calendar size={18} />
+                </button>
+                {/* Hidden native date picker */}
+                <input
+                  ref={hiddenDateRef}
+                  type="date"
+                  value={date}
+                  onChange={(e) => handleDateChange(e.target.value)}
+                  className="sr-only"
+                  tabIndex={-1}
+                />
               </div>
             </div>
-          </div>
 
-          {/* Date picker */}
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">Fecha</label>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => handleDateChange(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
-            />
-          </div>
-
-          {/* Hours */}
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">Horas trabajadas * <span className="text-gray-600 text-xs">(Enter=descripción)</span></label>
-            <input
-              ref={hoursRef}
-              type="number"
-              step="0.5"
-              min="0"
-              max="24"
-              value={hours}
-              onChange={(e) => setHours(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  descriptionRef.current?.focus();
-                }
-              }}
-              placeholder="8.0"
-              disabled={loading}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 disabled:opacity-50"
-            />
+            {/* Hours */}
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Horas trabajadas * <span className="text-gray-600 text-xs">(Enter=descripción)</span></label>
+              <input
+                ref={hoursRef}
+                type="number"
+                step="0.5"
+                min="0"
+                max="24"
+                value={hours}
+                onChange={(e) => setHours(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    descriptionRef.current?.focus();
+                  }
+                }}
+                placeholder="8.0"
+                disabled={loading}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 disabled:opacity-50"
+              />
+            </div>
           </div>
 
           {/* Description */}

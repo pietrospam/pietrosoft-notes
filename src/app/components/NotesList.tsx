@@ -416,38 +416,42 @@ export function NotesList() {
           </button>
         )}
         
-        {/* Type filter icons */}
-        <div className="flex gap-1">
-          {allTypes.map(type => {
-            const isActive = activeTypeFilters.includes(type);
-            const Icon = typeIcons[type];
-            const colors = typeBgColors[type];
+        {/* Type filter icons - only for bitacora tab */}
+        {activeTab === 'bitacora' && (
+          <>
+            <div className="flex gap-1">
+              {allTypes.map(type => {
+                const isActive = activeTypeFilters.includes(type);
+                const Icon = typeIcons[type];
+                const colors = typeBgColors[type];
+                
+                return (
+                  <button
+                    key={type}
+                    onClick={() => toggleTypeFilter(type)}
+                    className={`
+                      p-1.5 rounded transition-colors
+                      ${isActive ? colors.active + ' text-white' : 'bg-gray-800 text-gray-500 hover:text-gray-300'}
+                    `}
+                    title={typeLabels[type]}
+                  >
+                    <Icon size={14} />
+                  </button>
+                );
+              })}
+            </div>
             
-            return (
+            {/* Clear filters button - only show when filters active */}
+            {activeTypeFilters.length > 0 && (
               <button
-                key={type}
-                onClick={() => toggleTypeFilter(type)}
-                className={`
-                  p-1.5 rounded transition-colors
-                  ${isActive ? colors.active + ' text-white' : 'bg-gray-800 text-gray-500 hover:text-gray-300'}
-                `}
-                title={typeLabels[type]}
+                onClick={clearTypeFilters}
+                className="p-1.5 rounded bg-gray-800 text-gray-400 hover:text-red-400 transition-colors"
+                title="Quitar filtros"
               >
-                <Icon size={14} />
+                <X size={14} />
               </button>
-            );
-          })}
-        </div>
-        
-        {/* Clear filters button - only show when filters active */}
-        {activeTypeFilters.length > 0 && (
-          <button
-            onClick={clearTypeFilters}
-            className="p-1.5 rounded bg-gray-800 text-gray-400 hover:text-red-400 transition-colors"
-            title="Quitar filtros"
-          >
-            <X size={14} />
-          </button>
+            )}
+          </>
         )}
         
         <div className="flex-1" />
@@ -455,15 +459,22 @@ export function NotesList() {
         {/* Create note button */}
         <div className="relative" ref={createDropdownRef}>
           <button
-            onClick={() => setShowCreateDropdown(!showCreateDropdown)}
+            onClick={() => {
+              // For conexiones tab, directly create a connection
+              if (activeTab === 'conexiones') {
+                handleTypeSelect('connection');
+              } else {
+                setShowCreateDropdown(!showCreateDropdown);
+              }
+            }}
             className="p-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white transition-colors shadow-md"
-            title="Crear nota"
+            title={activeTab === 'conexiones' ? 'Crear conexión' : 'Crear nota'}
           >
             <Plus size={16} strokeWidth={2.5} />
           </button>
           
-          {/* Type dropdown */}
-          {showCreateDropdown && (
+          {/* Type dropdown - only for bitacora tab */}
+          {showCreateDropdown && activeTab === 'bitacora' && (
             <div className="absolute right-0 top-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 py-1 min-w-[140px]">
               {allTypes.map(type => {
                 const Icon = typeIcons[type];

@@ -208,27 +208,12 @@ export function getAttachmentDeletedDescription(filename: string): string {
 // ============================================================================
 
 export function getPlaceholderTimesheetDescription(eventType: TaskActivityEventType): string {
-  const descriptions: Record<TaskActivityEventType, string> = {
-    CREATED: 'Tarea creada',
-    TITLE_CHANGED: 'Actualización de título',
-    STATUS_CHANGED: 'Cambio de estado',
-    PRIORITY_CHANGED: 'Cambio de prioridad',
-    PROJECT_CHANGED: 'Cambio de proyecto',
-    CLIENT_CHANGED: 'Cambio de cliente',
-    DUE_DATE_CHANGED: 'Cambio de fecha',
-    CONTENT_UPDATED: 'Actualización de contenido',
-    TIMESHEET_ADDED: '', // Should not create placeholder
-    TIMESHEET_MODIFIED: '', // Should not create placeholder
-    TIMESHEET_DELETED: '', // Should not create placeholder
-    ATTACHMENT_ADDED: 'Agregado adjunto',
-    ATTACHMENT_DELETED: 'Eliminado adjunto',
-    ARCHIVED: 'Tarea archivada',
-    UNARCHIVED: 'Tarea desarchivada',
-    FAVORITED: 'Marcada como favorita',
-    UNFAVORITED: 'Desmarcada de favoritos',
-  };
-  
-  return descriptions[eventType] || 'Trabajé en esta tarea';
+  // All automatic events use the same generic description
+  const timesheetEvents: TaskActivityEventType[] = ['TIMESHEET_ADDED', 'TIMESHEET_MODIFIED', 'TIMESHEET_DELETED'];
+  if (timesheetEvents.includes(eventType)) {
+    return ''; // Should not create placeholder for timesheet events
+  }
+  return '- Se ha registrado actividad -';
 }
 
 // Events that should NOT create a placeholder timesheet

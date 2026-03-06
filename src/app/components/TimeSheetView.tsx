@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Clock, Trash2, Download, ChevronUp, ChevronDown, AlertCircle, X, Folder, FileText, Filter, XCircle, Save, Plus } from 'lucide-react';
+import { Clock, Trash2, Download, ChevronUp, ChevronDown, AlertCircle, X, Folder, FileText, Filter, XCircle, Save, Plus, Upload } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Toast } from './Toast';
 import { TaskEditorModal } from './TaskEditorModal';
@@ -52,7 +52,7 @@ type SortField = 'workDate' | 'clientName' | 'projectName' | 'taskTitle' | 'hour
 type SortDirection = 'asc' | 'desc';
 
 export function TimeSheetView() {
-  const { refreshNotes, selectedTimesheetClientId, clients, showCargarHorasModal, closeCargarHorasModal } = useApp();
+  const { refreshNotes, selectedTimesheetClientId, clients, showCargarHorasModal, closeCargarHorasModal, openCargarHorasModal } = useApp();
   // NOTE: selectedTimesheetClientId is used for filtering; we previously
   // displayed the parent client name in the header but that was removed.
   // (kept here for potential future logic)
@@ -113,7 +113,42 @@ export function TimeSheetView() {
   const [filterDateTo, setFilterDateTo] = useState<string>('');
   const [filterClient, setFilterClient] = useState<string>('');
   const [filterProject, setFilterProject] = useState<string>('');
-  const [showFilters, setShowFilters] = useState(false);
+  const [filterState, setFilterState] = useState<'all' | 'DRAFT' | 'FINAL'>('DRAFT'); // Estado: borrador por defecto
+  const [filterPositiveHours, setFilterPositiveHours] = useState(true); // Solo horas > 0
+
+  // Column widths (resizable, persisted in localStorage)
+  const COLUMN_WIDTHS_KEY = 'timesheet-column-widths';
+  const defaultColumnWidths = {
+    fecha: 100,
+    cliente: 120,
+    proyecto: 150,
+    ticket: 200,
+    horas: 80,
+    descripcion: 200,
+    estado: 100,
+    acciones: 80,
+  };
+  const [columnWidths, setColumnWidths] = useState<typeof defaultColumnWidths>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(COLUMN_WIDTHS_KEY);
+      if (saved) {
+        try {
+          return { ...defaultColumnWidths, ...JSON.parse(saved) };
+        } catch {}
+      }
+    }
+    return defaultColumnWidths;
+  });
+  
+  // Persist column widths to localStorage
+  useEffect(() => {
+    localStorage.setItem(COLUMN_WIDTHS_KEY, JSON.stringify(columnWidths));
+  }, [columnWidths]);
+  
+  // Column resize state
+  const [resizingColumn, setResizingColumn] = useState<string | null>(null);
+  const resizeStartX = useRef(0);
+  const resizeStartWidth = useRef(0);
 
   // Month and Year selectors (always visible, separated)
   const [selectedMonth, setSelectedMonth] = useState(() => (new Date().getMonth() + 1));
@@ -138,12 +173,15 @@ export function TimeSheetView() {
   }, [timesheets]);
 
   const uniqueProjects = useMemo(() => {
-    const projects = Array.from(new Set(timesheets.map(ts => ts.projectName))).sort();
+    const filtered = filterClient 
+      ? timesheets.filter(ts => ts.clientName === filterClient)
+      : timesheets;
+    const projects = Array.from(new Set(filtered.map(ts => ts.projectName))).sort();
     return projects;
-  }, [timesheets]);
+  }, [timesheets, filterClient]);
 
   // Check if any filter is active
-  const hasActiveFilters = filterDateFrom || filterDateTo || filterClient || filterProject;
+  const hasActiveFilters = filterDateFrom || filterDateTo || filterClient || filterProject || filterState !== 'DRAFT' || !filterPositiveHours;
 
   // Clear all filters
   const clearFilters = () => {
@@ -151,6 +189,8 @@ export function TimeSheetView() {
     setFilterDateTo('');
     setFilterClient('');
     setFilterProject('');
+    setFilterState('DRAFT');
+    setFilterPositiveHours(true);
   };
 
   // Fetch timesheets from API
@@ -205,6 +245,10 @@ export function TimeSheetView() {
   
   const filteredTimesheets = useMemo(() => {
     return timesheets.filter(ts => {
+      // State filter
+      if (filterState !== 'all' && ts.state !== filterState) return false;
+      // Positive hours filter
+      if (filterPositiveHours && ts.hoursWorked <= 0) return false;
       // Month filter (always active)
       if (selectedMonthStr) {
         const tsMonth = ts.workDate.slice(0, 7); // YYYY-MM
@@ -240,7 +284,7 @@ export function TimeSheetView() {
       
       return true;
     });
-  }, [timesheets, selectedMonthStr, selectedDay, selectedWeek, getWeekDaysRange, filterDateFrom, filterDateTo, filterClient, filterProject, selectedTimesheetClientId, clients]);
+  }, [timesheets, selectedMonthStr, selectedDay, selectedWeek, getWeekDaysRange, filterDateFrom, filterDateTo, filterClient, filterProject, selectedTimesheetClientId, clients, filterState, filterPositiveHours]);
 
   const totalHours = filteredTimesheets.reduce((sum, ts) => sum + ts.hoursWorked, 0);
   const totalImputadas = filteredTimesheets.filter(ts => ts.state === 'FINAL').reduce((sum, ts) => sum + ts.hoursWorked, 0);
@@ -295,6 +339,70 @@ export function TimeSheetView() {
       ? <ChevronUp size={14} className="inline ml-1" />
       : <ChevronDown size={14} className="inline ml-1" />;
   };
+
+  // Column resize handlers
+  const handleResizeStart = useCallback((e: React.MouseEvent, columnKey: keyof typeof columnWidths) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setResizingColumn(columnKey);
+    resizeStartX.current = e.clientX;
+    resizeStartWidth.current = columnWidths[columnKey];
+  }, [columnWidths]);
+
+  useEffect(() => {
+    if (!resizingColumn) return;
+    
+    const handleResizeMove = (e: MouseEvent) => {
+      const delta = e.clientX - resizeStartX.current;
+      const newWidth = Math.max(50, resizeStartWidth.current + delta);
+      setColumnWidths(prev => ({ ...prev, [resizingColumn]: newWidth }));
+    };
+    
+    const handleResizeEnd = () => {
+      setResizingColumn(null);
+    };
+    
+    document.addEventListener('mousemove', handleResizeMove);
+    document.addEventListener('mouseup', handleResizeEnd);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    
+    return () => {
+      document.removeEventListener('mousemove', handleResizeMove);
+      document.removeEventListener('mouseup', handleResizeEnd);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [resizingColumn]);
+
+  // Resizable table header component
+  const ResizableHeader = ({ 
+    columnKey, 
+    children, 
+    onClick, 
+    className = '' 
+  }: { 
+    columnKey: keyof typeof columnWidths; 
+    children: React.ReactNode; 
+    onClick?: () => void;
+    className?: string;
+  }) => (
+    <th 
+      style={{ width: columnWidths[columnKey], minWidth: columnWidths[columnKey] }}
+      className={`px-3 py-2 font-medium relative select-none ${className}`}
+    >
+      <div 
+        className={onClick ? 'cursor-pointer hover:text-white transition-colors' : ''}
+        onClick={onClick}
+      >
+        {children}
+      </div>
+      <div
+        className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-blue-500/50 transition-colors"
+        onMouseDown={(e) => handleResizeStart(e, columnKey)}
+      />
+    </th>
+  );
 
   // Handle delete
   const handleDelete = async (id: string) => {
@@ -1135,25 +1243,19 @@ export function TimeSheetView() {
         
         {/* Right section: Action buttons */}
         <div className="flex items-center gap-2">
-          {/* More filters toggle */}
           <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              showFilters || hasActiveFilters 
-                ? 'bg-orange-600 text-white' 
-                : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-            }`}
+            onClick={openCargarHorasModal}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors"
+            title="Cargar Horas"
           >
-            <Filter size={16} />
-            {hasActiveFilters && (
-              <span className="bg-white text-orange-600 text-xs rounded-full px-1.5 py-0.5 font-bold">!</span>
-            )}
+            <Upload size={16} />
           </button>
           
           <button
             onClick={handleExportCSV}
             disabled={filteredTimesheets.length === 0}
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 disabled:bg-gray-700 disabled:text-gray-500 text-white text-sm font-medium transition-colors"
+            title="Exportar CSV"
           >
             <Download size={16} />
           </button>
@@ -1176,9 +1278,56 @@ export function TimeSheetView() {
         </div>
       </div>
 
-      {/* Filter row */}
-      {showFilters && (
-        <div className="px-6 py-3 border-b border-gray-800 bg-gray-900/50 flex items-center gap-4 flex-wrap">
+      {/* Filter row - always visible */}
+        <div className="px-6 py-3 border-b border-gray-800 flex items-center gap-4 flex-wrap">
+          {/* Positive hours filter */}
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={filterPositiveHours}
+              onChange={(e) => setFilterPositiveHours(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-900"
+            />
+            <span className="text-sm text-gray-300">Solo horas &gt; 0</span>
+          </label>
+
+          {/* State filter toggles */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-400 mr-1">Estado:</span>
+            <button
+              onClick={() => setFilterState('all')}
+              className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                filterState === 'all'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white'
+              }`}
+            >
+              Todos
+            </button>
+            <button
+              onClick={() => setFilterState('DRAFT')}
+              className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                filterState === 'DRAFT'
+                  ? 'bg-yellow-600 text-white'
+                  : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-yellow-400'
+              }`}
+            >
+              Borrador
+            </button>
+            <button
+              onClick={() => setFilterState('FINAL')}
+              className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                filterState === 'FINAL'
+                  ? 'bg-green-600 text-white'
+                  : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-green-400'
+              }`}
+            >
+              Imputado
+            </button>
+          </div>
+
+          <div className="w-px h-6 bg-gray-700" />
+
           <div className="flex items-center gap-2">
             <label className="text-xs text-gray-500">Desde:</label>
             <input
@@ -1203,7 +1352,7 @@ export function TimeSheetView() {
             <label className="text-xs text-gray-500">Cliente:</label>
             <select
               value={filterClient}
-              onChange={(e) => setFilterClient(e.target.value)}
+              onChange={(e) => { setFilterClient(e.target.value); setFilterProject(''); }}
               className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-white focus:outline-none focus:ring-1 focus:ring-orange-500 min-w-[150px]"
             >
               <option value="">Todos</option>
@@ -1237,7 +1386,6 @@ export function TimeSheetView() {
             </button>
           )}
         </div>
-      )}
 
       {/* Content */}
       {loading ? (
@@ -1293,43 +1441,33 @@ export function TimeSheetView() {
             </h3>
           </div>
           {/* Table */}
-          <table className="w-full">
+          <table className="w-full table-fixed">
             <thead className="bg-gray-900 sticky top-0">
               <tr className="text-left text-sm text-gray-400">
-                <th 
-                  className="px-3 py-2 font-medium cursor-pointer hover:text-white transition-colors"
-                  onClick={() => handleSort('workDate')}
-                >
+                <ResizableHeader columnKey="fecha" onClick={() => handleSort('workDate')}>
                   Fecha <SortIndicator field="workDate" />
-                </th>
-                {/* new client column */}
-                <th 
-                  className="px-3 py-2 font-medium cursor-pointer hover:text-white transition-colors"
-                  onClick={() => handleSort('clientName')}
-                >
+                </ResizableHeader>
+                <ResizableHeader columnKey="cliente" onClick={() => handleSort('clientName')}>
                   Cliente <SortIndicator field="clientName" />
-                </th>
-                <th 
-                  className="px-3 py-2 font-medium cursor-pointer hover:text-white transition-colors"
-                  onClick={() => handleSort('projectName')}
-                >
+                </ResizableHeader>
+                <ResizableHeader columnKey="proyecto" onClick={() => handleSort('projectName')}>
                   Proyecto <SortIndicator field="projectName" />
-                </th>
-                <th 
-                  className="px-3 py-2 font-medium cursor-pointer hover:text-white transition-colors"
-                  onClick={() => handleSort('taskTitle')}
-                >
+                </ResizableHeader>
+                <ResizableHeader columnKey="ticket" onClick={() => handleSort('taskTitle')}>
                   Ticket/Fase <SortIndicator field="taskTitle" />
-                </th>
-                <th 
-                  className="px-3 py-2 font-medium text-right cursor-pointer hover:text-white transition-colors"
-                  onClick={() => handleSort('hoursWorked')}
-                >
+                </ResizableHeader>
+                <ResizableHeader columnKey="horas" onClick={() => handleSort('hoursWorked')}>
                   Horas <SortIndicator field="hoursWorked" />
-                </th>
-                <th className="px-3 py-2 font-medium">Descripción</th>
-                <th className="px-3 py-2 font-medium text-center">Estado</th>
-                <th className="px-3 py-2 font-medium text-center w-24">Acc</th>
+                </ResizableHeader>
+                <ResizableHeader columnKey="descripcion">
+                  Descripción
+                </ResizableHeader>
+                <ResizableHeader columnKey="estado">
+                  Estado
+                </ResizableHeader>
+                <ResizableHeader columnKey="acciones">
+                  Acc
+                </ResizableHeader>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800">
@@ -1414,7 +1552,7 @@ export function TimeSheetView() {
                       </button>
                     </td>
                     {/* Horas */}
-                    <td className="px-3 py-1.5 text-sm text-white text-right font-mono">
+                    <td className="px-3 py-1.5 text-sm text-white font-mono">
                       {isEditing ? (
                         <input
                           ref={(el) => { if (el) hoursInputRefs.current.set(entry.id, el); }}
@@ -1423,7 +1561,7 @@ export function TimeSheetView() {
                           value={editData?.hours ?? entry.hoursWorked}
                           onChange={(e) => handleEditHoursChange(entry.id, e.target.value)}
                           onKeyDown={(e) => handleKeyDown(e, entry.id)}
-                          className="bg-gray-800 border border-orange-500 rounded px-2 py-0.5 text-sm text-white w-16 text-right focus:outline-none focus:ring-1 focus:ring-orange-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          className="bg-gray-800 border border-orange-500 rounded px-2 py-0.5 text-sm text-white w-16 focus:outline-none focus:ring-1 focus:ring-orange-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           onClick={(e) => e.stopPropagation()}
                         />
                       ) : (
@@ -1447,7 +1585,7 @@ export function TimeSheetView() {
                       )}
                     </td>
                     {/* Estado - clickeable para cambiar */}
-                    <td className="px-3 py-1.5 text-sm text-center">
+                    <td className="px-3 py-1.5 text-sm">
                       <button
                         onClick={(e) => { e.stopPropagation(); handleToggleState(entry.id); }}
                         disabled={savingRowId === entry.id}
@@ -1463,7 +1601,7 @@ export function TimeSheetView() {
                     </td>
                     {/* Acciones */}
                     <td className="px-3 py-1.5">
-                      <div className="flex items-center justify-center gap-1">
+                      <div className="flex items-center gap-1">
                         {isEditing ? (
                           <>
                             <button
@@ -1520,7 +1658,7 @@ export function TimeSheetView() {
                 <td className="px-3 py-2 text-white" colSpan={2}>
                   Total horas <span className="text-gray-500">({monthName} {selectedYear})</span>
                 </td>
-                <td className="px-3 py-2 text-white text-right font-mono">
+                <td className="px-3 py-2 text-white font-mono">
                   {totalHours.toFixed(1)}
                 </td>
                 <td className="px-3 py-2 text-gray-400">

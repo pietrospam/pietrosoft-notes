@@ -1,12 +1,12 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Users, FolderPlus, Clipboard, FilePlus, Settings, Clock } from 'lucide-react';
+import { Plus, Users, FolderPlus, Clipboard, FilePlus, Settings, Clock, Link } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { NoteType } from '@/lib/types';
 
 export function FloatingActionButton() {
-  const { createNote, openConfig, requestTimeSheet, setCurrentView } = useApp();
+  const { openEditorModal, openConfig, requestTimeSheet, setCurrentView } = useApp();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -27,8 +27,8 @@ export function FloatingActionButton() {
   };
 
   const newNote = (type: NoteType) => {
-    return async () => {
-      await createNote(type);
+    return () => {
+      openEditorModal(type);
     };
   };
 
@@ -61,7 +61,7 @@ export function FloatingActionButton() {
             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-200 hover:bg-gray-800"
             onClick={() => handleAction(newNote('connection'))}
           >
-            <Users size={16} className="text-green-400" />
+            <Link size={16} className="text-green-400" />
             Conexión
           </button>
           <button

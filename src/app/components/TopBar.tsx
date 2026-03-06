@@ -2,7 +2,7 @@
 
 import { useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { Search, Save, X, Clock, BookOpen, Upload, Cable } from 'lucide-react';
+import { Search, Save, X, Clock, BookOpen, Cable } from 'lucide-react';
 import type { ActiveTab } from '../context/AppContext';
 
 // top-right "new note" dropdown removed, FAB handles creation
@@ -16,7 +16,7 @@ const tabs: { id: ActiveTab; label: string; icon: React.ElementType }[] = [
 ];
 
 export function TopBar() {
-  const { searchQuery, setSearchQuery, isSaving, lastSaved, selectedNote, confirmNavigation, filteredNotes, setSelectedNoteId, activeTab, setActiveTab, openCargarHorasModal } = useApp();
+  const { searchQuery, setSearchQuery, isSaving, lastSaved, selectedNote, confirmNavigation, filteredNotes, setSelectedNoteId, activeTab, setActiveTab } = useApp();
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // top-right dropdown removed; no additional state or effects
@@ -98,18 +98,6 @@ export function TopBar() {
 
       {/* Spacer */}
       <div className="flex-1" />
-
-      {/* Cargar Horas button - only visible on timesheets tab */}
-      {activeTab === 'timesheets' && (
-        <button
-          onClick={openCargarHorasModal}
-          className="flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-500 rounded-lg text-sm font-medium text-white transition-colors"
-          title="Abrir vista para cargar horas"
-        >
-          <Upload size={16} />
-          <span>Cargar Horas</span>
-        </button>
-      )}
 
       {/* Auto-save status badge */}
       {selectedNote && (
