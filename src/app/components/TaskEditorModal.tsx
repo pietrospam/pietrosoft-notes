@@ -9,7 +9,7 @@ import { QuickCreateModal } from './QuickCreateModal';
 import { Toast } from './Toast';
 import { UnsavedChangesModal } from './UnsavedChangesModal';
 import { TaskActivityLogModal } from './TaskActivityLogModal';
-import { TaskComments } from './TaskComments';
+import { TaskComments, TaskCommentsRef } from './TaskComments';
 import { useApp } from '../context/AppContext';
 import type { TaskNote, Client, Project, TaskStatus, TaskPriority } from '@/lib/types';
 
@@ -109,6 +109,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Track if editor content has been initialized (to ignore TipTap's initial onChange)
   const contentInitializedRef = useRef(!taskId); // New tasks start initialized
+  const commentsRef = useRef<TaskCommentsRef>(null); // Ref to save pending comments
 
   // Persist task and return new ID (for attachments/images before first save)
   const persistTask = useCallback(async (): Promise<string | null> => {
@@ -481,6 +482,9 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
   };
 
   const handleSave = async () => {
+    // Also save any pending comment
+    await commentsRef.current?.savePendingComment();
+    
     if (Object.keys(pendingChangesRef.current).length === 0 && taskId) return;
     
     if (autoSaveTimerRef.current) {
@@ -883,10 +887,14 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
 
       {/* Comments */}
       <TaskComments 
+        ref={commentsRef}
         taskId={taskId || task.id} 
         currentUser={currentUser} 
         onAttachmentsChange={refreshNotes}
         onSaveTask={handleSave}
+        onEditingChange={(isEditing) => {
+          if (isEditing) setIsDirty(true);
+        }}
         onCommentsLoaded={(count) => {
           setCommentsCount(count);
           // Auto-collapse body when comments exist (only on first load)

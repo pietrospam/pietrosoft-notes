@@ -1,13 +1,449 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { Building2, FolderKanban, Database, Download, Upload, Loader2, Settings, Save, Clock, Trash2 } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Building2, FolderKanban, Database, Download, Upload, Loader2, Settings, Save, Clock, Trash2, Server, Shield, ShieldOff, RotateCcw, RefreshCw, Plus, FolderOpen, Timer, Calendar } from 'lucide-react';
 import { ClientsManager } from './ClientsManager';
 import { ProjectsManager } from './ProjectsManager';
 import { useApp } from '../context/AppContext';
 import { InfoModal } from './InfoModal';
 
 export type ConfigTab = 'clients' | 'projects' | 'backup' | 'preferences';
+
+interface BackupMetadata {
+  filename: string;
+  createdAt: string;
+  sizeBytes: number;
+  type: 'auto' | 'manual';
+  description?: string;
+  protected: boolean;
+  stats?: {
+    notes: number;
+    clients: number;
+    projects: number;
+    attachments: number;
+    timesheets: number;
+    activityLogs: number;
+    taskComments?: number;
+  };
+}
+
+interface BackupSettings {
+  retentionCount: number;
+  autoBackupEnabled: boolean;
+  autoBackupFrequency: 'daily' | 'weekly' | 'monthly';
+  autoBackupTime: string;
+  backupDirectory: string;
+  lastAutoBackup?: string;
+}
+
+function ServerBackupsSection() {
+  const { refreshNotes } = useApp();
+  const [backups, setBackups] = useState<BackupMetadata[]>([]);
+  const [settings, setSettings] = useState<BackupSettings | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isCreating, setIsCreating] = useState(false);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [restoringFilename, setRestoringFilename] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+
+  const fetchBackups = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/backups');
+      if (!res.ok) throw new Error('Failed to fetch backups');
+      const data = await res.json();
+      setBackups(data);
+    } catch (err) {
+      setError('No se pudo cargar la lista de backups');
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const fetchSettings = useCallback(async () => {
+    try {
+      const res = await fetch('/api/backups/settings');
+      if (!res.ok) throw new Error('Failed to fetch settings');
+      const data = await res.json();
+      setSettings(data);
+    } catch (err) {
+      console.error('Failed to fetch backup settings:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchBackups();
+    fetchSettings();
+  }, [fetchBackups, fetchSettings]);
+
+  const handleCreateBackup = async () => {
+    setIsCreating(true);
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      const res = await fetch('/api/backups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: 'Manual backup' }),
+      });
+      if (!res.ok) throw new Error('Failed to create backup');
+      const data = await res.json();
+      setSuccessMessage(`Backup creado: ${data.filename}`);
+      fetchBackups();
+    } catch (err) {
+      setError('No se pudo crear el backup');
+      console.error(err);
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const handleRestore = async (filename: string) => {
+    if (!confirm(`¿Estás seguro de restaurar el backup "${filename}"?\n\nEsto reemplazará TODOS los datos actuales.`)) {
+      return;
+    }
+    setRestoringFilename(filename);
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      const res = await fetch(`/api/backups/${encodeURIComponent(filename)}/restore`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to restore');
+      setSuccessMessage(`Backup restaurado: ${data.restored.notes} notas, ${data.restored.clients} clientes, ${data.restored.projects} proyectos`);
+      refreshNotes();
+    } catch (err) {
+      setError('No se pudo restaurar el backup');
+      console.error(err);
+    } finally {
+      setRestoringFilename(null);
+    }
+  };
+
+  const handleDelete = async (filename: string) => {
+    if (!confirm(`¿Eliminar el backup "${filename}"?`)) return;
+    setError(null);
+    try {
+      const res = await fetch(`/api/backups/${encodeURIComponent(filename)}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to delete');
+      }
+      fetchBackups();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo eliminar');
+      console.error(err);
+    }
+  };
+
+  const handleToggleProtect = async (filename: string, currentlyProtected: boolean) => {
+    setError(null);
+    try {
+      const res = await fetch(`/api/backups/${encodeURIComponent(filename)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ protected: !currentlyProtected }),
+      });
+      if (!res.ok) throw new Error('Failed to update');
+      fetchBackups();
+    } catch (err) {
+      setError('No se pudo actualizar la protección');
+      console.error(err);
+    }
+  };
+
+  const handleDownload = (filename: string) => {
+    window.open(`/api/backups/${encodeURIComponent(filename)}`, '_blank');
+  };
+
+  const handleSaveSettings = async (newSettings: Partial<BackupSettings>) => {
+    if (!settings) return;
+    setIsSavingSettings(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/backups/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...settings, ...newSettings }),
+      });
+      if (!res.ok) throw new Error('Failed to save settings');
+      const data = await res.json();
+      setSettings(data.settings);
+      setSuccessMessage('Configuración guardada');
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      setError('No se pudo guardar la configuración');
+      console.error(err);
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
+  const formatDate = (dateStr: string) => {
+    const d = new Date(dateStr);
+    return d.toLocaleString('es-AR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  return (
+    <div className="bg-gray-900 rounded-lg p-4 border border-gray-800">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-purple-500/20 rounded-lg">
+            <Server size={20} className="text-purple-400" />
+          </div>
+          <div>
+            <h3 className="text-lg font-medium text-white">Backups en Servidor</h3>
+            <p className="text-gray-400 text-sm">Backups almacenados en el servidor</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className={`p-2 rounded-lg transition-colors ${showSettings ? 'text-purple-400 bg-purple-500/20' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}
+            title="Configuración"
+          >
+            <Settings size={18} />
+          </button>
+          <button
+            onClick={fetchBackups}
+            disabled={isLoading}
+            className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+            title="Refrescar lista"
+          >
+            <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
+          </button>
+          <button
+            onClick={handleCreateBackup}
+            disabled={isCreating}
+            className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+          >
+            {isCreating ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Plus size={16} />
+            )}
+            Crear Backup
+          </button>
+        </div>
+      </div>
+
+      {/* Messages */}
+      {error && (
+        <div className="mb-4 p-3 bg-red-900/50 text-red-300 border border-red-700 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
+      {successMessage && (
+        <div className="mb-4 p-3 bg-green-900/50 text-green-300 border border-green-700 rounded-lg text-sm">
+          {successMessage}
+        </div>
+      )}
+
+      {/* Settings Panel */}
+      {showSettings && settings && (
+        <div className="mb-4 p-4 bg-gray-800/50 rounded-lg border border-gray-700/50 space-y-4">
+          {/* Backup Directory */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              <FolderOpen size={14} className="inline mr-1" />
+              Directorio de Backups
+            </label>
+            <div className="text-sm text-gray-400 bg-gray-900 px-3 py-2 rounded font-mono break-all">
+              {settings.backupDirectory}
+            </div>
+          </div>
+
+          {/* Retention */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              <Timer size={14} className="inline mr-1" />
+              Retención de Backups
+            </label>
+            <div className="flex items-center gap-3">
+              <select
+                value={settings.retentionCount}
+                onChange={(e) => handleSaveSettings({ retentionCount: parseInt(e.target.value) })}
+                disabled={isSavingSettings}
+                className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+              >
+                <option value={0}>Ilimitado</option>
+                <option value={5}>Últimos 5 backups</option>
+                <option value={10}>Últimos 10 backups</option>
+                <option value={20}>Últimos 20 backups</option>
+                <option value={30}>Últimos 30 backups</option>
+                <option value={50}>Últimos 50 backups</option>
+              </select>
+              <span className="text-xs text-gray-500">
+                (Los backups protegidos no se eliminan)
+              </span>
+            </div>
+          </div>
+
+          {/* Auto-backup */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              <Calendar size={14} className="inline mr-1" />
+              Backup Automático
+            </label>
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => handleSaveSettings({ autoBackupEnabled: !settings.autoBackupEnabled })}
+                  disabled={isSavingSettings}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    settings.autoBackupEnabled ? 'bg-purple-600' : 'bg-gray-600'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      settings.autoBackupEnabled ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+                <span className="text-sm text-gray-300">
+                  {settings.autoBackupEnabled ? 'Activado' : 'Desactivado'}
+                </span>
+              </div>
+              
+              {settings.autoBackupEnabled && (
+                <div className="flex items-center gap-3 ml-14">
+                  <select
+                    value={settings.autoBackupFrequency}
+                    onChange={(e) => handleSaveSettings({ autoBackupFrequency: e.target.value as BackupSettings['autoBackupFrequency'] })}
+                    disabled={isSavingSettings}
+                    className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                  >
+                    <option value="daily">Diario</option>
+                    <option value="weekly">Semanal</option>
+                    <option value="monthly">Mensual</option>
+                  </select>
+                  <span className="text-xs text-gray-500">a las</span>
+                  <input
+                    type="time"
+                    value={settings.autoBackupTime}
+                    onChange={(e) => handleSaveSettings({ autoBackupTime: e.target.value })}
+                    disabled={isSavingSettings}
+                    className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                  />
+                </div>
+              )}
+              
+              {settings.lastAutoBackup && (
+                <div className="text-xs text-gray-500 ml-14">
+                  Último backup automático: {formatDate(settings.lastAutoBackup)}
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {isSavingSettings && (
+            <div className="flex items-center gap-2 text-xs text-purple-400">
+              <Loader2 size={12} className="animate-spin" />
+              Guardando...
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Backup List */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="animate-spin text-gray-400" size={24} />
+        </div>
+      ) : backups.length === 0 ? (
+        <div className="text-center py-8 text-gray-500">
+          No hay backups disponibles
+        </div>
+      ) : (
+        <div className="space-y-2 max-h-[400px] overflow-y-auto">
+          {backups.map((backup) => (
+            <div
+              key={backup.filename}
+              className="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg border border-gray-700/50 hover:border-gray-600/50 transition-colors"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-white font-medium text-sm truncate">
+                    {backup.filename}
+                  </span>
+                  {backup.protected && (
+                    <span title="Protegido">
+                      <Shield size={14} className="text-yellow-500 flex-shrink-0" />
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                  <span>{formatDate(backup.createdAt)}</span>
+                  <span>{formatSize(backup.sizeBytes)}</span>
+                  {backup.stats && (
+                    <span>
+                      {backup.stats.notes}n / {backup.stats.clients}c / {backup.stats.projects}p
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-1 ml-2">
+                <button
+                  onClick={() => handleToggleProtect(backup.filename, backup.protected)}
+                  className="p-1.5 text-gray-400 hover:text-yellow-400 hover:bg-gray-700 rounded transition-colors"
+                  title={backup.protected ? 'Quitar protección' : 'Proteger'}
+                >
+                  {backup.protected ? <ShieldOff size={16} /> : <Shield size={16} />}
+                </button>
+                <button
+                  onClick={() => handleDownload(backup.filename)}
+                  className="p-1.5 text-gray-400 hover:text-blue-400 hover:bg-gray-700 rounded transition-colors"
+                  title="Descargar"
+                >
+                  <Download size={16} />
+                </button>
+                <button
+                  onClick={() => handleRestore(backup.filename)}
+                  disabled={restoringFilename === backup.filename}
+                  className="p-1.5 text-gray-400 hover:text-green-400 hover:bg-gray-700 rounded transition-colors disabled:opacity-50"
+                  title="Restaurar"
+                >
+                  {restoringFilename === backup.filename ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <RotateCcw size={16} />
+                  )}
+                </button>
+                <button
+                  onClick={() => handleDelete(backup.filename)}
+                  disabled={backup.protected}
+                  className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-gray-700 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={backup.protected ? 'No se puede eliminar (protegido)' : 'Eliminar'}
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function BackupManager() {
   const { refreshNotes } = useApp();
@@ -190,6 +626,9 @@ function BackupManager() {
             </div>
           )}
         </div>
+
+        {/* Server Backups Section */}
+        <ServerBackupsSection />
       </div>
     </div>
   );
