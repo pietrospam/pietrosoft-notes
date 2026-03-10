@@ -6,12 +6,13 @@ Este directorio contiene las especificaciones técnicas del proyecto Pietrosoft 
 
 | Spec | Título | Estado | Descripción |
 |------|--------|--------|-------------|
-| [SPEC-001](SPEC-001-storage-docker.md) | Storage Engine & Docker Setup | ✅ Superseded | Infraestructura original file-based (reemplazado por SPEC-006) |
+| [SPEC-001](SPEC-001-storage-docker.md) | Storage Engine & Docker Setup | ⛔ Superseded | Infraestructura original file-based (reemplazado por SPEC-006) |
 | [SPEC-002](SPEC-002-ui-skeleton.md) | UI Skeleton & Navigation | ✅ Completed | Layout 3 paneles, navegación, lista de notas |
 | [SPEC-003](SPEC-003-config-screens.md) | Config Screens | 🔄 In Progress | CRUD de Clientes y Proyectos |
 | [SPEC-004](SPEC-004-attachments.md) | Attachments & Image Paste | ✅ Completed | Upload de archivos y pegado de imágenes |
 | [SPEC-005](SPEC-005-search-export.md) | Search Filters & CSV Export | 🔄 In Progress | Búsqueda mejorada y exportación CSV |
 | [SPEC-006](SPEC-006-database-migration.md) | PostgreSQL Database Migration | ✅ Completed | Migración a PostgreSQL con Prisma |
+| [SPEC-007](SPEC-007-telegram-notifications.md) | Telegram Backup Notifications | � In Progress | Notificaciones de backup vía Telegram |
 
 ## Estados
 

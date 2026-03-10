@@ -3,6 +3,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import JSZip from 'jszip';
 import archiver from 'archiver';
+import { notifyBackupSuccess, notifyBackupError } from '@/lib/telegram';
 
 export const dynamic = 'force-dynamic';
 
@@ -312,7 +313,15 @@ export async function POST(request: NextRequest) {
     
     // Apply retention policy
     await applyRetentionPolicy();
-    
+
+    // Send Telegram notification (async, don't block response)
+    notifyBackupSuccess({
+      filename,
+      sizeBytes: zipBuffer.length,
+      type: 'manual',
+      filePath,
+    }).catch(err => console.error('Telegram notification failed:', err));
+
     return NextResponse.json({
       success: true,
       filename,
@@ -321,6 +330,13 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error creating backup:', error);
+    
+    // Send error notification (async)
+    notifyBackupError({
+      type: 'manual',
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }).catch(err => console.error('Telegram error notification failed:', err));
+    
     return NextResponse.json({ error: 'Failed to create backup' }, { status: 500 });
   }
 }

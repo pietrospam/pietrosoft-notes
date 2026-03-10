@@ -23,3 +23,4 @@ export { ConnectionEditorModal } from './ConnectionEditorModal';
 export { TaskComments } from './TaskComments';
 export { Toast } from './Toast';
 export { GlobalDropZone } from './GlobalDropZone';
+export { TelegramConfig } from './TelegramConfig';

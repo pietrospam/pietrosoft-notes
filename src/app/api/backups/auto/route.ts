@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { promises as fs } from 'fs';
 import path from 'path';
+import { notifyBackupSuccess, notifyBackupError } from '@/lib/telegram';
 
 export const dynamic = 'force-dynamic';
 
@@ -171,6 +172,14 @@ export async function POST() {
     // Apply retention policy
     await applyRetentionPolicy(settings.retentionCount);
 
+    // Send Telegram notification (async, don't block response)
+    notifyBackupSuccess({
+      filename,
+      sizeBytes: zipBuffer.length,
+      type: 'auto',
+      filePath,
+    }).catch(err => console.error('Telegram notification failed:', err));
+
     return NextResponse.json({
       success: true,
       filename,
@@ -180,6 +189,13 @@ export async function POST() {
     });
   } catch (error) {
     console.error('Error creating auto backup:', error);
+    
+    // Send error notification (async)
+    notifyBackupError({
+      type: 'auto',
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }).catch(err => console.error('Telegram error notification failed:', err));
+    
     return NextResponse.json({ error: 'Failed to create auto backup' }, { status: 500 });
   }
 }

@@ -641,6 +641,15 @@ function PreferencesManager() {
   const [dailyHoursTarget, setDailyHoursTarget] = useState<number>(8);
   const [exportDateFormat, setExportDateFormat] = useState<string>('DD/MM/YYYY');
   
+  // Lazy import TelegramConfig to avoid SSR issues
+  const [TelegramConfigComponent, setTelegramConfigComponent] = useState<React.ComponentType | null>(null);
+  
+  useEffect(() => {
+    import('./TelegramConfig').then(mod => {
+      setTelegramConfigComponent(() => mod.TelegramConfig);
+    });
+  }, []);
+  
   // Load from localStorage on mount
   useEffect(() => {
     const savedHours = localStorage.getItem('timesheet-daily-hours');
@@ -757,6 +766,9 @@ function PreferencesManager() {
             Un punto amarillo indicará cuando hay cambios sin guardar.
           </p>
         </div>
+
+        {/* Telegram Notifications */}
+        {TelegramConfigComponent && <TelegramConfigComponent />}
       </div>
     </div>
   );
