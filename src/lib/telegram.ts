@@ -252,8 +252,7 @@ export async function notifyBackupSuccess(
         `✅ <b>Backup Completado</b>\n\n` +
         `📅 Fecha: ${dateFormatted}\n` +
         `📦 Tipo: ${typeLabel}\n` +
-        `💾 Tamaño: ${sizeFormatted}\n` +
-        `📁 Archivo: ${backupInfo.filename}`;
+        `💾 Tamaño: ${sizeFormatted}`;
       
       await telegram.sendDocument(fileBuffer, backupInfo.filename, caption);
     } catch (error) {
