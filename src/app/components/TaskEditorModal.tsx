@@ -291,14 +291,17 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
               if (description.length > 100) description = description.substring(0, 100);
               
               const newTitle = description ? `#${ticketCode} - ${description}` : `#${ticketCode}`;
+              const shortDesc = description || ticketCode;
               
               setTitle(newTitle);
-              setTask(prev => ({
-                ...prev,
+              // Update both state AND pendingChangesRef to prevent race condition with handleTitleBlur
+              const clipboardUpdates = {
                 title: newTitle,
                 ticketPhaseCode: ticketCode,
-                shortDescription: description || ticketCode,
-              }));
+                shortDescription: shortDesc,
+              };
+              pendingChangesRef.current = { ...pendingChangesRef.current, ...clipboardUpdates };
+              setTask(prev => ({ ...prev, ...clipboardUpdates }));
             }
           }
         } catch {
