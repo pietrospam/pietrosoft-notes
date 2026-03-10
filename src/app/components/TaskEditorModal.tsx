@@ -873,6 +873,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
               onChange={handleContentChange}
               noteId={task.id}
               onPersistNote={persistTask}
+              onAttachmentAdded={() => commentsRef.current?.reloadComments()}
               placeholder="Descripción de la tarea..."
             />
             {commentsCount > 0 && (
@@ -1170,6 +1171,8 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
             onChange={(newList) => {
               setTask(prev => ({ ...prev, attachments: newList }));
               trackChange({ attachments: newList });
+              // Reload comments to show system comment for new attachments
+              commentsRef.current?.reloadComments();
             }}
             onClose={() => setShowAttachmentsModal(false)}
             disabledUpload={task.id.startsWith('temp-')}

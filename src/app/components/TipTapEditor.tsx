@@ -26,6 +26,7 @@ interface TipTapEditorProps {
   placeholder?: string;
   noteId?: string; // Required for image uploads
   onPersistNote?: () => Promise<string | null>; // Called to persist temp notes before upload
+  onAttachmentAdded?: () => void; // Called when an image/attachment is added (for refreshing comments)
   readOnly?: boolean; // disable editing and hide toolbar
   compact?: boolean; // reduce height for inline comment inputs
 }
@@ -34,7 +35,7 @@ export interface TipTapEditorHandle {
   focus: () => void;
 }
 
-export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(function TipTapEditor({ content, onChange, placeholder = 'Start writing...', noteId, onPersistNote, readOnly = false, compact = false }, ref) {
+export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(function TipTapEditor({ content, onChange, placeholder = 'Start writing...', noteId, onPersistNote, onAttachmentAdded, readOnly = false, compact = false }, ref) {
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -46,6 +47,10 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
   // Use ref for onPersistNote callback
   const onPersistNoteRef = useRef(onPersistNote);
   onPersistNoteRef.current = onPersistNote;
+  
+  // Use ref for onAttachmentAdded callback
+  const onAttachmentAddedRef = useRef(onAttachmentAdded);
+  onAttachmentAddedRef.current = onAttachmentAdded;
 
   // Get a valid noteId, persisting if necessary
   const getValidNoteId = useCallback(async (): Promise<string | null> => {
@@ -88,6 +93,8 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
       }
 
       const data = await response.json();
+      // Notify parent that an attachment was added (for refreshing comments)
+      onAttachmentAddedRef.current?.();
       return data.url;
     } catch (error) {
       console.error('Failed to upload image:', error);

@@ -7,6 +7,7 @@ import type { TaskComment } from '@/lib/types';
 
 export interface TaskCommentsRef {
   savePendingComment: () => Promise<boolean>; // Returns true if a comment was saved
+  reloadComments: () => void; // Reload comments from server
 }
 
 interface TaskCommentsProps {
@@ -142,7 +143,7 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
     return false;
   };
 
-  // Expose function to save pending comment (new or editing) from parent
+  // Expose functions to parent via ref
   useImperativeHandle(ref, () => ({
     savePendingComment: async () => {
       // If editing an existing comment, save that
@@ -151,6 +152,9 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
       }
       // Otherwise save new comment if there's content
       return handleAdd();
+    },
+    reloadComments: () => {
+      load();
     }
   }));
 
@@ -199,6 +203,7 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
                   placeholder="Escribe tu comentario..."
                   readOnly={false}
                   noteId={taskId}
+                  onAttachmentAdded={() => load()}
                   compact
                 />
                 <div className="flex gap-2 mt-1 justify-end">
@@ -263,6 +268,7 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
             placeholder="Escribe un comentario... (Ctrl+S para guardar)"
             readOnly={false}
             noteId={taskId}
+            onAttachmentAdded={() => load()}
             compact
           />
           <div className="flex gap-2 mt-1">

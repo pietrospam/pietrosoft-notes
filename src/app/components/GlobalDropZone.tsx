@@ -6,13 +6,10 @@ import { useApp } from '../context/AppContext';
 import type { AttachmentMeta } from '@/lib/types';
 
 export function GlobalDropZone() {
-  const { selectedNoteId, filteredNotes, updateNote, persistNewNote } = useApp();
+  const { selectedNote, updateNote, persistNewNote } = useApp();
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
-  
-  // Find the selected note
-  const selectedNote = filteredNotes.find(n => n.id === selectedNoteId);
   
   // Check if we have a valid note to attach to
   const canReceiveFiles = !!selectedNote;
@@ -89,7 +86,6 @@ export function GlobalDropZone() {
 
     const handleDragEnter = (e: DragEvent) => {
       e.preventDefault();
-      e.stopPropagation();
       
       // Only show if files are being dragged and we have a note selected
       if (e.dataTransfer?.types.includes('Files') && canReceiveFiles) {
@@ -102,7 +98,6 @@ export function GlobalDropZone() {
 
     const handleDragLeave = (e: DragEvent) => {
       e.preventDefault();
-      e.stopPropagation();
       
       dragCounter--;
       if (dragCounter === 0) {
@@ -112,12 +107,10 @@ export function GlobalDropZone() {
 
     const handleDragOver = (e: DragEvent) => {
       e.preventDefault();
-      e.stopPropagation();
     };
 
     const handleDropEvent = (e: DragEvent) => {
       e.preventDefault();
-      e.stopPropagation();
       
       dragCounter = 0;
       setIsDragging(false);
@@ -127,16 +120,17 @@ export function GlobalDropZone() {
       }
     };
 
-    document.addEventListener('dragenter', handleDragEnter);
-    document.addEventListener('dragleave', handleDragLeave);
-    document.addEventListener('dragover', handleDragOver);
-    document.addEventListener('drop', handleDropEvent);
+    // Use capture phase to intercept events before child elements can stopPropagation
+    document.addEventListener('dragenter', handleDragEnter, true);
+    document.addEventListener('dragleave', handleDragLeave, true);
+    document.addEventListener('dragover', handleDragOver, true);
+    document.addEventListener('drop', handleDropEvent, true);
 
     return () => {
-      document.removeEventListener('dragenter', handleDragEnter);
-      document.removeEventListener('dragleave', handleDragLeave);
-      document.removeEventListener('dragover', handleDragOver);
-      document.removeEventListener('drop', handleDropEvent);
+      document.removeEventListener('dragenter', handleDragEnter, true);
+      document.removeEventListener('dragleave', handleDragLeave, true);
+      document.removeEventListener('dragover', handleDragOver, true);
+      document.removeEventListener('drop', handleDropEvent, true);
     };
   }, [canReceiveFiles, handleDrop]);
 
