@@ -2,7 +2,7 @@
 
 import { useEffect, useCallback, useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
-import { TopBar, Sidebar, NotesList, ConfigPanel, TimeSheetView, UnsavedChangesModal, FloatingActionButton, Toast } from './components';
+import { TopBar, Sidebar, NotesList, ConfigPanel, TimeSheetView, UnsavedChangesModal, FloatingActionButton, Toast, GlobalDropZone } from './components';
 import { TaskEditorModal } from './components/TaskEditorModal';
 import { NoteEditorModal } from './components/NoteEditorModal';
 import { ConnectionEditorModal } from './components/ConnectionEditorModal';
@@ -163,6 +163,7 @@ function AppLayout() {
         <MainContent />
       </div>
       <FloatingActionButton />
+      <GlobalDropZone />
       {toast && (
         <Toast message={toast.message} onClose={() => setToast(null)} />
       )}
