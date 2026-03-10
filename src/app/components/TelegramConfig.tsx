@@ -98,7 +98,7 @@ export function TelegramConfig() {
         setTestResult('error');
         setTestMessage(data.error || 'Error desconocido');
       }
-    } catch (error) {
+    } catch {
       setTestResult('error');
       setTestMessage('Error de conexión');
     } finally {

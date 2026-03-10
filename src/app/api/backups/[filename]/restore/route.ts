@@ -129,7 +129,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     }
     
     // Optionally restore data directory files
-    const dataDir = process.env.DATA_DIR || './data';
+    const dataDir = process.env.WORKSPACE_PATH || './data';
     const dataFolders = ['notes', 'clients', 'projects', 'attachments'];
     
     let filesRestored = 0;
