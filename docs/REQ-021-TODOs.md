@@ -1,6 +1,7 @@
 # REQ-021: Sistema de TODOs
 
-**Estado:** PENDIENTE  
+**Estado:** EN PROGRESO  
+**Spec:** [SPEC-009-todos](../specs/SPEC-009-todos.md)  
 **Prioridad:** Media-Alta  
 **Fecha:** 2026-03-11
 
