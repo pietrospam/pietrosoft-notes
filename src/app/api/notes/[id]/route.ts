@@ -11,6 +11,7 @@ import {
   getProjectChangeDescription,
   getDueDateChangeDescription,
 } from '@/lib/repositories/activity-log-repo';
+import { createSystemComment, getStatusLabel } from '@/lib/system-comments';
 import type { Note, UpdateNoteInput, TaskActivityEventType, TaskNote } from '@/lib/types';
 
 interface RouteParams {
@@ -66,6 +67,32 @@ export async function PUT(request: Request, { params }: RouteParams) {
           if (firstLoggableEvent) {
             const description = getPlaceholderTimesheetDescription(firstLoggableEvent.eventType);
             await createPlaceholderTimesheet(note.id, description);
+          }
+          
+          // REQ-020: Create system comments for specific events
+          for (const event of events) {
+            if (event.eventType === 'STATUS_CHANGED') {
+              const oldStatus = getStatusLabel((oldNote as TaskNote).status);
+              const newStatus = getStatusLabel((note as TaskNote).status);
+              await createSystemComment({
+                noteId: note.id,
+                message: `📋 Estado cambiado: ${oldStatus} → ${newStatus}`,
+              });
+            }
+            
+            if (event.eventType === 'FAVORITED') {
+              await createSystemComment({
+                noteId: note.id,
+                message: '⭐ Tarea marcada como favorita',
+              });
+            }
+            
+            if (event.eventType === 'UNFAVORITED') {
+              await createSystemComment({
+                noteId: note.id,
+                message: '☆ Tarea quitada de favoritos',
+              });
+            }
           }
         }
       } catch (error) {

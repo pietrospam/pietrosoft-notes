@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { listTaskComments, createTaskComment, updateTaskComment, deleteTaskComment } from '@/lib/repositories/notes-repo';
+import prisma from '@/lib/db';
+import { SYSTEM_AUTHOR } from '@/lib/system-comments';
 
 // GET /api/tasks/[id]/comments
 export async function GET(request: Request, { params }: { params: { id: string } }) {
@@ -20,24 +22,54 @@ export async function POST(request: Request, { params }: { params: { id: string 
   return NextResponse.json(comment);
 }
 
-// PUT to update comment
+// PUT to update comment (system comments cannot be updated)
 export async function PUT(request: Request) {
   const body = await request.json();
   const { id, content } = body;
   if (!id || content === undefined) {
     return NextResponse.json({ error: 'id and content required' }, { status: 400 });
   }
+  
+  // Check if it's a system comment
+  const comment = await prisma.taskComment.findUnique({
+    where: { id },
+    select: { author: true },
+  });
+  
+  if (!comment) {
+    return NextResponse.json({ error: 'Comment not found' }, { status: 404 });
+  }
+  
+  if (comment.author === SYSTEM_AUTHOR) {
+    return NextResponse.json({ error: 'System comments cannot be edited' }, { status: 403 });
+  }
+  
   const updated = await updateTaskComment(id, content);
   return NextResponse.json(updated);
 }
 
-// DELETE comment
+// DELETE comment (system comments cannot be deleted)
 export async function DELETE(request: Request) {
   const url = new URL(request.url);
   const id = url.searchParams.get('id');
   if (!id) {
     return NextResponse.json({ error: 'id required' }, { status: 400 });
   }
+  
+  // Check if it's a system comment
+  const comment = await prisma.taskComment.findUnique({
+    where: { id },
+    select: { author: true },
+  });
+  
+  if (!comment) {
+    return NextResponse.json({ error: 'Comment not found' }, { status: 404 });
+  }
+  
+  if (comment.author === SYSTEM_AUTHOR) {
+    return NextResponse.json({ error: 'System comments cannot be deleted' }, { status: 403 });
+  }
+  
   await deleteTaskComment(id);
   return NextResponse.json({ success: true });
 }

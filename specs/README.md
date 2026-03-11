@@ -12,8 +12,7 @@ Este directorio contiene las especificaciones técnicas del proyecto Pietrosoft 
 | [SPEC-004](SPEC-004-attachments.md) | Attachments & Image Paste | ✅ Completed | Upload de archivos y pegado de imágenes |
 | [SPEC-005](SPEC-005-search-export.md) | Search Filters & CSV Export | 🔄 In Progress | Búsqueda mejorada y exportación CSV |
 | [SPEC-006](SPEC-006-database-migration.md) | PostgreSQL Database Migration | ✅ Completed | Migración a PostgreSQL con Prisma |
-| [SPEC-007](SPEC-007-telegram-notifications.md) | Telegram Backup Notifications | � In Progress | Notificaciones de backup vía Telegram |
-
+| [SPEC-007](SPEC-007-telegram-notifications.md) | Telegram Backup Notifications | � In Progress | Notificaciones de backup vía Telegram || [SPEC-008](SPEC-008-system-comments.md) | System Comments | ✅ Completed | Comentarios automáticos del sistema en tareas |
 ## Estados
 
 - ✅ **Completed** - Implementación finalizada
