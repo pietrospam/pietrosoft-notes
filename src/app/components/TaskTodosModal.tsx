@@ -460,7 +460,7 @@ export function TaskTodosModal({
                           />
                         </div>
                         <span className="text-xs text-gray-500 whitespace-nowrap">
-                          {todo.completedAt && new Date(todo.completedAt).toLocaleString()}
+                          {todo.completedAt && new Date(todo.completedAt).toLocaleString('es-AR', { hour12: false })}
                         </span>
                       </div>
                     </div>

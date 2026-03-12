@@ -8,6 +8,16 @@ import { notifyBackupSuccess, notifyBackupError } from '@/lib/telegram';
 export const dynamic = 'force-dynamic';
 
 const BACKUP_DIR = process.env.BACKUP_DIR || './backups';
+const ARGENTINA_TIMEZONE = 'America/Buenos_Aires';
+
+/**
+ * Generate timestamp string in Argentina timezone for filenames
+ */
+function getArgentinaTimestamp(): string {
+  const now = new Date();
+  const argentinaDate = new Date(now.toLocaleString('en-US', { timeZone: ARGENTINA_TIMEZONE }));
+  return `${argentinaDate.getFullYear()}-${String(argentinaDate.getMonth() + 1).padStart(2, '0')}-${String(argentinaDate.getDate()).padStart(2, '0')}T${String(argentinaDate.getHours()).padStart(2, '0')}-${String(argentinaDate.getMinutes()).padStart(2, '0')}-${String(argentinaDate.getSeconds()).padStart(2, '0')}`;
+}
 
 interface BackupManifest {
   version: string;
@@ -213,8 +223,8 @@ export async function POST(request: NextRequest) {
     // Ensure backup directory exists
     await fs.mkdir(BACKUP_DIR, { recursive: true });
     
-    // Generate filename with timestamp
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    // Generate filename with timestamp in Argentina timezone
+    const timestamp = getArgentinaTimestamp();
     const filename = `backup-${timestamp}.zip`;
     const filePath = path.join(BACKUP_DIR, filename);
     

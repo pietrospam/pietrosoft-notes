@@ -6,6 +6,19 @@ import { notifyBackupSuccess, notifyBackupError } from '@/lib/telegram';
 export const dynamic = 'force-dynamic';
 
 const BACKUP_DIR = process.env.BACKUP_DIR || './backups';
+const ARGENTINA_TIMEZONE = 'America/Buenos_Aires';
+
+/**
+ * Get current time in Argentina timezone
+ */
+function getArgentinaTime(): { hours: number; minutes: number } {
+  const now = new Date();
+  const argentinaTime = new Date(now.toLocaleString('en-US', { timeZone: ARGENTINA_TIMEZONE }));
+  return {
+    hours: argentinaTime.getHours(),
+    minutes: argentinaTime.getMinutes(),
+  };
+}
 
 interface BackupSettings {
   retentionCount: number;
@@ -35,16 +48,27 @@ function shouldRunAutoBackup(settings: BackupSettings): boolean {
     return false;
   }
 
-  const now = new Date();
+  // Use Argentina timezone for time comparison
+  const argentinaTime = getArgentinaTime();
   const [targetHour, targetMinute] = settings.autoBackupTime.split(':').map(Number);
   
-  // Check if we're within the backup window (target time ± 30 minutes)
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  // Check if we're within the backup window (from target time to 5 minutes after)
+  // Never run before the scheduled time
+  const currentMinutes = argentinaTime.hours * 60 + argentinaTime.minutes;
   const targetMinutes = targetHour * 60 + targetMinute;
-  const diff = Math.abs(currentMinutes - targetMinutes);
   
-  if (diff > 30 && diff < (24 * 60 - 30)) {
-    // Not in the backup window
+  // Calculate minutes since target time (handling midnight wraparound)
+  let minutesSinceTarget = currentMinutes - targetMinutes;
+  if (minutesSinceTarget < -60) {
+    // We're before midnight and target is after (e.g., current 23:30, target 00:00)
+    minutesSinceTarget += 24 * 60;
+  } else if (minutesSinceTarget > 23 * 60) {
+    // We're after midnight and target was before (e.g., current 00:02, target 23:58)
+    minutesSinceTarget -= 24 * 60;
+  }
+  
+  // Only run if we're at or after the target time, within 5-minute window
+  if (minutesSinceTarget < 0 || minutesSinceTarget > 5) {
     return false;
   }
 
@@ -52,6 +76,7 @@ function shouldRunAutoBackup(settings: BackupSettings): boolean {
     return true;
   }
 
+  const now = new Date();
   const lastBackup = new Date(settings.lastAutoBackup);
   const hoursSinceLastBackup = (now.getTime() - lastBackup.getTime()) / (1000 * 60 * 60);
 
@@ -80,9 +105,12 @@ export async function POST() {
     }
 
     if (!shouldRunAutoBackup(settings)) {
+      const argentinaTime = getArgentinaTime();
       return NextResponse.json({ 
         skipped: true, 
         reason: 'Auto backup not due yet',
+        currentArgentinaTime: `${String(argentinaTime.hours).padStart(2, '0')}:${String(argentinaTime.minutes).padStart(2, '0')}`,
+        targetTime: settings.autoBackupTime,
         lastAutoBackup: settings.lastAutoBackup,
         frequency: settings.autoBackupFrequency,
       });
@@ -95,8 +123,10 @@ export async function POST() {
     // Ensure backup directory exists
     await fs.mkdir(BACKUP_DIR, { recursive: true });
 
-    // Generate filename with timestamp
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    // Generate filename with timestamp in Argentina timezone
+    const now = new Date();
+    const argentinaDate = new Date(now.toLocaleString('en-US', { timeZone: ARGENTINA_TIMEZONE }));
+    const timestamp = `${argentinaDate.getFullYear()}-${String(argentinaDate.getMonth() + 1).padStart(2, '0')}-${String(argentinaDate.getDate()).padStart(2, '0')}T${String(argentinaDate.getHours()).padStart(2, '0')}-${String(argentinaDate.getMinutes()).padStart(2, '0')}-${String(argentinaDate.getSeconds()).padStart(2, '0')}`;
     const filename = `backup-auto-${timestamp}.zip`;
     const filePath = path.join(BACKUP_DIR, filename);
 

@@ -422,7 +422,7 @@ export function TaskTodos({ taskId, currentUser, onTodoCountChange }: TaskTodosP
                       />
                     </div>
                     <span className="text-[10px] text-gray-500">
-                      {todo.completedAt && new Date(todo.completedAt).toLocaleString()}
+                      {todo.completedAt && new Date(todo.completedAt).toLocaleString('es-AR', { hour12: false })}
                     </span>
                   </div>
                 </div>

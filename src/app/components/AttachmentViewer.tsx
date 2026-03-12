@@ -104,7 +104,7 @@ export function AttachmentViewer({ attachment, allAttachments, onClose, onNaviga
       >
         <div className="flex flex-col">
           <h3 className="text-white font-medium truncate">{attachment.originalName}</h3>
-          <span className="text-xs text-gray-400">{new Date(attachment.createdAt).toLocaleString()}</span>
+          <span className="text-xs text-gray-400">{new Date(attachment.createdAt).toLocaleString('es-AR', { hour12: false })}</span>
         </div>
         <div className="flex items-center gap-2">
           {isImageType(attachment.mimeType) && (

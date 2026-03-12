@@ -212,6 +212,7 @@ function ServerBackupsSection() {
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
+      hour12: false,
     });
   };
 
@@ -352,12 +353,33 @@ function ServerBackupsSection() {
                     <option value="monthly">Mensual</option>
                   </select>
                   <span className="text-xs text-gray-500">a las</span>
-                  <input
-                    type="time"
-                    value={settings.autoBackupTime}
-                    onChange={(e) => updateSettings({ autoBackupTime: e.target.value })}
-                    className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
-                  />
+                  <div className="flex items-center gap-1">
+                    <select
+                      value={settings.autoBackupTime.split(':')[0] || '03'}
+                      onChange={(e) => {
+                        const minute = settings.autoBackupTime.split(':')[1] || '00';
+                        updateSettings({ autoBackupTime: `${e.target.value}:${minute}` });
+                      }}
+                      className="bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                    >
+                      {Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0')).map(h => (
+                        <option key={h} value={h}>{h}</option>
+                      ))}
+                    </select>
+                    <span className="text-gray-500">:</span>
+                    <select
+                      value={settings.autoBackupTime.split(':')[1] || '00'}
+                      onChange={(e) => {
+                        const hour = settings.autoBackupTime.split(':')[0] || '03';
+                        updateSettings({ autoBackupTime: `${hour}:${e.target.value}` });
+                      }}
+                      className="bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                    >
+                      {Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0')).map(m => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               )}
               

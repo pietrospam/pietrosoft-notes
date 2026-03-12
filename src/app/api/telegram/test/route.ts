@@ -42,7 +42,7 @@ export async function POST() {
     }
     
     // Send test message
-    const dateStr = new Date().toLocaleString('es-AR');
+    const dateStr = new Date().toLocaleString('es-AR', { hour12: false });
     const message = 
       `🔔 <b>Prueba de Conexión</b>\n\n` +
       `✅ Conexión exitosa con Pietrosoft Notes\n` +

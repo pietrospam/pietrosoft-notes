@@ -181,7 +181,7 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
             }}
           >
             <div className="flex justify-end items-center gap-2 text-[10px] text-gray-400 mb-1">
-              <span>{c.createdAt ? new Date(c.createdAt).toLocaleString() : 'Sin fecha'}</span>
+              <span>{c.createdAt ? new Date(c.createdAt).toLocaleString('es-AR', { hour12: false }) : 'Sin fecha'}</span>
               <span className="truncate max-w-[120px]">{c.author}</span>
             </div>
             {editing?.id === c.id ? (

@@ -22,8 +22,8 @@ function formatFileSize(bytes: number): string {
 
 function formatDateTime(iso: string): string {
   const d = new Date(iso);
-  // Show local short format; could later be replaced with relative formatting
-  return d.toLocaleString();
+  // Show local short format in 24h; could later be replaced with relative formatting
+  return d.toLocaleString('es-AR', { hour12: false });
 }
 
 function getFileIcon(mimeType: string) {

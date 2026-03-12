@@ -228,6 +228,7 @@ function formatDate(date: Date | string): string {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
+    hour12: false,
   });
 }
 
@@ -384,7 +385,7 @@ export async function sendTodoDailySummary(todos: TodoSummary[]): Promise<boolea
       message += `🟡 <b>Para Hoy (${todayTodos.length})</b>\n`;
       todayTodos.slice(0, 5).forEach(todo => {
         const code = todo.ticketCode ? `[${todo.ticketCode}] ` : '';
-        const time = todo.deadline ? new Date(todo.deadline).toLocaleTimeString('es-AR', { timeZone: ARGENTINA_TIMEZONE, hour: '2-digit', minute: '2-digit' }) : '';
+        const time = todo.deadline ? new Date(todo.deadline).toLocaleTimeString('es-AR', { timeZone: ARGENTINA_TIMEZONE, hour: '2-digit', minute: '2-digit', hour12: false }) : '';
         message += `• ${time} ${code}${escapeHtml(todo.content.substring(0, 40))}\n`;
       });
       if (todayTodos.length > 5) {
@@ -423,7 +424,7 @@ export async function sendTodoReminder(todo: TodoSummary, minutesRemaining: numb
   const telegram = new TelegramService(config.botToken, config.chatId);
   
   const code = todo.ticketCode ? `[${todo.ticketCode}] ` : '';
-  const time = todo.deadline ? new Date(todo.deadline).toLocaleTimeString('es-AR', { timeZone: ARGENTINA_TIMEZONE, hour: '2-digit', minute: '2-digit' }) : '';
+  const time = todo.deadline ? new Date(todo.deadline).toLocaleTimeString('es-AR', { timeZone: ARGENTINA_TIMEZONE, hour: '2-digit', minute: '2-digit', hour12: false }) : '';
   
   let timeText: string;
   if (minutesRemaining <= 0) {
@@ -459,7 +460,7 @@ export async function sendTodoOverdue(todo: TodoSummary): Promise<boolean> {
   
   const code = todo.ticketCode ? `[${todo.ticketCode}] ` : '';
   const deadline = todo.deadline ? new Date(todo.deadline) : null;
-  const time = deadline ? deadline.toLocaleTimeString('es-AR', { timeZone: ARGENTINA_TIMEZONE, hour: '2-digit', minute: '2-digit' }) : '';
+  const time = deadline ? deadline.toLocaleTimeString('es-AR', { timeZone: ARGENTINA_TIMEZONE, hour: '2-digit', minute: '2-digit', hour12: false }) : '';
   const date = deadline ? deadline.toLocaleDateString('es-AR', { timeZone: ARGENTINA_TIMEZONE, day: '2-digit', month: '2-digit' }) : '';
   
   // Calculate how overdue it is

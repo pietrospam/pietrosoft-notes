@@ -652,7 +652,7 @@ export function TelegramConfig() {
                     : 'text-yellow-400'
                 }`}>
                   {automationsStatus.lastExecution 
-                    ? new Date(automationsStatus.lastExecution).toLocaleString('es-AR')
+                    ? new Date(automationsStatus.lastExecution).toLocaleString('es-AR', { hour12: false })
                     : 'Nunca (esperando primera ejecución)'
                   }
                 </span>
