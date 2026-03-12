@@ -26,6 +26,7 @@ export { TaskComments } from './TaskComments';
 export { TaskTodos } from './TaskTodos';
 export { TaskTodosModal } from './TaskTodosModal';
 export { TaskTodosBanner } from './TaskTodosBanner';
+export { TodoEditModal } from './TodoEditModal';
 export { Toast } from './Toast';
 export { GlobalDropZone } from './GlobalDropZone';
 export { TelegramConfig } from './TelegramConfig';

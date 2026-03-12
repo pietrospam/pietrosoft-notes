@@ -200,8 +200,8 @@ export class TelegramService {
   }
 }
 
-// Maximum file size for Telegram (50MB)
-const MAX_FILE_SIZE = 50 * 1024 * 1024;
+// Maximum file size for Telegram (1GB)
+const MAX_FILE_SIZE = 1024 * 1024 * 1024;
 
 /**
  * Format file size for display
@@ -294,7 +294,7 @@ async function sendTextOnlyNotification(
     `📁 Archivo: ${backupInfo.filename}`;
   
   if (fileTooLarge) {
-    message += `\n\n⚠️ Archivo muy grande para adjuntar (>50MB).\nDescárgalo desde la aplicación.`;
+    message += `\n\n⚠️ Archivo muy grande para adjuntar (>1GB).\nDescárgalo desde la aplicación.`;
   }
   
   await telegram.sendMessage(message);

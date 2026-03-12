@@ -4,9 +4,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { TipTapEditor } from './TipTapEditor';
 import { 
   Flag, Clock, Repeat, Bell, BellOff, Check, Trash2, 
-  Calendar, ChevronDown, ChevronUp, X, Plus 
+  Calendar, ChevronDown, ChevronUp, X, Plus, Pencil 
 } from 'lucide-react';
 import type { TaskTodo, RecurrenceRule } from '@/lib/types';
+import { TodoEditModal } from './TodoEditModal';
 
 interface TaskTodosModalProps {
   taskId: string;
@@ -39,6 +40,9 @@ export function TaskTodosModal({
   
   // Snooze menu state
   const [snoozeMenuId, setSnoozeMenuId] = useState<string | null>(null);
+  
+  // Edit modal state
+  const [editingTodo, setEditingTodo] = useState<TaskTodo | null>(null);
 
   const load = useCallback(async () => {
     if (!taskId) return;
@@ -397,6 +401,14 @@ export function TaskTodosModal({
                           )}
                           
                           <button
+                            onClick={() => setEditingTodo(todo)}
+                            className="p-1.5 text-gray-400 hover:text-blue-400 hover:bg-gray-700 rounded"
+                            title="Editar"
+                          >
+                            <Pencil size={16} />
+                          </button>
+                          
+                          <button
                             onClick={() => handleDelete(todo.id)}
                             className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-gray-700 rounded"
                             title="Eliminar"
@@ -472,6 +484,24 @@ export function TaskTodosModal({
           </div>
         </div>
       </div>
+
+      {/* Edit Modal */}
+      {editingTodo && (
+        <TodoEditModal
+          todo={editingTodo}
+          taskTitle={taskTitle}
+          isOpen={!!editingTodo}
+          onClose={() => setEditingTodo(null)}
+          onSave={() => {
+            load();
+            setEditingTodo(null);
+          }}
+          onDelete={() => {
+            load();
+            setEditingTodo(null);
+          }}
+        />
+      )}
     </div>
   );
 }

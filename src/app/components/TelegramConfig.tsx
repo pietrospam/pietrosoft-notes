@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Send, Eye, EyeOff, Loader2, CheckCircle, XCircle, AlertCircle, HelpCircle, ChevronDown, ChevronUp, ExternalLink, Flag, Clock, Bell } from 'lucide-react';
+import { Send, Eye, EyeOff, Loader2, CheckCircle, XCircle, AlertCircle, HelpCircle, ChevronDown, ChevronUp, ExternalLink, Flag, Clock, Bell, Cog } from 'lucide-react';
 
 interface TelegramConfigState {
   enabled: boolean;
@@ -23,6 +23,11 @@ interface TodoNotificationConfig {
   enabled: boolean;
   dailySummaryTime: string;
   reminderMinutes: number[];
+}
+
+interface AutomationsStatus {
+  lastExecution: string | null;
+  executionCount: number;
 }
 
 export function TelegramConfig() {
@@ -54,11 +59,21 @@ export function TelegramConfig() {
     reminderMinutes: [60, 15],
   });
   const [loadingTodo, setLoadingTodo] = useState(false);
+  
+  // REQ-022: Automations status
+  const [automationsStatus, setAutomationsStatus] = useState<AutomationsStatus | null>(null);
 
   // Load configuration on mount
   useEffect(() => {
     loadConfig();
     loadTodoConfig();
+    loadAutomationsStatus();
+  }, []);
+  
+  // Refresh automations status every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(loadAutomationsStatus, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const loadConfig = async () => {
@@ -85,6 +100,22 @@ export function TelegramConfig() {
       }
     } catch (error) {
       console.error('Failed to load TODO notification config:', error);
+    }
+  };
+
+  // REQ-022: Load automations status
+  const loadAutomationsStatus = async () => {
+    try {
+      const res = await fetch('/api/automations');
+      if (res.ok) {
+        const data = await res.json();
+        setAutomationsStatus({
+          lastExecution: data.lastExecution,
+          executionCount: data.executionCount,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load automations status:', error);
     }
   };
 
@@ -345,10 +376,10 @@ export function TelegramConfig() {
                 onChange={(e) => saveConfig({ sendFile: e.target.checked })}
                 className="rounded bg-gray-800 border-gray-600"
               />
-              Adjuntar archivo de backup (máx. 50MB)
+              Adjuntar archivo de backup (máx. 1GB)
             </label>
             <p className="text-xs text-gray-500 mt-1 ml-6">
-              Si está desactivado o el archivo excede 50MB, solo se enviará una notificación de texto
+              Si está desactivado o el archivo excede 1GB, solo se enviará una notificación de texto
             </p>
           </div>
 
@@ -556,6 +587,82 @@ export function TelegramConfig() {
           </div>
         </div>
       )}
+
+      {/* REQ-022: Automations Status Section */}
+      <div className="mt-6 pt-4 border-t border-gray-700">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="p-1.5 bg-purple-500/20 rounded-lg">
+            <Cog size={16} className="text-purple-400" />
+          </div>
+          <div>
+            <h4 className="text-sm font-medium text-white">Estado de Automatizaciones</h4>
+            <p className="text-xs text-gray-500">Cron container ejecuta cada minuto</p>
+          </div>
+        </div>
+        
+        <div className="bg-gray-800/50 rounded-lg p-3">
+          {automationsStatus ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-400">Última ejecución:</span>
+                <span className={`text-xs font-medium ${
+                  automationsStatus.lastExecution 
+                    ? 'text-green-400' 
+                    : 'text-yellow-400'
+                }`}>
+                  {automationsStatus.lastExecution 
+                    ? new Date(automationsStatus.lastExecution).toLocaleString('es-AR')
+                    : 'Nunca (esperando primera ejecución)'
+                  }
+                </span>
+              </div>
+              {automationsStatus.lastExecution && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-400">Hace:</span>
+                    <span className="text-xs text-gray-300">
+                      {(() => {
+                        const diff = Date.now() - new Date(automationsStatus.lastExecution).getTime();
+                        const minutes = Math.floor(diff / 60000);
+                        const hours = Math.floor(minutes / 60);
+                        if (hours > 0) return `${hours}h ${minutes % 60}m`;
+                        if (minutes > 0) return `${minutes} minuto${minutes !== 1 ? 's' : ''}`;
+                        return 'menos de 1 minuto';
+                      })()}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-400">Total ejecuciones:</span>
+                    <span className="text-xs text-gray-300">
+                      {automationsStatus.executionCount.toLocaleString()}
+                    </span>
+                  </div>
+                </>
+              )}
+              {automationsStatus.lastExecution && (() => {
+                const diff = Date.now() - new Date(automationsStatus.lastExecution).getTime();
+                const minutes = Math.floor(diff / 60000);
+                if (minutes > 5) {
+                  return (
+                    <div className="flex items-start gap-2 mt-2 pt-2 border-t border-gray-700">
+                      <AlertCircle size={14} className="text-yellow-400 mt-0.5 flex-shrink-0" />
+                      <p className="text-xs text-yellow-300">
+                        Hace más de 5 minutos desde la última ejecución. 
+                        El contenedor de cron podría no estar corriendo.
+                      </p>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+            </div>
+          ) : (
+            <div className="text-xs text-gray-500">
+              Cargando estado de automatizaciones...
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

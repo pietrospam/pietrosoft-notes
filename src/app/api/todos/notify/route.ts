@@ -25,6 +25,30 @@ import {
 
 export const dynamic = 'force-dynamic';
 
+// Timezone for Argentina
+const TIMEZONE = 'America/Buenos_Aires';
+
+/**
+ * Get current time in Argentina timezone
+ */
+function getArgentinaTime(): { hours: number; minutes: number; timeString: string } {
+  const now = new Date();
+  const argentinaTime = new Date(now.toLocaleString('en-US', { timeZone: TIMEZONE }));
+  const hours = argentinaTime.getHours();
+  const minutes = argentinaTime.getMinutes();
+  const timeString = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  return { hours, minutes, timeString };
+}
+
+/**
+ * Get today's date key in Argentina timezone
+ */
+function getArgentinaDailyKey(): string {
+  const now = new Date();
+  const argentinaTime = new Date(now.toLocaleString('en-US', { timeZone: TIMEZONE }));
+  return `${argentinaTime.getFullYear()}-${String(argentinaTime.getMonth() + 1).padStart(2, '0')}-${String(argentinaTime.getDate()).padStart(2, '0')}`;
+}
+
 // Helper to extract text from TipTap content
 function extractText(content: unknown): string {
   if (!content) return '';
@@ -37,12 +61,6 @@ function extractText(content: unknown): string {
       .trim();
   }
   return String(content);
-}
-
-// Key for today's summary (to avoid sending multiple times per day)
-function getDailySummaryKey(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
 // Track daily summary sent (in-memory for simplicity, could use file/db)
@@ -66,12 +84,12 @@ export async function POST() {
     };
     
     const now = new Date();
-    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    const dailySummaryKey = getDailySummaryKey();
+    const argentinaTime = getArgentinaTime();
+    const dailySummaryKey = getArgentinaDailyKey();
     
-    // 1. Check if it's time for daily summary
+    // 1. Check if it's time for daily summary (using Argentina timezone)
     const summaryTime = config.todoNotifications.dailySummaryTime || '08:00';
-    if (currentTime === summaryTime && !sentSummaries.has(dailySummaryKey)) {
+    if (argentinaTime.timeString === summaryTime && !sentSummaries.has(dailySummaryKey)) {
       const pendingTodos = await listAllPendingTodos();
       const summaries: TodoSummary[] = pendingTodos.map(todo => ({
         id: todo.id,
@@ -157,6 +175,7 @@ export async function POST() {
       processed: true,
       results,
       timestamp: now.toISOString(),
+      argentinaTime: argentinaTime.timeString,
     });
     
   } catch (error) {
@@ -172,12 +191,16 @@ export async function POST() {
 export async function GET() {
   try {
     const config = await getTelegramConfig();
+    const argentinaTime = getArgentinaTime();
+    const dailySummaryKey = getArgentinaDailyKey();
     
     return NextResponse.json({
       enabled: config.enabled && config.todoNotifications?.enabled,
       dailySummaryTime: config.todoNotifications?.dailySummaryTime,
       reminderMinutes: config.todoNotifications?.reminderMinutes,
-      todaySummarySent: sentSummaries.has(getDailySummaryKey()),
+      todaySummarySent: sentSummaries.has(dailySummaryKey),
+      currentArgentinaTime: argentinaTime.timeString,
+      timezone: TIMEZONE,
     });
   } catch (error) {
     console.error('Error getting notification status:', error);

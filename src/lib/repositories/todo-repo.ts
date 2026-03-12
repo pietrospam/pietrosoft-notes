@@ -168,9 +168,14 @@ export async function listAllPendingTodos(): Promise<TodoWithTask[]> {
 /**
  * List ALL TODOs (pending + completed) across all tasks
  * For calendar view that shows all todos
+ * Excludes deleted TODOs
  */
 export async function listAllTodos(): Promise<TodoWithTask[]> {
   const records = await prisma.taskTodo.findMany({
+    where: {
+      status: { not: 'deleted' },
+      deletedAt: null,
+    },
     include: {
       task: {
         select: {

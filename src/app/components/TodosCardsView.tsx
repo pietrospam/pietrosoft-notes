@@ -9,8 +9,9 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Flag, Check, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
-import type { TodoWithTask } from '@/lib/types';
+import { Flag, Check, Clock, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
+import type { TodoWithTask, TaskTodo } from '@/lib/types';
+import { TodoEditModal } from './TodoEditModal';
 
 interface TodosCardsViewProps {
   filterTaskId?: string | null;  // null = all TODOs, string = specific task
@@ -25,6 +26,9 @@ export function TodosCardsView({ filterTaskId, onNavigateToTask, onClose }: Todo
   // Calendar state
   const [currentMonth, setCurrentMonth] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  
+  // Edit modal state
+  const [editingTodo, setEditingTodo] = useState<TodoWithTask | null>(null);
 
   const fetchTodos = useCallback(async () => {
     setLoading(true);
@@ -434,6 +438,18 @@ export function TodosCardsView({ filterTaskId, onNavigateToTask, onClose }: Todo
                           </button>
                         </div>
                       </div>
+                      
+                      {/* Edit button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingTodo(todo);
+                        }}
+                        className="flex items-center gap-1 px-2 py-0.5 bg-gray-700 hover:bg-gray-600 rounded text-[10px] text-gray-300"
+                        title="Editar TODO"
+                      >
+                        <Pencil size={10} />
+                      </button>
                     </div>
                   )}
                 </div>
@@ -442,6 +458,24 @@ export function TodosCardsView({ filterTaskId, onNavigateToTask, onClose }: Todo
           </div>
         )}
       </div>
+
+      {/* Edit Modal */}
+      {editingTodo && (
+        <TodoEditModal
+          todo={editingTodo as TaskTodo}
+          taskTitle={editingTodo.task?.title}
+          isOpen={!!editingTodo}
+          onClose={() => setEditingTodo(null)}
+          onSave={() => {
+            fetchTodos();
+            setEditingTodo(null);
+          }}
+          onDelete={() => {
+            fetchTodos();
+            setEditingTodo(null);
+          }}
+        />
+      )}
     </div>
   );
 }

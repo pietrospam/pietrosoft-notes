@@ -22,7 +22,6 @@ export function Sidebar() {
     setCurrentView, 
     selectedClientId, 
     setSelectedClientId,
-    setSelectedNoteId,
     clients, 
     notes,
     favoritesCount, // REQ-006
