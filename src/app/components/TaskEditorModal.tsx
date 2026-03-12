@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Save, Loader2, Maximize2, Minimize2, Pencil, Clock, ChevronDown, Plus, Check, Star, Archive, ArchiveRestore, Trash2, Copy, History, Paperclip, Code } from 'lucide-react';
+import { X, Save, Loader2, Maximize2, Minimize2, Pencil, Clock, ChevronDown, Plus, Check, Star, Archive, ArchiveRestore, Trash2, Copy, History, Paperclip, Code, Flag } from 'lucide-react';
 import { TipTapEditor, TipTapEditorHandle } from './TipTapEditor';
 import { AttachmentsModal } from './AttachmentsModal';
 import { TimeSheetModal } from './TimeSheetModal';
@@ -10,6 +10,8 @@ import { Toast } from './Toast';
 import { UnsavedChangesModal } from './UnsavedChangesModal';
 import { TaskActivityLogModal } from './TaskActivityLogModal';
 import { TaskComments, TaskCommentsRef } from './TaskComments';
+import { TaskTodosModal } from './TaskTodosModal';
+import { TaskTodosBanner } from './TaskTodosBanner';
 import { useApp } from '../context/AppContext';
 import type { TaskNote, Client, Project, TaskStatus, TaskPriority } from '@/lib/types';
 
@@ -78,6 +80,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
   const [showTimeSheetModal, setShowTimeSheetModal] = useState(false);
   const [showActivityLog, setShowActivityLog] = useState(false); // REQ-010: Activity log modal
   const [showCoderHintsModal, setShowCoderHintsModal] = useState(false);
+  const [showTodosModal, setShowTodosModal] = useState(false); // REQ-021: TODOs modal
   
   // Header fields edit mode - enabled by default for NEW tasks, disabled for existing
   const [isHeaderEditing, setIsHeaderEditing] = useState(!taskId);
@@ -90,6 +93,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [commentsCount, setCommentsCount] = useState(0);
+  const [todoPendingCount, setTodoPendingCount] = useState(0); // REQ-021: Pending TODOs count
   const [bodyCollapsed, setBodyCollapsed] = useState(false); // collapse body when comments exist
   
   // Sync local isDirty with global context (for inline mode navigation protection)
@@ -595,6 +599,15 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
 
   const renderContent = () => (
     <>
+      {/* REQ-021: TODO Banner - shows when task has pending TODOs */}
+      {(taskId || isCreatedRef.current) && (
+        <TaskTodosBanner 
+          taskId={taskId || task.id} 
+          onClick={() => setShowTodosModal(true)}
+          onPendingCountChange={setTodoPendingCount}
+        />
+      )}
+
       {/* Task Fields - Compact Header */}
       <div className="mb-4 space-y-2">
         {/* Validation Summary + Edit Toggle */}
@@ -1083,6 +1096,23 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
                 <span className="ml-1 text-xs">{attachmentCount}</span>
               </button>
             )}
+            {/* REQ-021: TODO icon - open TODOs modal */}
+            {(taskId || isCreatedRef.current) && (
+              <button
+                onClick={() => setShowTodosModal(true)}
+                className={`flex items-center p-2 rounded transition-colors ${
+                  todoPendingCount > 0 
+                    ? 'text-orange-400 hover:text-orange-300 hover:bg-gray-800' 
+                    : 'text-gray-400 hover:text-orange-400 hover:bg-gray-800'
+                }`}
+                title={`TODOs (${todoPendingCount} pendientes)`}
+              >
+                <Flag size={20} />
+                {todoPendingCount > 0 && (
+                  <span className="ml-1 text-xs">{todoPendingCount}</span>
+                )}
+              </button>
+            )}
             {/* Collapse to note list button (inline mode only) */}
             {inline && (
               <button
@@ -1110,6 +1140,18 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
             onSaved={() => {
               setToast({ message: 'Horas registradas' });
             }}
+          />
+        )}
+
+        {/* REQ-021: TODOs Modal */}
+        {showTodosModal && (taskId || isCreatedRef.current) && (
+          <TaskTodosModal
+            taskId={taskId || task.id}
+            taskTitle={title}
+            isOpen={showTodosModal}
+            currentUser={currentUser}
+            onClose={() => setShowTodosModal(false)}
+            onTodosChange={setTodoPendingCount}
           />
         )}
 
@@ -1455,6 +1497,18 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
           onSaved={() => {
             setToast({ message: 'Horas registradas' });
           }}
+        />
+      )}
+
+      {/* REQ-021: TODOs Modal */}
+      {showTodosModal && (taskId || isCreatedRef.current) && (
+        <TaskTodosModal
+          taskId={taskId || task.id}
+          taskTitle={title}
+          isOpen={showTodosModal}
+          currentUser={currentUser}
+          onClose={() => setShowTodosModal(false)}
+          onTodosChange={setTodoPendingCount}
         />
       )}
 

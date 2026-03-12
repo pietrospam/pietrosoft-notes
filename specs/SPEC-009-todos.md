@@ -658,6 +658,186 @@ export function TodoCreateModal({ taskId, onClose, onCreated }: TodoCreateModalP
 )}
 ```
 
+### 5.6 TodosCardsView - Vista Principal de TODOs
+
+Nueva vista que se muestra en el área principal cuando se hace click en TODOs de la sidebar.
+
+```tsx
+// src/app/components/TodosCardsView.tsx
+
+interface TodosCardsViewProps {
+  filterTaskId?: string;  // null = todos, string = solo de una tarea
+  onNavigateToTask: (taskId: string) => void;
+  onCreateTodo?: () => void;  // Solo si filterTaskId está definido
+}
+
+export function TodosCardsView({ filterTaskId, onNavigateToTask, onCreateTodo }: TodosCardsViewProps) {
+  const [todos, setTodos] = useState<TodoWithTask[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch TODOs (all o filtered por task)
+  useEffect(() => {
+    const url = filterTaskId 
+      ? `/api/tasks/${filterTaskId}/todos`
+      : '/api/todos';
+    fetch(url).then(r => r.json()).then(setTodos);
+  }, [filterTaskId]);
+
+  return (
+    <div className="flex-1 bg-gray-900 p-6 overflow-y-auto">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+            <Flag className="text-orange-500" />
+            {filterTaskId ? 'TODOs de esta tarea' : 'Todos los TODOs'}
+          </h1>
+          {filterTaskId && onCreateTodo && (
+            <button onClick={onCreateTodo} className="btn-primary">
+              + Nuevo TODO
+            </button>
+          )}
+        </div>
+
+        {/* Cards Grid */}
+        <div className="space-y-4">
+          {todos.map(todo => (
+            <TodoCard 
+              key={todo.id} 
+              todo={todo}
+              onComplete={() => handleComplete(todo.id)}
+              onSnooze={(until) => handleSnooze(todo.id, until)}
+              onNavigate={() => onNavigateToTask(todo.taskId)}
+            />
+          ))}
+        </div>
+
+        {todos.length === 0 && (
+          <div className="text-center text-gray-500 py-12">
+            <Flag size={48} className="mx-auto mb-4 opacity-50" />
+            <p>No hay TODOs pendientes</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+```
+
+### 5.7 TodoCard - Card Individual
+
+```tsx
+// src/app/components/TodoCard.tsx
+
+interface TodoCardProps {
+  todo: TodoWithTask;
+  onComplete: () => void;
+  onSnooze: (until: string) => void;
+  onNavigate: () => void;
+}
+
+export function TodoCard({ todo, onComplete, onSnooze, onNavigate }: TodoCardProps) {
+  const isOverdue = todo.deadline && new Date(todo.deadline) < new Date();
+  
+  return (
+    <div className={`bg-gray-800 rounded-lg p-4 border ${
+      isOverdue ? 'border-red-500/50' : 'border-gray-700'
+    }`}>
+      {/* Header: Task link + Time */}
+      <div className="flex items-center justify-between mb-3">
+        <button 
+          onClick={onNavigate}
+          className="text-sm text-blue-400 hover:text-blue-300 flex items-center gap-1"
+        >
+          <ExternalLink size={14} />
+          {todo.taskTitle}
+        </button>
+        <span className={`text-xs px-2 py-1 rounded ${
+          isOverdue 
+            ? 'bg-red-500/20 text-red-400' 
+            : 'bg-gray-700 text-gray-400'
+        }`}>
+          {isOverdue ? `Vencido hace ${formatTimeAgo(todo.deadline)}` : `Vence ${formatDeadline(todo.deadline)}`}
+        </span>
+      </div>
+
+      {/* Content */}
+      <div className="prose prose-invert prose-sm max-w-none mb-4">
+        <TipTapReadOnly content={todo.content} />
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-2 pt-3 border-t border-gray-700">
+        <button 
+          onClick={onComplete}
+          className="flex items-center gap-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-sm"
+        >
+          <Check size={14} /> Completar
+        </button>
+        <TodoSnoozeDropdown onSnooze={onSnooze} />
+      </div>
+    </div>
+  );
+}
+```
+
+### 5.8 TaskTodosHeader - Icono en Cabecera de Task
+
+En el TaskEditorModal, agregar icono de TODO en la cabecera.
+
+```tsx
+// En TaskEditorModal.tsx - agregar en la cabecera
+
+interface TaskTodosHeaderProps {
+  taskId: string;
+  onShowTodos: () => void;
+}
+
+function TaskTodosHeaderIcon({ taskId, onShowTodos }: TaskTodosHeaderProps) {
+  const [count, setCount] = useState(0);
+  
+  useEffect(() => {
+    fetch(`/api/tasks/${taskId}/todos?count=true`)
+      .then(r => r.json())
+      .then(data => setCount(data.pending));
+  }, [taskId]);
+
+  return (
+    <button
+      onClick={onShowTodos}
+      className="relative p-1.5 hover:bg-gray-700 rounded"
+      title={`${count} TODOs pendientes`}
+    >
+      <Flag size={16} className={count > 0 ? 'text-orange-500' : 'text-gray-500'} />
+      {count > 0 && (
+        <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-xs w-4 h-4 rounded-full flex items-center justify-center">
+          {count}
+        </span>
+      )}
+    </button>
+  );
+}
+```
+
+### 5.9 Cambios en AppContext
+
+Agregar nuevo ViewType y estado para filtrar TODOs.
+
+```tsx
+// En AppContext.tsx
+
+export type ViewType = 'all' | 'general' | 'task' | 'connection' | 'timesheets' | 'archived' | 'config' | 'favorites' | 'todos';
+
+interface AppState {
+  // ... existing ...
+  todosFilterTaskId: string | null; // null = all, string = specific task
+}
+
+// Nuevo action
+setCurrentView: (view: ViewType) => void;
+showTodosView: (taskId?: string) => void; // Muestra vista TODOs, opcionalmente filtrada
+```
+
 ---
 
 ## 6. Integración con Comentarios

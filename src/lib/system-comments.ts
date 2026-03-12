@@ -7,6 +7,7 @@
  * REQ-020 / SPEC-008
  */
 
+import { randomUUID } from 'crypto';
 import prisma from '@/lib/db';
 
 /** System comment author identifier */
@@ -98,6 +99,7 @@ export async function createSystemComment(params: SystemCommentParams): Promise<
 
     await prisma.taskComment.create({
       data: {
+        id: randomUUID(),
         taskId: noteId,
         author: SYSTEM_AUTHOR,
         content,

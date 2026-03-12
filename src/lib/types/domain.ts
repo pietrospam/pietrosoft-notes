@@ -230,3 +230,70 @@ export interface TaskActivityLog {
   description?: string;
   createdAt: string;
 }
+
+// ============================================================================
+// REQ-021: Task TODO Types
+// ============================================================================
+
+export type TodoStatus = 'pending' | 'completed' | 'deleted';
+
+export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly';
+
+export interface RecurrenceRule {
+  frequency: RecurrenceFrequency;
+  interval?: number; // Every N days/weeks/months (default 1)
+  endDate?: string; // ISO 8601 date when recurrence stops
+}
+
+export interface TaskTodo {
+  id: UUID;
+  taskId: UUID;
+  author: string;
+  content: unknown; // TipTap JSON
+  deadline?: string; // ISO 8601 datetime (null for checklist-style TODO)
+  status: TodoStatus;
+  completedAt?: string;
+  deletedAt?: string;
+  snoozedUntil?: string; // ISO 8601 datetime
+  recurrenceRule?: RecurrenceRule | null;
+  recurrenceParentId?: string;
+  createdAt: string;
+}
+
+export type CreateTodoInput = {
+  taskId: UUID;
+  author: string;
+  content: unknown;
+  deadline?: string;
+  recurrenceRule?: RecurrenceRule;
+};
+
+export type UpdateTodoInput = Partial<{
+  content: unknown;
+  deadline: string | null;
+  status: TodoStatus;
+  snoozedUntil: string | null;
+  recurrenceRule: RecurrenceRule | null;
+}>;
+
+// Todo with related task info for sidebar display
+export interface TodoWithTask extends TaskTodo {
+  task: {
+    id: UUID;
+    title: string;
+    ticketPhaseCode?: string;
+    projectId?: UUID;
+  };
+}
+
+// ============================================================================
+// REQ-021: Telegram TODO Notification Config
+// ============================================================================
+
+export interface TodoNotificationConfig {
+  enabled: boolean;
+  dailySummaryTime?: string; // HH:mm format, e.g., "08:00"
+  reminderMinutes?: number[]; // Minutes before deadline to send reminders, e.g., [60, 15]
+}
+
+export type TodoNotificationType = 'daily_summary' | 'reminder' | 'overdue';

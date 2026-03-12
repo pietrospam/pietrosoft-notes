@@ -77,26 +77,163 @@ Cuando un TODO alcanza su deadline:
 - **Descartar** (✗): Elimina el TODO sin completarlo (opcional, a discutir)
 - Los TODOs completados quedan en el historial de la tarea
 
+### 6. Vista Principal de TODOs (Panel Lateral)
+
+Al hacer click en el botón TODOs de la sidebar:
+- **NO** se despliega una lista en la sidebar
+- Se muestra **TodosCardsView** en el panel izquierdo (donde normalmente está NotesList)
+- El panel derecho (InlineEditorPanel) muestra la task seleccionada
+
+Los TODOs se muestran como items en lista con:
+- Nombre de la tarea asociada
+- Preview del contenido del TODO
+- Indicador de tiempo restante o vencido
+- Botones rápidos para **completar** y **posponer**
+
+**Interacción:** Click en un TODO selecciona la task asociada y la muestra en el editor de la derecha.
+
+### 7. Icono TODO en Cabecera de Task
+
+En el editor de Task (TaskEditorModal):
+- Agregar un **icono de bandera** (🚩) en la cabecera, junto al icono de anexos
+- El icono muestra un badge con el conteo de TODOs pendientes
+- Al hacer click en el icono: **abre modal de TODOs** (ver sección 11)
+
+### 8. Calendario Mensual en Vista de TODOs
+
+En la vista principal de TODOs (TodosCardsView):
+- Se muestra un **calendario del mes actual** arriba de las cards
+- Cada día del mes que tiene al menos un TODO muestra un **indicador visual** (punto o marca)
+- El día actual se resalta con un borde diferente
+
+**Interacción:**
+- Click en un día del calendario **filtra las cards** para mostrar solo TODOs de ese día
+- Los TODOs completados también se muestran (no solo pendientes)
+- **Orden de cards:**
+  1. TODOs vencidos (primero)
+  2. TODOs pendientes (ordenados por deadline)
+  3. TODOs completados (al final)
+
+**Navegación del calendario:**
+- Botones para ir al mes anterior/siguiente
+- Se pueden ver TODOs de otros meses
+
+### 9. Posición en Sidebar
+
+La sección "🚩 TODOs" debe aparecer **antes** que "⭐ Favoritos" en el sidebar.
+
+### 10. Banner Recordatorio de TODOs Pendientes (en Task)
+
+Cuando se abre el editor de una Task que tiene TODOs pendientes:
+- Se muestra un **banner destacado ANTES del header** de la task
+- El banner es muy visible (fondo naranja/rojo) como recordatorio urgente
+- Formato resumido mostrando:
+  - Cantidad de TODOs pendientes
+  - Primer TODO vencido o próximo a vencer (preview corto)
+  - Indicador de tiempo restante o "VENCIDO"
+
+**Ejemplo visual:**
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 🚩 2 TODOs pendientes • "Revisar docs..." vence en 30min               │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+El banner NO se muestra si la task no tiene TODOs pendientes.
+
+### 11. Modal de TODOs de la Task
+
+Al hacer click en el icono de bandera (🚩) en el header de la task:
+- Se abre un **modal dedicado** con todos los TODOs de la task
+- Muestra TODOs **pendientes Y completados** (historial completo)
+- Permite **crear nuevos TODOs** desde el modal
+- Acciones disponibles: completar, posponer, eliminar
+
+**Estructura del modal:**
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│ 🚩 TODOs de la tarea                                        [✕ Cerrar]│
+├────────────────────────────────────────────────────────────────────────┤
+│ [+ Nuevo TODO]                                                         │
+│────────────────────────────────────────────────────────────────────────│
+│ Pendientes (2)                                                         │
+│ ┌────────────────────────────────────────────────────────────────────┐ │
+│ │ ⚠️ Revisar documentación              Vencido hace 2h    [✓] [⏰]  │ │
+│ │ 📝 Actualizar tests                   Vence en 3h        [✓] [⏰]  │ │
+│ └────────────────────────────────────────────────────────────────────┘ │
+│────────────────────────────────────────────────────────────────────────│
+│ Completados (1)                                                        │
+│ ┌────────────────────────────────────────────────────────────────────┐ │
+│ │ ✅ Preparar presentación              Completado hace 1d           │ │
+│ └────────────────────────────────────────────────────────────────────┘ │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
 ## Interfaz de Usuario
 
 ### Sidebar - Sección TODOs
 
+Click en "🚩 TODOs" no expande lista, sino que navega a la vista de TODOs.
+
 ```
 ┌─────────────────────────────┐
-│ 🚩 TODOs (3)               │
-├─────────────────────────────┤
-│ ⚠️ Revisar documentación    │
-│    Task: API Backend        │
-│    Vencido hace 2h          │
-├─────────────────────────────┤
-│ 📌 Enviar reporte           │
-│    Task: Informe mensual    │
-│    Vence en 3h              │
-├─────────────────────────────┤
-│ 📌 Llamar al cliente        │
-│    Task: Soporte ABC        │
-│    Vence mañana 10:00       │
+│ 🚩 TODOs (3)    ← click    │
 └─────────────────────────────┘
+```
+
+### Vista de TODOs - Panel Lateral + Editor
+
+Al hacer click en TODOs de sidebar, el layout es dual-panel:
+- Panel izquierdo: Calendario + Lista de TODOs
+- Panel derecho: Editor de la task seleccionada
+
+```
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│                              PIETROSOFT NOTES                                        │
+├──────────┬─────────────────────────┬─────────────────────────────────────────────────┤
+│          │ 🚩 TODOs                │                                                 │
+│  Sidebar │ ┌───────────────────┐   │   Editor de Task Seleccionada                   │
+│          │ │ ◄ Marzo 2026 ►    │   │                                                 │
+│ ⭐ Favor │ │ L M M J V S D     │   │   #ABC-123 - Revisar documentación              │
+│ 📁 Todas │ │ · · · · · 1 2     │   │                                                 │
+│ 📁 Clien │ │ 3 4 5 6 7 8 9     │   │   [Contenido de la tarea...]                    │
+│          │ │10●11●12 13 14 15 16│   │                                                 │
+│          │ │17 18 19 20 ...    │   │   ── Comentarios ──                             │
+│          │ └───────────────────┘   │                                                 │
+│          │                         │                                                 │
+│          │ API Backend    -2h      │                                                 │
+│          │ Revisar docs...  [✓]    │                                                 │
+│          │ ─────────────────────   │                                                 │
+│          │ Informe         3h      │                                                 │
+│          │ Enviar reporte  [✓]     │                                                 │
+│          │ ─────────────────────   │                                                 │
+└──────────┴─────────────────────────┴─────────────────────────────────────────────────┘
+```
+
+Los puntos (●) en el calendario indican días con TODOs.
+Click en un día filtra la lista para mostrar solo TODOs de ese día.
+
+### Cabecera de Task - Icono TODO
+
+En el editor de tarea, se agrega un icono de bandera con badge:
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│  [Editar]  Ticket: ABC-123  Proyecto: API Backend        [🚩 2] [📎] [⏱️] │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                                            │
+│  [Body de la tarea...]                                                     │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+
+Click en [🚩 2] muestra panel/sección con TODOs de esa tarea:
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│ TODOs de esta tarea                              [+ Nuevo TODO]            │
+├────────────────────────────────────────────────────────────────────────────┤
+│ 📌 Revisar documentación         Vence en 1h        [✓] [⏰]              │
+│ 📌 Actualizar tests              Vence mañana       [✓] [⏰]              │
+└────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Banner de Notificación (TODO vencido)

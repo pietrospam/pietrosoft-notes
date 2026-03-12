@@ -15,12 +15,17 @@ export { TimeSheetModal } from './TimeSheetModal';
 export { CargarHorasModal } from './CargarHorasModal';
 export { FloatingActionButton } from './FloatingActionButton';
 export { AttachmentsSidebar } from './AttachmentsSidebar';
+export { TodosSidebarSection } from './TodosSidebarSection';
+export { TodosCardsView } from './TodosCardsView';
 // Editor Modals
 export { BaseEditorModal } from './BaseEditorModal';
 export { TaskEditorModal } from './TaskEditorModal';
 export { NoteEditorModal } from './NoteEditorModal';
 export { ConnectionEditorModal } from './ConnectionEditorModal';
 export { TaskComments } from './TaskComments';
+export { TaskTodos } from './TaskTodos';
+export { TaskTodosModal } from './TaskTodosModal';
+export { TaskTodosBanner } from './TaskTodosBanner';
 export { Toast } from './Toast';
 export { GlobalDropZone } from './GlobalDropZone';
 export { TelegramConfig } from './TelegramConfig';

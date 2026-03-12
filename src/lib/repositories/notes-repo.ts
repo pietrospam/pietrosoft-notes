@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../db';
 import { NoteType as PrismaNoteType, TaskStatus as PrismaTaskStatus, TaskPriority as PrismaTaskPriority, Prisma } from '@prisma/client';
 import type { 
@@ -465,10 +466,16 @@ export async function createTaskComment(data: {
   author: string;
   content: Prisma.InputJsonValue;
 }): Promise<TaskCommentRecord> {
-  const rec = await prisma.taskComment.create({ data });
+  const rec = await prisma.taskComment.create({ 
+    data: {
+      id: randomUUID(),
+      ...data,
+    } 
+  });
   // record in activity log
   await prisma.taskActivityLog.create({
     data: {
+      id: randomUUID(),
       taskId: data.taskId,
       eventType: 'COMMENT_CREATED',
       description: data.author,
@@ -482,6 +489,7 @@ export async function updateTaskComment(id: string, content: Prisma.InputJsonVal
   // log update (author not tracked here)
   await prisma.taskActivityLog.create({
     data: {
+      id: randomUUID(),
       taskId: rec.taskId,
       eventType: 'COMMENT_UPDATED',
       description: id,
@@ -495,6 +503,7 @@ export async function deleteTaskComment(id: string): Promise<void> {
   if (rec) {
     await prisma.taskActivityLog.create({
       data: {
+        id: randomUUID(),
         taskId: rec.taskId,
         eventType: 'COMMENT_DELETED',
         description: id,

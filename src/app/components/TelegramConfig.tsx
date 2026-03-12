@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Send, Eye, EyeOff, Loader2, CheckCircle, XCircle, AlertCircle, HelpCircle, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
+import { Send, Eye, EyeOff, Loader2, CheckCircle, XCircle, AlertCircle, HelpCircle, ChevronDown, ChevronUp, ExternalLink, Flag, Clock, Bell } from 'lucide-react';
 
 interface TelegramConfigState {
   enabled: boolean;
@@ -17,6 +17,12 @@ interface TelegramConfigState {
   notifyManual: boolean;
   notifyErrors: boolean;
   sendFile: boolean;
+}
+
+interface TodoNotificationConfig {
+  enabled: boolean;
+  dailySummaryTime: string;
+  reminderMinutes: number[];
 }
 
 export function TelegramConfig() {
@@ -40,10 +46,19 @@ export function TelegramConfig() {
   const [newToken, setNewToken] = useState<string>('');
   const [editingToken, setEditingToken] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  
+  // REQ-021: TODO notification settings
+  const [todoConfig, setTodoConfig] = useState<TodoNotificationConfig>({
+    enabled: false,
+    dailySummaryTime: '08:00',
+    reminderMinutes: [60, 15],
+  });
+  const [loadingTodo, setLoadingTodo] = useState(false);
 
   // Load configuration on mount
   useEffect(() => {
     loadConfig();
+    loadTodoConfig();
   }, []);
 
   const loadConfig = async () => {
@@ -57,6 +72,39 @@ export function TelegramConfig() {
       console.error('Failed to load Telegram config:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // REQ-021: Load TODO notification config
+  const loadTodoConfig = async () => {
+    try {
+      const res = await fetch('/api/telegram/todo-config');
+      if (res.ok) {
+        const data = await res.json();
+        setTodoConfig(data);
+      }
+    } catch (error) {
+      console.error('Failed to load TODO notification config:', error);
+    }
+  };
+
+  // REQ-021: Save TODO notification config
+  const saveTodoConfig = async (updates: Partial<TodoNotificationConfig>) => {
+    setLoadingTodo(true);
+    try {
+      const res = await fetch('/api/telegram/todo-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTodoConfig(data);
+      }
+    } catch (error) {
+      console.error('Failed to save TODO notification config:', error);
+    } finally {
+      setLoadingTodo(false);
     }
   };
 
@@ -302,6 +350,91 @@ export function TelegramConfig() {
             <p className="text-xs text-gray-500 mt-1 ml-6">
               Si está desactivado o el archivo excede 50MB, solo se enviará una notificación de texto
             </p>
+          </div>
+
+          {/* REQ-021: TODO Notifications section */}
+          <div className="pt-4 border-t border-gray-800">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Flag size={16} className="text-orange-400" />
+                <span className="text-sm text-white font-medium">Notificaciones de TODOs</span>
+              </div>
+              <button
+                onClick={() => saveTodoConfig({ enabled: !todoConfig.enabled })}
+                disabled={loadingTodo}
+                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                  todoConfig.enabled ? 'bg-orange-600' : 'bg-gray-600'
+                }`}
+              >
+                <span
+                  className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
+                    todoConfig.enabled ? 'translate-x-5' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {todoConfig.enabled && (
+              <div className="space-y-3 pl-6 border-l-2 border-orange-500/30 ml-2">
+                {/* Daily Summary Time */}
+                <div>
+                  <label className="flex items-center gap-2 text-sm text-gray-300 mb-1">
+                    <Clock size={14} className="text-gray-400" />
+                    Resumen diario a las:
+                  </label>
+                  <input
+                    type="time"
+                    value={todoConfig.dailySummaryTime}
+                    onChange={(e) => saveTodoConfig({ dailySummaryTime: e.target.value })}
+                    className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Recibe un resumen de TODOs pendientes a esta hora
+                  </p>
+                </div>
+
+                {/* Reminder intervals */}
+                <div>
+                  <label className="flex items-center gap-2 text-sm text-gray-300 mb-2">
+                    <Bell size={14} className="text-gray-400" />
+                    Recordatorios antes del deadline:
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { value: 1440, label: '24h' },
+                      { value: 60, label: '1h' },
+                      { value: 30, label: '30m' },
+                      { value: 15, label: '15m' },
+                      { value: 5, label: '5m' },
+                    ].map((option) => {
+                      const isSelected = todoConfig.reminderMinutes.includes(option.value);
+                      return (
+                        <button
+                          key={option.value}
+                          onClick={() => {
+                            const newReminders = isSelected
+                              ? todoConfig.reminderMinutes.filter(m => m !== option.value)
+                              : [...todoConfig.reminderMinutes, option.value].sort((a, b) => b - a);
+                            saveTodoConfig({ reminderMinutes: newReminders });
+                          }}
+                          disabled={loadingTodo}
+                          className={`px-3 py-1 rounded text-xs transition-colors ${
+                            isSelected
+                              ? 'bg-orange-600 text-white'
+                              : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Selecciona cuánto tiempo antes del deadline recibir recordatorios
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Help section - always visible, collapsible */}

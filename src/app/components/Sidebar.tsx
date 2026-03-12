@@ -1,6 +1,7 @@
 'use client';
 
 import { useApp } from '../context/AppContext';
+import { TodosSidebarSection } from './TodosSidebarSection';
 import { 
   Settings,
   Layers,
@@ -21,6 +22,7 @@ export function Sidebar() {
     setCurrentView, 
     selectedClientId, 
     setSelectedClientId,
+    setSelectedNoteId,
     clients, 
     notes,
     favoritesCount, // REQ-006
@@ -39,6 +41,14 @@ export function Sidebar() {
     confirmNavigation(() => {
       setSearchQuery(''); // Clear search when navigating
       action();
+    });
+  };
+
+  // REQ-021: Handle TODOs sidebar click - navigate to TODOs view
+  const handleShowTodosView = () => {
+    handleNavigate(() => {
+      setSelectedClientId(null);
+      setCurrentView('todos');
     });
   };
 
@@ -69,6 +79,9 @@ export function Sidebar() {
   const renderBitacoraNav = () => (
     <>
       <nav className="space-y-1 px-2">
+        {/* REQ-021: TODOs Section - before Favoritos */}
+        <TodosSidebarSection onShowTodosView={handleShowTodosView} />
+
         {/* REQ-006: Favoritos */}
         <button
           onClick={() => handleNavigate(() => {

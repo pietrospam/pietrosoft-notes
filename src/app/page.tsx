@@ -2,7 +2,7 @@
 
 import { useEffect, useCallback, useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
-import { TopBar, Sidebar, NotesList, ConfigPanel, TimeSheetView, UnsavedChangesModal, FloatingActionButton, Toast, GlobalDropZone } from './components';
+import { TopBar, Sidebar, NotesList, ConfigPanel, TimeSheetView, UnsavedChangesModal, FloatingActionButton, Toast, GlobalDropZone, TodosCardsView } from './components';
 import { TaskEditorModal } from './components/TaskEditorModal';
 import { NoteEditorModal } from './components/NoteEditorModal';
 import { ConnectionEditorModal } from './components/ConnectionEditorModal';
@@ -91,7 +91,16 @@ function InlineEditorPanel() {
 }
 
 function MainContent() {
-  const { currentView, showUnsavedModal, discardAndExecute, cancelPendingAction, saveAndExecute } = useApp();
+  const { 
+    currentView, 
+    showUnsavedModal, 
+    discardAndExecute, 
+    cancelPendingAction, 
+    saveAndExecute,
+    todosFilterTaskId,
+    setCurrentView,
+    setSelectedNoteId,
+  } = useApp();
 
   if (currentView === 'config') {
     return (
@@ -111,6 +120,26 @@ function MainContent() {
     return (
       <>
         <TimeSheetView />
+        <UnsavedChangesModal
+          isOpen={showUnsavedModal}
+          onDiscard={discardAndExecute}
+          onCancel={cancelPendingAction}
+          onSave={saveAndExecute}
+        />
+      </>
+    );
+  }
+
+  // REQ-021: TODOs view - dual panel: TodosCardsView (left) + InlineEditorPanel (right)
+  if (currentView === 'todos') {
+    return (
+      <>
+        <TodosCardsView 
+          filterTaskId={todosFilterTaskId}
+          onNavigateToTask={(taskId) => setSelectedNoteId(taskId)}
+          onClose={todosFilterTaskId ? () => setCurrentView('all') : undefined}
+        />
+        <InlineEditorPanel />
         <UnsavedChangesModal
           isOpen={showUnsavedModal}
           onDiscard={discardAndExecute}
@@ -154,6 +183,24 @@ function AppLayout() {
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
   }, [saveCurrentNote]);
+
+  // REQ-021: Poll for TODO notifications every minute
+  useEffect(() => {
+    const checkNotifications = async () => {
+      try {
+        await fetch('/api/todos/notify', { method: 'POST' });
+      } catch (error) {
+        console.error('Error checking TODO notifications:', error);
+      }
+    };
+
+    // Check immediately on mount
+    checkNotifications();
+    
+    // Then check every minute
+    const interval = setInterval(checkNotifications, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="h-screen flex flex-col bg-gray-950 text-white overflow-hidden">

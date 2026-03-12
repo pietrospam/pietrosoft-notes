@@ -220,6 +220,7 @@ async function main() {
   // Create timesheet entries (now in dedicated table)
   await prisma.timesheet.create({
     data: {
+      id: crypto.randomUUID(),
       workDate: new Date('2026-02-15'),
       hoursWorked: 4,
       description: 'Dev environment setup',
@@ -233,6 +234,7 @@ async function main() {
 
   await prisma.timesheet.create({
     data: {
+      id: crypto.randomUUID(),
       workDate: new Date('2026-02-18'),
       hoursWorked: 6,
       description: 'Homepage design work',
@@ -246,6 +248,7 @@ async function main() {
 
   await prisma.timesheet.create({
     data: {
+      id: crypto.randomUUID(),
       workDate: new Date('2026-02-19'),
       hoursWorked: 5,
       description: 'Homepage design continued',
@@ -259,6 +262,7 @@ async function main() {
 
   await prisma.timesheet.create({
     data: {
+      id: crypto.randomUUID(),
       workDate: new Date('2026-02-17'),
       hoursWorked: 3,
       description: 'API planning session',

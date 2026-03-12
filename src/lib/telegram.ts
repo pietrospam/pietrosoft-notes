@@ -18,6 +18,12 @@ export interface TelegramConfig {
   notifyManual: boolean;
   notifyErrors: boolean;
   sendFile: boolean;
+  // REQ-021: TODO notifications
+  todoNotifications?: {
+    enabled: boolean;
+    dailySummaryTime?: string; // HH:mm format
+    reminderMinutes?: number[]; // Minutes before deadline
+  };
 }
 
 const DEFAULT_CONFIG: TelegramConfig = {
@@ -28,6 +34,11 @@ const DEFAULT_CONFIG: TelegramConfig = {
   notifyManual: true,
   notifyErrors: true,
   sendFile: true,
+  todoNotifications: {
+    enabled: false,
+    dailySummaryTime: '08:00',
+    reminderMinutes: [60, 15],
+  },
 };
 
 /**
@@ -316,4 +327,166 @@ export async function notifyBackupError(
     `Revisa el sistema lo antes posible.`;
   
   await telegram.sendMessage(message);
+}
+
+// ============================================================================
+// REQ-021: TODO Notifications
+// ============================================================================
+
+export interface TodoSummary {
+  id: string;
+  content: string;
+  deadline?: string;
+  taskTitle: string;
+  ticketCode?: string;
+  isOverdue: boolean;
+}
+
+/**
+ * Send daily TODO summary to Telegram
+ */
+export async function sendTodoDailySummary(todos: TodoSummary[]): Promise<boolean> {
+  const config = await getTelegramConfig();
+  
+  if (!config.enabled || !config.todoNotifications?.enabled) {
+    return false;
+  }
+  
+  const telegram = new TelegramService(config.botToken, config.chatId);
+  
+  const dateFormatted = formatDate(new Date());
+  const overdueTodos = todos.filter(t => t.isOverdue);
+  const todayTodos = todos.filter(t => !t.isOverdue && t.deadline);
+  const noDueDate = todos.filter(t => !t.deadline);
+  
+  let message = `📋 <b>Resumen Diario de TODOs</b>\n📅 ${dateFormatted}\n\n`;
+  
+  if (todos.length === 0) {
+    message += `✅ No tienes TODOs pendientes. ¡Buen trabajo!`;
+  } else {
+    if (overdueTodos.length > 0) {
+      message += `🔴 <b>Vencidos (${overdueTodos.length})</b>\n`;
+      overdueTodos.slice(0, 5).forEach(todo => {
+        const code = todo.ticketCode ? `[${todo.ticketCode}] ` : '';
+        message += `• ${code}${escapeHtml(todo.content.substring(0, 50))}\n`;
+      });
+      if (overdueTodos.length > 5) {
+        message += `  <i>...y ${overdueTodos.length - 5} más</i>\n`;
+      }
+      message += '\n';
+    }
+    
+    if (todayTodos.length > 0) {
+      message += `🟡 <b>Para Hoy (${todayTodos.length})</b>\n`;
+      todayTodos.slice(0, 5).forEach(todo => {
+        const code = todo.ticketCode ? `[${todo.ticketCode}] ` : '';
+        const time = todo.deadline ? new Date(todo.deadline).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }) : '';
+        message += `• ${time} ${code}${escapeHtml(todo.content.substring(0, 40))}\n`;
+      });
+      if (todayTodos.length > 5) {
+        message += `  <i>...y ${todayTodos.length - 5} más</i>\n`;
+      }
+      message += '\n';
+    }
+    
+    if (noDueDate.length > 0) {
+      message += `⚪ <b>Sin fecha límite (${noDueDate.length})</b>\n`;
+      noDueDate.slice(0, 3).forEach(todo => {
+        const code = todo.ticketCode ? `[${todo.ticketCode}] ` : '';
+        message += `• ${code}${escapeHtml(todo.content.substring(0, 40))}\n`;
+      });
+      if (noDueDate.length > 3) {
+        message += `  <i>...y ${noDueDate.length - 3} más</i>\n`;
+      }
+    }
+    
+    message += `\n📊 Total pendientes: ${todos.length}`;
+  }
+  
+  return telegram.sendMessage(message);
+}
+
+/**
+ * Send TODO reminder notification to Telegram
+ */
+export async function sendTodoReminder(todo: TodoSummary, minutesRemaining: number): Promise<boolean> {
+  const config = await getTelegramConfig();
+  
+  if (!config.enabled || !config.todoNotifications?.enabled) {
+    return false;
+  }
+  
+  const telegram = new TelegramService(config.botToken, config.chatId);
+  
+  const code = todo.ticketCode ? `[${todo.ticketCode}] ` : '';
+  const time = todo.deadline ? new Date(todo.deadline).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }) : '';
+  
+  let timeText: string;
+  if (minutesRemaining <= 0) {
+    timeText = '¡AHORA!';
+  } else if (minutesRemaining < 60) {
+    timeText = `en ${minutesRemaining} minutos`;
+  } else {
+    timeText = `en ${Math.round(minutesRemaining / 60)} hora(s)`;
+  }
+  
+  const emoji = minutesRemaining <= 15 ? '🚨' : '⏰';
+  
+  const message = 
+    `${emoji} <b>Recordatorio TODO</b>\n\n` +
+    `📌 ${code}${escapeHtml(todo.content)}\n` +
+    `🗂 Tarea: ${escapeHtml(todo.taskTitle)}\n` +
+    `⏰ Vence: ${time} (${timeText})\n`;
+  
+  return telegram.sendMessage(message);
+}
+
+/**
+ * Send TODO overdue notification to Telegram
+ */
+export async function sendTodoOverdue(todo: TodoSummary): Promise<boolean> {
+  const config = await getTelegramConfig();
+  
+  if (!config.enabled || !config.todoNotifications?.enabled) {
+    return false;
+  }
+  
+  const telegram = new TelegramService(config.botToken, config.chatId);
+  
+  const code = todo.ticketCode ? `[${todo.ticketCode}] ` : '';
+  const deadline = todo.deadline ? new Date(todo.deadline) : null;
+  const time = deadline ? deadline.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }) : '';
+  const date = deadline ? deadline.toLocaleDateString('es', { day: '2-digit', month: '2-digit' }) : '';
+  
+  // Calculate how overdue it is
+  const now = new Date();
+  const overdueMs = deadline ? now.getTime() - deadline.getTime() : 0;
+  const overdueMinutes = Math.floor(overdueMs / 60000);
+  
+  let overdueText: string;
+  if (overdueMinutes < 60) {
+    overdueText = `hace ${overdueMinutes} minuto(s)`;
+  } else if (overdueMinutes < 1440) {
+    overdueText = `hace ${Math.floor(overdueMinutes / 60)} hora(s)`;
+  } else {
+    overdueText = `hace ${Math.floor(overdueMinutes / 1440)} día(s)`;
+  }
+  
+  const message = 
+    `🔴 <b>TODO VENCIDO</b>\n\n` +
+    `📌 ${code}${escapeHtml(todo.content)}\n` +
+    `🗂 Tarea: ${escapeHtml(todo.taskTitle)}\n` +
+    `❌ Venció: ${date} ${time} (${overdueText})\n`;
+  
+  return telegram.sendMessage(message);
+}
+
+/**
+ * Helper to escape HTML special characters
+ */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }

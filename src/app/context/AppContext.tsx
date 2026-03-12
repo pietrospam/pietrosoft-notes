@@ -8,7 +8,7 @@ import type { ConfigTab } from '../components/ConfigPanel';
 // Types
 // ============================================================================
 
-export type ViewType = 'all' | 'general' | 'task' | 'connection' | 'timesheets' | 'archived' | 'config' | 'favorites'; // REQ-006: Added favorites
+export type ViewType = 'all' | 'general' | 'task' | 'connection' | 'timesheets' | 'archived' | 'config' | 'favorites' | 'todos'; // REQ-006: Added favorites, REQ-021: Added todos
 
 export type ActiveTab = 'bitacora' | 'conexiones' | 'timesheets'; // REQ-010: Main navigation tabs
 
@@ -55,6 +55,8 @@ interface AppState {
   globalTimeSheetRequest: boolean;
   // Cargar Horas modal
   showCargarHorasModal: boolean;
+  // REQ-021: TODOs view filter
+  todosFilterTaskId: string | null; // null = show all TODOs, string = show TODOs for specific task
   // Editor modal state
   editorModal: {
     isOpen: boolean;
@@ -66,6 +68,7 @@ interface AppState {
 
 interface AppContextValue extends AppState {
   setCurrentView: (view: ViewType) => void;
+  setTodosFilterTaskId: (taskId: string | null) => void; // REQ-021: Filter TODOs view by task
   setSelectedNoteId: (id: string | null) => void;
   setSelectedClientId: (id: string | null) => void;
   toggleTypeFilter: (type: NoteType) => void;
@@ -179,6 +182,7 @@ export function AppProvider({ children }: AppProviderProps) {
     configRequest: null,
     globalTimeSheetRequest: false,
     showCargarHorasModal: false,
+    todosFilterTaskId: null, // REQ-021: TODOs view filter
     selectedTimesheetClientId: null,
     expandedClientIds: [],
     // REQ-012: FAB helpers have been initialized above
@@ -827,6 +831,7 @@ export function AppProvider({ children }: AppProviderProps) {
   const value: AppContextValue = {
     ...state,
     setCurrentView: (view) => setState(s => ({ ...s, currentView: view, selectedNoteId: null, isNewNote: false })),
+    setTodosFilterTaskId: (taskId) => setState(s => ({ ...s, todosFilterTaskId: taskId })), // REQ-021
     setSelectedNoteId: (id) => setState(s => ({ ...s, selectedNoteId: id, isNewNote: id?.startsWith('temp-') ?? false })),
     setSelectedClientId: (id) => setState(s => ({ ...s, selectedClientId: id, selectedNoteId: null, isNewNote: false })),
     toggleTypeFilter: (type) => setState(s => {
