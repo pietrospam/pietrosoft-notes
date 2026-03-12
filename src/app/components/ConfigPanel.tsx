@@ -40,6 +40,7 @@ function ServerBackupsSection() {
   const { refreshNotes } = useApp();
   const [backups, setBackups] = useState<BackupMetadata[]>([]);
   const [settings, setSettings] = useState<BackupSettings | null>(null);
+  const [originalSettings, setOriginalSettings] = useState<BackupSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
@@ -47,6 +48,15 @@ function ServerBackupsSection() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+
+  // Check if settings have changed
+  const hasSettingsChanges = useCallback(() => {
+    if (!settings || !originalSettings) return false;
+    return settings.retentionCount !== originalSettings.retentionCount ||
+      settings.autoBackupEnabled !== originalSettings.autoBackupEnabled ||
+      settings.autoBackupFrequency !== originalSettings.autoBackupFrequency ||
+      settings.autoBackupTime !== originalSettings.autoBackupTime;
+  }, [settings, originalSettings]);
 
   const fetchBackups = useCallback(async () => {
     setIsLoading(true);
@@ -70,6 +80,7 @@ function ServerBackupsSection() {
       if (!res.ok) throw new Error('Failed to fetch settings');
       const data = await res.json();
       setSettings(data);
+      setOriginalSettings(data);
     } catch (err) {
       console.error('Failed to fetch backup settings:', err);
     }
@@ -163,7 +174,7 @@ function ServerBackupsSection() {
     window.open(`/api/backups/${encodeURIComponent(filename)}`, '_blank');
   };
 
-  const handleSaveSettings = async (newSettings: Partial<BackupSettings>) => {
+  const handleSaveSettings = async () => {
     if (!settings) return;
     setIsSavingSettings(true);
     setError(null);
@@ -171,11 +182,12 @@ function ServerBackupsSection() {
       const res = await fetch('/api/backups/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...settings, ...newSettings }),
+        body: JSON.stringify(settings),
       });
       if (!res.ok) throw new Error('Failed to save settings');
       const data = await res.json();
       setSettings(data.settings);
+      setOriginalSettings(data.settings);
       setSuccessMessage('Configuración guardada');
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
@@ -184,6 +196,12 @@ function ServerBackupsSection() {
     } finally {
       setIsSavingSettings(false);
     }
+  };
+
+  // Update local settings
+  const updateSettings = (newSettings: Partial<BackupSettings>) => {
+    if (!settings) return;
+    setSettings({ ...settings, ...newSettings });
   };
 
   const formatDate = (dateStr: string) => {
@@ -281,8 +299,7 @@ function ServerBackupsSection() {
             <div className="flex items-center gap-3">
               <select
                 value={settings.retentionCount}
-                onChange={(e) => handleSaveSettings({ retentionCount: parseInt(e.target.value) })}
-                disabled={isSavingSettings}
+                onChange={(e) => updateSettings({ retentionCount: parseInt(e.target.value) })}
                 className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
               >
                 <option value={0}>Ilimitado</option>
@@ -307,8 +324,7 @@ function ServerBackupsSection() {
             <div className="space-y-3">
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => handleSaveSettings({ autoBackupEnabled: !settings.autoBackupEnabled })}
-                  disabled={isSavingSettings}
+                  onClick={() => updateSettings({ autoBackupEnabled: !settings.autoBackupEnabled })}
                   className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                     settings.autoBackupEnabled ? 'bg-purple-600' : 'bg-gray-600'
                   }`}
@@ -328,8 +344,7 @@ function ServerBackupsSection() {
                 <div className="flex items-center gap-3 ml-14">
                   <select
                     value={settings.autoBackupFrequency}
-                    onChange={(e) => handleSaveSettings({ autoBackupFrequency: e.target.value as BackupSettings['autoBackupFrequency'] })}
-                    disabled={isSavingSettings}
+                    onChange={(e) => updateSettings({ autoBackupFrequency: e.target.value as BackupSettings['autoBackupFrequency'] })}
                     className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
                   >
                     <option value="daily">Diario</option>
@@ -340,8 +355,7 @@ function ServerBackupsSection() {
                   <input
                     type="time"
                     value={settings.autoBackupTime}
-                    onChange={(e) => handleSaveSettings({ autoBackupTime: e.target.value })}
-                    disabled={isSavingSettings}
+                    onChange={(e) => updateSettings({ autoBackupTime: e.target.value })}
                     className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
                   />
                 </div>
@@ -355,12 +369,35 @@ function ServerBackupsSection() {
             </div>
           </div>
           
-          {isSavingSettings && (
-            <div className="flex items-center gap-2 text-xs text-purple-400">
-              <Loader2 size={12} className="animate-spin" />
-              Guardando...
-            </div>
-          )}
+          {/* Save Button */}
+          <div className="pt-3 border-t border-gray-700">
+            <button
+              onClick={handleSaveSettings}
+              disabled={isSavingSettings || !hasSettingsChanges()}
+              className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all ${
+                hasSettingsChanges()
+                  ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                  : 'bg-gray-700 text-gray-400 cursor-not-allowed'
+              }`}
+            >
+              {isSavingSettings ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                <>
+                  <Save size={16} />
+                  {hasSettingsChanges() ? 'Guardar cambios' : 'Sin cambios pendientes'}
+                </>
+              )}
+            </button>
+            {hasSettingsChanges() && (
+              <p className="text-xs text-yellow-400 text-center mt-2">
+                Tienes cambios sin guardar
+              </p>
+            )}
+          </div>
         </div>
       )}
 
@@ -637,9 +674,12 @@ function BackupManager() {
 function PreferencesManager() {
   const { autoSaveEnabled, toggleAutoSave } = useApp();
   
-  // TimeSheet preferences
+  // TimeSheet preferences with original tracking
   const [dailyHoursTarget, setDailyHoursTarget] = useState<number>(8);
   const [exportDateFormat, setExportDateFormat] = useState<string>('DD/MM/YYYY');
+  const [originalDailyHours, setOriginalDailyHours] = useState<number>(8);
+  const [originalExportFormat, setOriginalExportFormat] = useState<string>('DD/MM/YYYY');
+  const [timesheetSaved, setTimesheetSaved] = useState(false);
   
   // Lazy import TelegramConfig to avoid SSR issues
   const [TelegramConfigComponent, setTelegramConfigComponent] = useState<React.ComponentType | null>(null);
@@ -654,18 +694,26 @@ function PreferencesManager() {
   useEffect(() => {
     const savedHours = localStorage.getItem('timesheet-daily-hours');
     const savedFormat = localStorage.getItem('timesheet-export-date-format');
-    if (savedHours) setDailyHoursTarget(parseFloat(savedHours));
-    if (savedFormat) setExportDateFormat(savedFormat);
+    const hours = savedHours ? parseFloat(savedHours) : 8;
+    const format = savedFormat || 'DD/MM/YYYY';
+    setDailyHoursTarget(hours);
+    setOriginalDailyHours(hours);
+    setExportDateFormat(format);
+    setOriginalExportFormat(format);
   }, []);
   
-  const handleDailyHoursChange = (hours: number) => {
-    setDailyHoursTarget(hours);
-    localStorage.setItem('timesheet-daily-hours', hours.toString());
+  // Check if timesheet settings have changed
+  const hasTimesheetChanges = () => {
+    return dailyHoursTarget !== originalDailyHours || exportDateFormat !== originalExportFormat;
   };
   
-  const handleExportFormatChange = (format: string) => {
-    setExportDateFormat(format);
-    localStorage.setItem('timesheet-export-date-format', format);
+  const handleSaveTimesheetSettings = () => {
+    localStorage.setItem('timesheet-daily-hours', dailyHoursTarget.toString());
+    localStorage.setItem('timesheet-export-date-format', exportDateFormat);
+    setOriginalDailyHours(dailyHoursTarget);
+    setOriginalExportFormat(exportDateFormat);
+    setTimesheetSaved(true);
+    setTimeout(() => setTimesheetSaved(false), 3000);
   };
 
   return (
@@ -734,7 +782,7 @@ function PreferencesManager() {
                 max={24}
                 step={0.5}
                 value={dailyHoursTarget}
-                onChange={(e) => handleDailyHoursChange(parseFloat(e.target.value) || 8)}
+                onChange={(e) => setDailyHoursTarget(parseFloat(e.target.value) || 8)}
                 className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-white w-20 focus:outline-none focus:ring-1 focus:ring-orange-500"
               />
             </div>
@@ -747,13 +795,43 @@ function PreferencesManager() {
               </div>
               <select
                 value={exportDateFormat}
-                onChange={(e) => handleExportFormatChange(e.target.value)}
+                onChange={(e) => setExportDateFormat(e.target.value)}
                 className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
               >
                 <option value="DD/MM/YYYY">DD/MM/YYYY (20/02/2026)</option>
                 <option value="YYYY-MM-DD">YYYY-MM-DD (2026-02-20)</option>
                 <option value="DD-MM-YYYY">DD-MM-YYYY (20-02-2026)</option>
               </select>
+            </div>
+            
+            {/* Save Button for TimeSheet settings */}
+            <div className="pt-3 border-t border-gray-700">
+              <button
+                onClick={handleSaveTimesheetSettings}
+                disabled={!hasTimesheetChanges()}
+                className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all ${
+                  hasTimesheetChanges()
+                    ? 'bg-orange-600 hover:bg-orange-700 text-white'
+                    : 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                {timesheetSaved ? (
+                  <>
+                    <span className="text-green-400">✓</span>
+                    ¡Guardado!
+                  </>
+                ) : (
+                  <>
+                    <Save size={16} />
+                    {hasTimesheetChanges() ? 'Guardar cambios' : 'Sin cambios pendientes'}
+                  </>
+                )}
+              </button>
+              {hasTimesheetChanges() && (
+                <p className="text-xs text-yellow-400 text-center mt-2">
+                  Tienes cambios sin guardar
+                </p>
+              )}
             </div>
           </div>
         </div>

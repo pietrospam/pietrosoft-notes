@@ -173,7 +173,7 @@ export function BaseEditorModal({
         titleInputRef.current?.select();
       }, 100);
     }
-  }, [noteId]);
+  }, [noteId, onFieldsChange]);
 
   // Handle Escape key (only in popup mode)
   useEffect(() => {

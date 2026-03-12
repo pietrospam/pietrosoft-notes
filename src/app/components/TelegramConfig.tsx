@@ -5,8 +5,8 @@
  * SPEC-007: Telegram Backup Notifications
  */
 
-import { useState, useEffect } from 'react';
-import { Send, Eye, EyeOff, Loader2, CheckCircle, XCircle, AlertCircle, HelpCircle, ChevronDown, ChevronUp, ExternalLink, Flag, Clock, Bell, Cog } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Send, Eye, EyeOff, Loader2, CheckCircle, XCircle, AlertCircle, HelpCircle, ChevronDown, ChevronUp, ExternalLink, Flag, Clock, Bell, Cog, Save } from 'lucide-react';
 
 interface TelegramConfigState {
   enabled: boolean;
@@ -30,6 +30,22 @@ interface AutomationsStatus {
   executionCount: number;
 }
 
+// Helper to compare configs
+function configsEqual(a: TelegramConfigState, b: TelegramConfigState): boolean {
+  return a.enabled === b.enabled &&
+    a.chatId === b.chatId &&
+    a.notifyAuto === b.notifyAuto &&
+    a.notifyManual === b.notifyManual &&
+    a.notifyErrors === b.notifyErrors &&
+    a.sendFile === b.sendFile;
+}
+
+function todoConfigsEqual(a: TodoNotificationConfig, b: TodoNotificationConfig): boolean {
+  return a.enabled === b.enabled &&
+    a.dailySummaryTime === b.dailySummaryTime &&
+    JSON.stringify(a.reminderMinutes) === JSON.stringify(b.reminderMinutes);
+}
+
 export function TelegramConfig() {
   const [config, setConfig] = useState<TelegramConfigState>({
     enabled: false,
@@ -41,9 +57,11 @@ export function TelegramConfig() {
     notifyErrors: true,
     sendFile: true,
   });
+  const [originalConfig, setOriginalConfig] = useState<TelegramConfigState | null>(null);
   
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
   const [testMessage, setTestMessage] = useState<string>('');
@@ -58,10 +76,16 @@ export function TelegramConfig() {
     dailySummaryTime: '08:00',
     reminderMinutes: [60, 15],
   });
-  const [loadingTodo, setLoadingTodo] = useState(false);
+  const [originalTodoConfig, setOriginalTodoConfig] = useState<TodoNotificationConfig | null>(null);
   
   // REQ-022: Automations status
   const [automationsStatus, setAutomationsStatus] = useState<AutomationsStatus | null>(null);
+
+  // Check if there are pending changes
+  const hasChanges = useCallback(() => {
+    if (!originalConfig || !originalTodoConfig) return false;
+    return !configsEqual(config, originalConfig) || !todoConfigsEqual(todoConfig, originalTodoConfig);
+  }, [config, originalConfig, todoConfig, originalTodoConfig]);
 
   // Load configuration on mount
   useEffect(() => {
@@ -82,6 +106,7 @@ export function TelegramConfig() {
       if (res.ok) {
         const data = await res.json();
         setConfig(data);
+        setOriginalConfig(data);
       }
     } catch (error) {
       console.error('Failed to load Telegram config:', error);
@@ -97,6 +122,7 @@ export function TelegramConfig() {
       if (res.ok) {
         const data = await res.json();
         setTodoConfig(data);
+        setOriginalTodoConfig(data);
       }
     } catch (error) {
       console.error('Failed to load TODO notification config:', error);
@@ -119,43 +145,67 @@ export function TelegramConfig() {
     }
   };
 
-  // REQ-021: Save TODO notification config
-  const saveTodoConfig = async (updates: Partial<TodoNotificationConfig>) => {
-    setLoadingTodo(true);
+  // Save all changes
+  const handleSaveAll = async () => {
+    setSaving(true);
+    setSaveSuccess(false);
     try {
-      const res = await fetch('/api/telegram/todo-config', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setTodoConfig(data);
+      // Save telegram config if changed
+      if (originalConfig && !configsEqual(config, originalConfig)) {
+        const res = await fetch('/api/telegram/config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setConfig(data);
+          setOriginalConfig(data);
+        }
       }
+      
+      // Save TODO config if changed
+      if (originalTodoConfig && !todoConfigsEqual(todoConfig, originalTodoConfig)) {
+        const res = await fetch('/api/telegram/todo-config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(todoConfig),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setTodoConfig(data);
+          setOriginalTodoConfig(data);
+        }
+      }
+      
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
     } catch (error) {
-      console.error('Failed to save TODO notification config:', error);
+      console.error('Failed to save config:', error);
     } finally {
-      setLoadingTodo(false);
+      setSaving(false);
     }
   };
 
-  const saveConfig = async (updates: Partial<TelegramConfigState>) => {
+  // Save only the token (special case)
+  const handleSaveToken = async () => {
+    if (!newToken.trim()) return;
     setSaving(true);
     try {
       const res = await fetch('/api/telegram/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
+        body: JSON.stringify({ botToken: newToken.trim() }),
       });
-      
       if (res.ok) {
         const data = await res.json();
         setConfig(data);
+        setOriginalConfig(data);
         setEditingToken(false);
         setNewToken('');
       }
     } catch (error) {
-      console.error('Failed to save Telegram config:', error);
+      console.error('Failed to save token:', error);
     } finally {
       setSaving(false);
     }
@@ -182,12 +232,6 @@ export function TelegramConfig() {
       setTestMessage('Error de conexión');
     } finally {
       setTesting(false);
-    }
-  };
-
-  const handleSaveToken = () => {
-    if (newToken.trim()) {
-      saveConfig({ botToken: newToken.trim() });
     }
   };
 
@@ -218,7 +262,7 @@ export function TelegramConfig() {
         
         {/* Main toggle */}
         <button
-          onClick={() => saveConfig({ enabled: !config.enabled })}
+          onClick={() => setConfig(prev => ({ ...prev, enabled: !prev.enabled }))}
           disabled={saving}
           className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
             config.enabled ? 'bg-blue-600' : 'bg-gray-600'
@@ -295,7 +339,6 @@ export function TelegramConfig() {
               type="text"
               value={config.chatId}
               onChange={(e) => setConfig(prev => ({ ...prev, chatId: e.target.value }))}
-              onBlur={() => saveConfig({ chatId: config.chatId })}
               placeholder="123456789"
               className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
@@ -341,7 +384,7 @@ export function TelegramConfig() {
                 <input
                   type="checkbox"
                   checked={config.notifyAuto}
-                  onChange={(e) => saveConfig({ notifyAuto: e.target.checked })}
+                  onChange={(e) => setConfig(prev => ({ ...prev, notifyAuto: e.target.checked }))}
                   className="rounded bg-gray-800 border-gray-600"
                 />
                 Backups automáticos
@@ -350,7 +393,7 @@ export function TelegramConfig() {
                 <input
                   type="checkbox"
                   checked={config.notifyManual}
-                  onChange={(e) => saveConfig({ notifyManual: e.target.checked })}
+                  onChange={(e) => setConfig(prev => ({ ...prev, notifyManual: e.target.checked }))}
                   className="rounded bg-gray-800 border-gray-600"
                 />
                 Backups manuales
@@ -359,7 +402,7 @@ export function TelegramConfig() {
                 <input
                   type="checkbox"
                   checked={config.notifyErrors}
-                  onChange={(e) => saveConfig({ notifyErrors: e.target.checked })}
+                  onChange={(e) => setConfig(prev => ({ ...prev, notifyErrors: e.target.checked }))}
                   className="rounded bg-gray-800 border-gray-600"
                 />
                 Errores de backup
@@ -373,7 +416,7 @@ export function TelegramConfig() {
               <input
                 type="checkbox"
                 checked={config.sendFile}
-                onChange={(e) => saveConfig({ sendFile: e.target.checked })}
+                onChange={(e) => setConfig(prev => ({ ...prev, sendFile: e.target.checked }))}
                 className="rounded bg-gray-800 border-gray-600"
               />
               Adjuntar archivo de backup (máx. 1GB)
@@ -391,8 +434,7 @@ export function TelegramConfig() {
                 <span className="text-sm text-white font-medium">Notificaciones de TODOs</span>
               </div>
               <button
-                onClick={() => saveTodoConfig({ enabled: !todoConfig.enabled })}
-                disabled={loadingTodo}
+                onClick={() => setTodoConfig(prev => ({ ...prev, enabled: !prev.enabled }))}
                 className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
                   todoConfig.enabled ? 'bg-orange-600' : 'bg-gray-600'
                 }`}
@@ -416,7 +458,7 @@ export function TelegramConfig() {
                   <input
                     type="time"
                     value={todoConfig.dailySummaryTime}
-                    onChange={(e) => saveTodoConfig({ dailySummaryTime: e.target.value })}
+                    onChange={(e) => setTodoConfig(prev => ({ ...prev, dailySummaryTime: e.target.value }))}
                     className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
                   />
                   <p className="text-xs text-gray-500 mt-1">
@@ -446,9 +488,8 @@ export function TelegramConfig() {
                             const newReminders = isSelected
                               ? todoConfig.reminderMinutes.filter(m => m !== option.value)
                               : [...todoConfig.reminderMinutes, option.value].sort((a, b) => b - a);
-                            saveTodoConfig({ reminderMinutes: newReminders });
+                            setTodoConfig(prev => ({ ...prev, reminderMinutes: newReminders }));
                           }}
-                          disabled={loadingTodo}
                           className={`px-3 py-1 rounded text-xs transition-colors ${
                             isSelected
                               ? 'bg-orange-600 text-white'
@@ -662,6 +703,41 @@ export function TelegramConfig() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Save Button - always visible */}
+      <div className="mt-6 pt-4 border-t border-gray-700">
+        <button
+          onClick={handleSaveAll}
+          disabled={saving || !hasChanges()}
+          className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-all ${
+            hasChanges()
+              ? 'bg-blue-600 hover:bg-blue-700 text-white'
+              : 'bg-gray-700 text-gray-400 cursor-not-allowed'
+          }`}
+        >
+          {saving ? (
+            <>
+              <Loader2 size={18} className="animate-spin" />
+              Guardando...
+            </>
+          ) : saveSuccess ? (
+            <>
+              <CheckCircle size={18} className="text-green-400" />
+              ¡Guardado!
+            </>
+          ) : (
+            <>
+              <Save size={18} />
+              {hasChanges() ? 'Guardar cambios' : 'Sin cambios pendientes'}
+            </>
+          )}
+        </button>
+        {hasChanges() && (
+          <p className="text-xs text-yellow-400 text-center mt-2">
+            Tienes cambios sin guardar
+          </p>
+        )}
       </div>
     </div>
   );
