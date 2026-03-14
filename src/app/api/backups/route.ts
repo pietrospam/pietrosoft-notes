@@ -314,6 +314,15 @@ export async function POST(request: NextRequest) {
     } catch {
       // Data directory doesn't exist - that's fine
     }
+
+    // Add backup settings if exists
+    const backupSettingsPath = path.join(BACKUP_DIR, 'backup-settings.json');
+    try {
+      const settingsContent = await fs.readFile(backupSettingsPath);
+      archive.append(settingsContent, { name: 'config/backup-settings.json' });
+    } catch {
+      // Settings file doesn't exist - that's fine
+    }
     
     await archive.finalize();
     const zipBuffer = await finishPromise;

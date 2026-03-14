@@ -189,6 +189,39 @@ export async function POST() {
     }));
     archive.append(JSON.stringify(attachmentsWithData, null, 2), { name: 'db/attachments.json' });
 
+    // Add data directory if exists (telegram config, etc)
+    const dataDir = process.env.DATA_DIR || './data';
+    try {
+      const addDirectory = async (dirPath: string, archivePath: string): Promise<void> => {
+        const entries = await fs.readdir(dirPath, { withFileTypes: true });
+        
+        for (const entry of entries) {
+          const fullPath = path.join(dirPath, entry.name);
+          const archiveEntryPath = path.join(archivePath, entry.name);
+          
+          if (entry.isDirectory()) {
+            await addDirectory(fullPath, archiveEntryPath);
+          } else {
+            const content = await fs.readFile(fullPath);
+            archive.append(content, { name: archiveEntryPath });
+          }
+        }
+      };
+      
+      await addDirectory(dataDir, 'data');
+    } catch {
+      // Data directory doesn't exist - that's fine
+    }
+
+    // Add backup settings
+    const backupSettingsPath = path.join(BACKUP_DIR, 'backup-settings.json');
+    try {
+      const settingsContent = await fs.readFile(backupSettingsPath);
+      archive.append(settingsContent, { name: 'config/backup-settings.json' });
+    } catch {
+      // Settings file doesn't exist - that's fine
+    }
+
     await archive.finalize();
     const zipBuffer = await finishPromise;
 
