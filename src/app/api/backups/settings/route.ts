@@ -64,31 +64,21 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const currentSettings = await readSettings();
     
-    // Determine the new values
-    const newAutoBackupEnabled = typeof body.autoBackupEnabled === 'boolean'
-      ? body.autoBackupEnabled
-      : currentSettings.autoBackupEnabled;
-    const newAutoBackupTime = typeof body.autoBackupTime === 'string' && /^\d{2}:\d{2}$/.test(body.autoBackupTime)
-      ? body.autoBackupTime
-      : currentSettings.autoBackupTime;
-    
-    // If enabling auto backup for the first time OR changing the backup time,
-    // set lastAutoBackup to now to prevent immediate execution
-    const isEnablingBackup = newAutoBackupEnabled && !currentSettings.autoBackupEnabled;
-    const isChangingTime = newAutoBackupTime !== currentSettings.autoBackupTime && newAutoBackupEnabled;
-    const shouldResetLastBackup = isEnablingBackup || isChangingTime;
-    
     const newSettings: BackupSettings = {
       retentionCount: typeof body.retentionCount === 'number' 
         ? Math.max(0, Math.floor(body.retentionCount)) 
         : currentSettings.retentionCount,
-      autoBackupEnabled: newAutoBackupEnabled,
+      autoBackupEnabled: typeof body.autoBackupEnabled === 'boolean'
+        ? body.autoBackupEnabled
+        : currentSettings.autoBackupEnabled,
       autoBackupFrequency: ['daily', 'weekly', 'monthly'].includes(body.autoBackupFrequency)
         ? body.autoBackupFrequency
         : currentSettings.autoBackupFrequency,
-      autoBackupTime: newAutoBackupTime,
-      // Reset lastAutoBackup when enabling or changing time to prevent immediate execution
-      lastAutoBackup: shouldResetLastBackup ? new Date().toISOString() : currentSettings.lastAutoBackup,
+      autoBackupTime: typeof body.autoBackupTime === 'string' && /^\d{2}:\d{2}$/.test(body.autoBackupTime)
+        ? body.autoBackupTime
+        : currentSettings.autoBackupTime,
+      // Preserve lastAutoBackup - only updated when a real backup is created
+      lastAutoBackup: currentSettings.lastAutoBackup,
     };
     
     await writeSettings(newSettings);

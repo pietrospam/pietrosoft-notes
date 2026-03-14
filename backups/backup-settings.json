@@ -1,6 +1,1 @@
-{
-  "retentionCount": 10,
-  "autoBackupEnabled": true,
-  "autoBackupFrequency": "daily",
-  "autoBackupTime": "03:00"
-}
+{"retentionCount":10,"autoBackupEnabled":false,"autoBackupFrequency":"daily","autoBackupTime":"03:00"}

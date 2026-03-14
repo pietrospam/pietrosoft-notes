@@ -200,8 +200,24 @@ export class TelegramService {
   }
 }
 
-// Maximum file size for Telegram (1GB)
-const MAX_FILE_SIZE = 1024 * 1024 * 1024;
+// Maximum file size per part for Telegram bots (45MB to have margin under 50MB limit)
+const MAX_PART_SIZE = 45 * 1024 * 1024;
+
+/**
+ * Split a buffer into parts of maximum size
+ */
+function splitBuffer(buffer: Buffer, maxSize: number): Buffer[] {
+  const parts: Buffer[] = [];
+  let offset = 0;
+  
+  while (offset < buffer.length) {
+    const end = Math.min(offset + maxSize, buffer.length);
+    parts.push(buffer.subarray(offset, end));
+    offset = end;
+  }
+  
+  return parts;
+}
 
 /**
  * Format file size for display
@@ -256,30 +272,91 @@ export async function notifyBackupSuccess(
   const sizeFormatted = formatSize(backupInfo.sizeBytes);
   const dateFormatted = formatDate(new Date());
   
-  // Check if file is too large for Telegram
-  if (config.sendFile && backupInfo.sizeBytes <= MAX_FILE_SIZE) {
-    // Send with file attached
-    const { promises: fs } = await import('fs');
+  if (!config.sendFile) {
+    // sendFile disabled - send text only
+    await sendTextOnlyNotification(telegram, backupInfo, typeLabel, sizeFormatted, dateFormatted);
+    return;
+  }
+  
+  // Read the file and send (potentially in parts)
+  const { promises: fs } = await import('fs');
+  
+  try {
+    const fileBuffer = await fs.readFile(backupInfo.filePath);
     
-    try {
-      const fileBuffer = await fs.readFile(backupInfo.filePath);
-      
+    // Check if we need to split the file
+    if (fileBuffer.length <= MAX_PART_SIZE) {
+      // Single file - send directly
       const caption = 
         `✅ <b>Backup Completado</b>\n\n` +
         `📅 Fecha: ${dateFormatted}\n` +
         `📦 Tipo: ${typeLabel}\n` +
         `💾 Tamaño: ${sizeFormatted}`;
       
-      await telegram.sendDocument(fileBuffer, backupInfo.filename, caption);
-    } catch (error) {
-      console.error('Failed to send backup file to Telegram:', error);
-      // Fall back to text-only notification
-      await sendTextOnlyNotification(telegram, backupInfo, typeLabel, sizeFormatted, dateFormatted);
+      const success = await telegram.sendDocument(fileBuffer, backupInfo.filename, caption);
+      
+      if (!success) {
+        console.error('sendDocument returned false, falling back to text notification');
+        await sendTextOnlyNotification(telegram, backupInfo, typeLabel, sizeFormatted, dateFormatted);
+      }
+    } else {
+      // File too large - split into parts
+      const parts = splitBuffer(fileBuffer, MAX_PART_SIZE);
+      const totalParts = parts.length;
+      
+      // Send header message first
+      const headerMessage = 
+        `✅ <b>Backup Completado</b>\n\n` +
+        `📅 Fecha: ${dateFormatted}\n` +
+        `📦 Tipo: ${typeLabel}\n` +
+        `💾 Tamaño total: ${sizeFormatted}\n` +
+        `📎 Partes: ${totalParts}\n\n` +
+        `⬇️ Descargando partes...`;
+      
+      await telegram.sendMessage(headerMessage);
+      
+      // Send each part
+      let allSuccess = true;
+      const baseFilename = backupInfo.filename.replace('.zip', '');
+      
+      for (let i = 0; i < parts.length; i++) {
+        const partNumber = i + 1;
+        const partFilename = `${baseFilename}.part${String(partNumber).padStart(2, '0')}.zip`;
+        const partSize = formatSize(parts[i].length);
+        
+        const caption = `📦 Parte ${partNumber}/${totalParts} (${partSize})`;
+        
+        const success = await telegram.sendDocument(parts[i], partFilename, caption);
+        
+        if (!success) {
+          console.error(`Failed to send part ${partNumber}/${totalParts}`);
+          allSuccess = false;
+          break;
+        }
+        
+        // Small delay between parts to avoid rate limiting
+        if (i < parts.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+      
+      if (allSuccess) {
+        // Send completion message
+        await telegram.sendMessage(
+          `✅ <b>Backup enviado completo</b>\n\n` +
+          `Para restaurar, concatena las partes:\n` +
+          `<code>cat ${baseFilename}.part*.zip > ${backupInfo.filename}</code>`
+        );
+      } else {
+        await telegram.sendMessage(
+          `⚠️ <b>Error enviando algunas partes</b>\n` +
+          `Descarga el backup completo desde la aplicación.`
+        );
+      }
     }
-  } else {
-    // File too large or sendFile disabled - send text only
-    await sendTextOnlyNotification(telegram, backupInfo, typeLabel, sizeFormatted, dateFormatted, 
-      config.sendFile && backupInfo.sizeBytes > MAX_FILE_SIZE);
+  } catch (error) {
+    console.error('Failed to send backup file to Telegram:', error);
+    await sendTextOnlyNotification(telegram, backupInfo, typeLabel, sizeFormatted, dateFormatted);
   }
 }
 
@@ -288,19 +365,14 @@ async function sendTextOnlyNotification(
   backupInfo: { filename: string; sizeBytes: number },
   typeLabel: string,
   sizeFormatted: string,
-  dateFormatted: string,
-  fileTooLarge = false
+  dateFormatted: string
 ): Promise<void> {
-  let message = 
+  const message = 
     `✅ <b>Backup Completado</b>\n\n` +
     `📅 Fecha: ${dateFormatted}\n` +
     `📦 Tipo: ${typeLabel}\n` +
     `💾 Tamaño: ${sizeFormatted}\n` +
     `📁 Archivo: ${backupInfo.filename}`;
-  
-  if (fileTooLarge) {
-    message += `\n\n⚠️ Archivo muy grande para adjuntar (>1GB).\nDescárgalo desde la aplicación.`;
-  }
   
   await telegram.sendMessage(message);
 }
