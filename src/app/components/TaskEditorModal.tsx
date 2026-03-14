@@ -1227,9 +1227,9 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
           <AttachmentsModal
             noteId={taskId || task.id}
             attachments={task.attachments || []}
-            onChange={(newList) => {
-              setTask(prev => ({ ...prev, attachments: newList }));
-              trackChange({ attachments: newList });
+            onChange={() => {
+              // After any attachment change, refresh from server to get updated list
+              refreshNotes();
               // Reload comments to show system comment for new attachments
               commentsRef.current?.reloadComments();
             }}
@@ -1567,9 +1567,9 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
         <AttachmentsModal
           noteId={taskId || task.id}
           attachments={task.attachments || []}
-          onChange={(newList) => {
-            setTask(prev => ({ ...prev, attachments: newList }));
-            trackChange({ attachments: newList });
+          onChange={() => {
+            // After any attachment change, refresh from server to get updated list
+            refreshNotes();
           }}
           onClose={() => setShowAttachmentsModal(false)}
           disabledUpload={task.id.startsWith('temp-')}

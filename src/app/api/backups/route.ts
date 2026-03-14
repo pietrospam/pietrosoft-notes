@@ -33,6 +33,7 @@ interface BackupManifest {
     timesheets: number;
     activityLogs: number;
     taskComments?: number;
+    taskTodos?: number;
   };
   appVersion: string;
 }
@@ -242,7 +243,7 @@ export async function POST(request: NextRequest) {
     // Export database tables
     const { prisma } = await import('@/lib/db');
     
-    const [clients, projects, notes, attachments, activityLogs, timesheets, taskComments] = await Promise.all([
+    const [clients, projects, notes, attachments, activityLogs, timesheets, taskComments, taskTodos] = await Promise.all([
       prisma.client.findMany(),
       prisma.project.findMany(),
       prisma.note.findMany(),
@@ -250,6 +251,7 @@ export async function POST(request: NextRequest) {
       prisma.taskActivityLog.findMany(),
       prisma.timesheet.findMany(),
       prisma.taskComment.findMany(),
+      prisma.taskTodo.findMany(),
     ]);
     
     // Create manifest
@@ -267,6 +269,7 @@ export async function POST(request: NextRequest) {
         timesheets: timesheets.length,
         activityLogs: activityLogs.length,
         taskComments: taskComments.length,
+        taskTodos: taskTodos.length,
       },
       appVersion: '1.0.0',
     };
@@ -281,6 +284,7 @@ export async function POST(request: NextRequest) {
     archive.append(JSON.stringify(timesheets, null, 2), { name: 'db/timesheets.json' });
     archive.append(JSON.stringify(activityLogs, null, 2), { name: 'db/activityLogs.json' });
     archive.append(JSON.stringify(taskComments, null, 2), { name: 'db/taskComments.json' });
+    archive.append(JSON.stringify(taskTodos, null, 2), { name: 'db/taskTodos.json' });
     
     // Encode attachment data to base64
     const attachmentsWithData = attachments.map(a => ({

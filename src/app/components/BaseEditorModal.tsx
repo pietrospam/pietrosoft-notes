@@ -556,9 +556,9 @@ export function BaseEditorModal({
           <AttachmentsModal
             noteId={noteId || note.id}
             attachments={note.attachments || []}
-            onChange={(newList) => {
-              setNote(prev => ({ ...prev, attachments: newList }));
-              trackChange({ attachments: newList });
+            onChange={() => {
+              // After any attachment change, refresh from server to get updated list
+              refreshNotes();
             }}
             onClose={() => setShowAttachmentsModal(false)}
             disabledUpload={note.id.startsWith('temp-')}
@@ -581,9 +581,9 @@ export function BaseEditorModal({
         <AttachmentsModal
           noteId={noteId || note.id}
           attachments={note.attachments || []}
-          onChange={(newList) => {
-            setNote(prev => ({ ...prev, attachments: newList }));
-            trackChange({ attachments: newList });
+          onChange={() => {
+            // After any attachment change, refresh from server to get updated list
+            refreshNotes();
           }}
           onClose={() => setShowAttachmentsModal(false)}
           disabledUpload={note.id.startsWith('temp-')}

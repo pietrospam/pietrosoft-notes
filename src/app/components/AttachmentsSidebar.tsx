@@ -4,13 +4,12 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Paperclip } from 'lucide-react';
 import { AttachmentsPanel } from './AttachmentsPanel';
 import { useApp } from '../context/AppContext';
-import type { AttachmentMeta } from '@/lib/types';
 
 export function AttachmentsSidebar() {
   const {
     selectedNoteId,
     filteredNotes,
-    updateNote,
+    refreshNotes,
     isAttachmentsSidebarOpen,
     setAttachmentsSidebarOpen,
     toggleAttachmentsSidebar,
@@ -19,12 +18,6 @@ export function AttachmentsSidebar() {
 
   const selectedNote = filteredNotes.find(n => n.id === selectedNoteId) || null;
   const attachments = selectedNote?.attachments || [];
-
-  // Keep a ref to always have the latest attachments value (fixes multi-upload stale closure)
-  const attachmentsRef = useRef(attachments);
-  attachmentsRef.current = attachments;
-  const selectedNoteRef = useRef(selectedNote);
-  selectedNoteRef.current = selectedNote;
 
   // close when clicking outside
   const panelRef = useRef<HTMLDivElement>(null);
@@ -53,23 +46,10 @@ export function AttachmentsSidebar() {
     setAttachmentsSidebarOpen(false);
   }, [selectedNoteId, setAttachmentsSidebarOpen]);
 
-  // Use useCallback with refs to avoid stale closure issues during multi-upload
-  const onAdded = useCallback((a: AttachmentMeta) => {
-    if (!selectedNoteRef.current) return;
-    updateNote(selectedNoteRef.current.id, { attachments: [...attachmentsRef.current, a] });
-  }, [updateNote]);
-
-  const onDeleted = useCallback((id: string) => {
-    if (!selectedNoteRef.current) return;
-    updateNote(selectedNoteRef.current.id, { attachments: attachmentsRef.current.filter(a => a.id !== id) });
-  }, [updateNote]);
-
-  const onRenamed = useCallback((id: string, newName: string) => {
-    if (!selectedNoteRef.current) return;
-    updateNote(selectedNoteRef.current.id, { 
-      attachments: attachmentsRef.current.map(a => (a.id === id ? { ...a, originalName: newName } : a))
-    });
-  }, [updateNote]);
+  // After any attachment change, refresh from server to get updated list
+  const onAttachmentChanged = useCallback(() => {
+    refreshNotes();
+  }, [refreshNotes]);
 
   // don't show panel at all if no note selected
   if (!selectedNote) return null;
@@ -110,9 +90,9 @@ export function AttachmentsSidebar() {
           <AttachmentsPanel
             noteId={selectedNote.id}
             attachments={attachments}
-            onAttachmentAdded={onAdded}
-            onAttachmentDeleted={onDeleted}
-            onAttachmentRenamed={onRenamed}
+            onAttachmentAdded={onAttachmentChanged}
+            onAttachmentDeleted={onAttachmentChanged}
+            onAttachmentRenamed={onAttachmentChanged}
             {...(isTemp ? { disabledUpload: true } : {})}
           />
         </div>
