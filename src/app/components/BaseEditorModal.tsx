@@ -32,7 +32,7 @@ export function BaseEditorModal({
   headerActions,
   inline = false,
 }: BaseEditorModalProps) {
-  const { updateNote, refreshNotes, toggleFavorite, autoSaveEnabled, setIsDirty: setGlobalIsDirty, setPendingChanges: setGlobalPendingChanges, deleteNote, setSelectedNoteId } = useApp();
+  const { updateNote, refreshNotes, toggleFavorite, autoSaveEnabled, setIsDirty: setGlobalIsDirty, setPendingChanges: setGlobalPendingChanges, deleteNote, setSelectedNoteId, filteredNotes } = useApp();
   const [showAttachmentsModal, setShowAttachmentsModal] = useState(false);
   
   const [note, setNote] = useState<Note>(defaultNote);
@@ -174,6 +174,23 @@ export function BaseEditorModal({
       }, 100);
     }
   }, [noteId, onFieldsChange]);
+
+  // Sync attachments from global context (for when files are dropped via GlobalDropZone)
+  useEffect(() => {
+    const targetId = noteId || (isCreatedRef.current ? note.id : null);
+    if (!targetId) return;
+    
+    const globalNote = filteredNotes.find(n => n.id === targetId);
+    if (globalNote && globalNote.attachments) {
+      // Only update if attachments actually changed (by length or IDs)
+      const localIds = (note.attachments || []).map(a => a.id).sort().join(',');
+      const globalIds = globalNote.attachments.map(a => a.id).sort().join(',');
+      
+      if (localIds !== globalIds) {
+        setNote(prev => ({ ...prev, attachments: globalNote.attachments }));
+      }
+    }
+  }, [filteredNotes, noteId, note.id, note.attachments]);
 
   // Handle Escape key (only in popup mode)
   useEffect(() => {

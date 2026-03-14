@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { X } from 'lucide-react';
 import { AttachmentsPanel } from './AttachmentsPanel';
 import type { AttachmentMeta } from '@/lib/types';
@@ -14,6 +14,10 @@ interface AttachmentsModalProps {
 }
 
 export function AttachmentsModal({ noteId, attachments, onChange, onClose, disabledUpload }: AttachmentsModalProps) {
+  // Keep a ref to always have the latest attachments value
+  const attachmentsRef = useRef(attachments);
+  attachmentsRef.current = attachments;
+
   // close on Esc
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -23,12 +27,18 @@ export function AttachmentsModal({ noteId, attachments, onChange, onClose, disab
     return () => document.removeEventListener('keydown', handleKey);
   }, [onClose]);
 
-  const onAdded = (a: AttachmentMeta) => onChange([...attachments, a]);
-  const onDeleted = (id: string) => onChange(attachments.filter(a => a.id !== id));
-  const onRenamed = (id: string, name: string) =>
-    onChange(
-      attachments.map(a => (a.id === id ? { ...a, originalName: name } : a))
-    );
+  // Use useCallback with ref to avoid stale closure issues during multi-upload
+  const onAdded = useCallback((a: AttachmentMeta) => {
+    onChange([...attachmentsRef.current, a]);
+  }, [onChange]);
+
+  const onDeleted = useCallback((id: string) => {
+    onChange(attachmentsRef.current.filter(a => a.id !== id));
+  }, [onChange]);
+
+  const onRenamed = useCallback((id: string, name: string) => {
+    onChange(attachmentsRef.current.map(a => (a.id === id ? { ...a, originalName: name } : a)));
+  }, [onChange]);
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-60">

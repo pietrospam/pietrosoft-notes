@@ -40,7 +40,7 @@ interface TaskEditorModalProps {
 }
 
 export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defaultClientId }: TaskEditorModalProps) {
-  const { refreshNotes, refreshClients, toggleFavorite, autoSaveEnabled, setIsDirty: setGlobalIsDirty, setPendingChanges: setGlobalPendingChanges, updateNote, deleteNote, setSelectedNoteId, isNotesListCollapsed, setNotesListCollapsed } = useApp();
+  const { refreshNotes, refreshClients, toggleFavorite, autoSaveEnabled, setIsDirty: setGlobalIsDirty, setPendingChanges: setGlobalPendingChanges, updateNote, deleteNote, setSelectedNoteId, isNotesListCollapsed, setNotesListCollapsed, filteredNotes } = useApp();
   const [showAttachmentsModal, setShowAttachmentsModal] = useState(false);
   const isCreatedRef = useRef(false);
   useEffect(() => {
@@ -316,6 +316,23 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
       }, 100);
     }
   }, [taskId]);
+
+  // Sync attachments from global context (for when files are dropped via GlobalDropZone)
+  useEffect(() => {
+    const targetId = taskId || (isCreatedRef.current ? task.id : null);
+    if (!targetId) return;
+    
+    const globalNote = filteredNotes.find(n => n.id === targetId);
+    if (globalNote && globalNote.attachments) {
+      // Only update if attachments actually changed (by length or IDs)
+      const localIds = (task.attachments || []).map(a => a.id).sort().join(',');
+      const globalIds = globalNote.attachments.map(a => a.id).sort().join(',');
+      
+      if (localIds !== globalIds) {
+        setTask(prev => ({ ...prev, attachments: globalNote.attachments }));
+      }
+    }
+  }, [filteredNotes, taskId, task.id, task.attachments]);
 
   // Handle client change - load projects for client
   const handleClientChange = async (clientId: string) => {

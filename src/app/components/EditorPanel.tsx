@@ -47,6 +47,9 @@ export function EditorPanel() {
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Track if editor content has been initialized (to ignore TipTap's initial onChange)
   const contentInitializedRef = useRef(false);
+  // Ref for selectedNote to avoid stale closures in callbacks (e.g., multi-upload)
+  const selectedNoteRef = useRef(selectedNote);
+  selectedNoteRef.current = selectedNote;
 
   // Track the previous note ID to detect actual note changes
   const prevNoteIdRef = useRef<string | null>(null);
@@ -424,17 +427,21 @@ export function EditorPanel() {
           onPersistNote={isNewNote ? handlePersistForUpload : undefined}
           attachments={selectedNote.attachments || []}
           onAttachmentAdded={(attachment: AttachmentMeta) => {
-            const updatedAttachments = [...(selectedNote.attachments || []), attachment];
+            // Use ref to get current attachments (fixes stale closure in multi-upload)
+            const currentAttachments = selectedNoteRef.current?.attachments || [];
+            const updatedAttachments = [...currentAttachments, attachment];
             updateNote(selectedNote.id, { attachments: updatedAttachments });
           }}
           onAttachmentDeleted={(attachmentId: string) => {
-            const updatedAttachments = (selectedNote.attachments || []).filter(
+            const currentAttachments = selectedNoteRef.current?.attachments || [];
+            const updatedAttachments = currentAttachments.filter(
               (a) => a.id !== attachmentId
             );
             updateNote(selectedNote.id, { attachments: updatedAttachments });
           }}
           onAttachmentRenamed={(attachmentId: string, newName: string) => {
-            const updatedAttachments = (selectedNote.attachments || []).map(
+            const currentAttachments = selectedNoteRef.current?.attachments || [];
+            const updatedAttachments = currentAttachments.map(
               (a) => a.id === attachmentId ? { ...a, originalName: newName } : a
             );
             updateNote(selectedNote.id, { attachments: updatedAttachments });

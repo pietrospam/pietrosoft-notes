@@ -1,20 +1,23 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Upload, Loader2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import type { AttachmentMeta } from '@/lib/types';
 
 export function GlobalDropZone() {
-  const { selectedNote, updateNote, persistNewNote } = useApp();
+  const { selectedNote, persistNewNote, refreshNotes } = useApp();
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   
+  // Ref to always have current selectedNote (fixes stale closure in handleDrop)
+  const selectedNoteRef = useRef(selectedNote);
+  selectedNoteRef.current = selectedNote;
+  
   // Check if we have a valid note to attach to
   const canReceiveFiles = !!selectedNote;
 
-  const uploadFile = useCallback(async (file: File, noteId: string): Promise<AttachmentMeta | null> => {
+  const uploadFile = useCallback(async (file: File, noteId: string): Promise<boolean> => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('noteId', noteId);
@@ -29,28 +32,21 @@ export function GlobalDropZone() {
         throw new Error('Upload failed');
       }
 
-      const data = await response.json();
-      return {
-        id: data.id,
-        filename: data.filename,
-        originalName: data.originalName,
-        mimeType: data.mimeType,
-        size: data.size,
-        createdAt: data.createdAt,
-      };
+      return true;
     } catch (error) {
       console.error('Failed to upload:', error);
-      return null;
+      return false;
     }
   }, []);
 
   const handleDrop = useCallback(async (files: FileList) => {
-    if (!selectedNote || files.length === 0) return;
+    const currentNote = selectedNoteRef.current;
+    if (!currentNote || files.length === 0) return;
     
     setUploading(true);
     setUploadProgress({ current: 0, total: files.length });
     
-    let targetId = selectedNote.id;
+    let targetId = currentNote.id;
     
     // If temporary note, persist it first
     if (targetId.startsWith('temp-')) {
@@ -62,24 +58,24 @@ export function GlobalDropZone() {
       targetId = savedNote.id;
     }
     
-    const newAttachments: AttachmentMeta[] = [];
+    let successCount = 0;
     
     for (let i = 0; i < files.length; i++) {
       setUploadProgress({ current: i + 1, total: files.length });
-      const attachment = await uploadFile(files[i], targetId);
-      if (attachment) {
-        newAttachments.push(attachment);
+      const success = await uploadFile(files[i], targetId);
+      if (success) {
+        successCount++;
       }
     }
     
-    if (newAttachments.length > 0) {
-      const updatedAttachments = [...(selectedNote.attachments || []), ...newAttachments];
-      await updateNote(targetId, { attachments: updatedAttachments });
+    // Refresh notes to get attachments from DB (they're stored in Attachment table)
+    if (successCount > 0) {
+      await refreshNotes();
     }
     
     setUploading(false);
     setUploadProgress({ current: 0, total: 0 });
-  }, [selectedNote, persistNewNote, uploadFile, updateNote]);
+  }, [persistNewNote, uploadFile, refreshNotes]);
 
   useEffect(() => {
     let dragCounter = 0;
@@ -144,10 +140,11 @@ export function GlobalDropZone() {
       {/* Backdrop overlay */}
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm pointer-events-auto" />
       
-      {/* Drop zone content */}
+      {/* Drop zone content - large area covering most of screen */}
       <div className={`
-        relative z-10 flex flex-col items-center justify-center p-12
-        border-4 border-dashed rounded-2xl
+        relative z-10 flex flex-col items-center justify-center
+        w-[80vw] h-[70vh] max-w-4xl
+        border-4 border-dashed rounded-3xl
         transition-all duration-200
         ${uploading 
           ? 'border-yellow-500 bg-yellow-500/10' 
@@ -156,21 +153,21 @@ export function GlobalDropZone() {
       `}>
         {uploading ? (
           <>
-            <Loader2 className="w-16 h-16 text-yellow-400 animate-spin mb-4" />
-            <p className="text-xl font-medium text-white">
+            <Loader2 className="w-24 h-24 text-yellow-400 animate-spin mb-6" />
+            <p className="text-2xl font-medium text-white">
               Subiendo archivos...
             </p>
-            <p className="text-gray-400 mt-2">
+            <p className="text-lg text-gray-400 mt-3">
               {uploadProgress.current} de {uploadProgress.total}
             </p>
           </>
         ) : (
           <>
-            <Upload className="w-16 h-16 text-blue-400 mb-4" />
-            <p className="text-xl font-medium text-white">
+            <Upload className="w-24 h-24 text-blue-400 mb-6" />
+            <p className="text-2xl font-medium text-white">
               Soltar archivos aquí
             </p>
-            <p className="text-gray-400 mt-2">
+            <p className="text-lg text-gray-400 mt-3">
               Se asociarán a la nota actual
             </p>
           </>

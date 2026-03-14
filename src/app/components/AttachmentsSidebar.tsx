@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Paperclip } from 'lucide-react';
 import { AttachmentsPanel } from './AttachmentsPanel';
 import { useApp } from '../context/AppContext';
@@ -19,6 +19,12 @@ export function AttachmentsSidebar() {
 
   const selectedNote = filteredNotes.find(n => n.id === selectedNoteId) || null;
   const attachments = selectedNote?.attachments || [];
+
+  // Keep a ref to always have the latest attachments value (fixes multi-upload stale closure)
+  const attachmentsRef = useRef(attachments);
+  attachmentsRef.current = attachments;
+  const selectedNoteRef = useRef(selectedNote);
+  selectedNoteRef.current = selectedNote;
 
   // close when clicking outside
   const panelRef = useRef<HTMLDivElement>(null);
@@ -47,17 +53,23 @@ export function AttachmentsSidebar() {
     setAttachmentsSidebarOpen(false);
   }, [selectedNoteId, setAttachmentsSidebarOpen]);
 
-  const handleChange = (newAttachments: AttachmentMeta[]) => {
-    if (!selectedNote) return;
-    updateNote(selectedNote.id, { attachments: newAttachments });
-  };
+  // Use useCallback with refs to avoid stale closure issues during multi-upload
+  const onAdded = useCallback((a: AttachmentMeta) => {
+    if (!selectedNoteRef.current) return;
+    updateNote(selectedNoteRef.current.id, { attachments: [...attachmentsRef.current, a] });
+  }, [updateNote]);
 
-  const onAdded = (a: AttachmentMeta) => handleChange([...attachments, a]);
-  const onDeleted = (id: string) => handleChange(attachments.filter(a => a.id !== id));
-  const onRenamed = (id: string, newName: string) =>
-    handleChange(
-      attachments.map(a => (a.id === id ? { ...a, originalName: newName } : a))
-    );
+  const onDeleted = useCallback((id: string) => {
+    if (!selectedNoteRef.current) return;
+    updateNote(selectedNoteRef.current.id, { attachments: attachmentsRef.current.filter(a => a.id !== id) });
+  }, [updateNote]);
+
+  const onRenamed = useCallback((id: string, newName: string) => {
+    if (!selectedNoteRef.current) return;
+    updateNote(selectedNoteRef.current.id, { 
+      attachments: attachmentsRef.current.map(a => (a.id === id ? { ...a, originalName: newName } : a))
+    });
+  }, [updateNote]);
 
   // don't show panel at all if no note selected
   if (!selectedNote) return null;
