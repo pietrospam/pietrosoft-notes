@@ -11,6 +11,7 @@ interface TimeSheetEntry {
   hoursWorked: number;
   description: string;
   projectName: string;
+  projectCode: string; // Optional project code (e.g. PRJ-001)
   taskCode: string; // Ticket/Fase
   taskShortDescription: string; // Descripción corta del ticket
   state: string; // DRAFT or FINAL
@@ -299,10 +300,20 @@ export function CargarHorasModal({ isOpen, onClose, timesheets, onRefresh, selec
                         
                         {/* Proyecto */}
                         <td className="px-2 py-2">
-                          <ClickableCell 
-                            value={ts.projectName} 
-                            fieldId={`${ts.id}-project`}
-                          />
+                          {(() => {
+                            const hasCode = ts.projectCode && ts.projectName.toLowerCase() !== 'general';
+                            const displayValue = hasCode
+                              ? `${ts.projectCode} (${ts.projectName})`
+                              : ts.projectName;
+                            const copyValue = hasCode ? ts.projectCode : ts.projectName;
+                            return (
+                              <ClickableCell 
+                                value={displayValue} 
+                                copyValue={copyValue}
+                                fieldId={`${ts.id}-project`}
+                              />
+                            );
+                          })()}
                         </td>
                         
                         {/* Ticket/Fase */}

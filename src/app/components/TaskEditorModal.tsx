@@ -277,9 +277,8 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
     } else {
       // New note - focus title after mount and try to read clipboard
       setTimeout(async () => {
-        titleInputRef.current?.focus();
-        
         // Try to read clipboard and auto-fill if pattern found
+        let autoFilledFromClipboard = false;
         try {
           const clipboardText = await navigator.clipboard.readText();
           if (clipboardText) {
@@ -306,13 +305,23 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
               };
               pendingChangesRef.current = { ...pendingChangesRef.current, ...clipboardUpdates };
               setTask(prev => ({ ...prev, ...clipboardUpdates }));
+              autoFilledFromClipboard = true;
             }
           }
         } catch {
           // Clipboard access denied or not available - ignore silently
         }
         
-        titleInputRef.current?.select();
+        // If auto-filled from clipboard, focus the editor body; otherwise focus title
+        if (autoFilledFromClipboard) {
+          // Small delay to ensure editor is mounted
+          setTimeout(() => {
+            editorRef.current?.focus();
+          }, 50);
+        } else {
+          titleInputRef.current?.focus();
+          titleInputRef.current?.select();
+        }
       }, 100);
     }
   }, [taskId]);

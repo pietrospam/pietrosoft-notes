@@ -1,0 +1,500 @@
+/**
+ * POST /api/mail
+ *
+ * Recibe correos reenviados por el smtp-forwarder y los convierte en notas.
+ * Ver docs/api-spec.md para el formato del payload.
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
+import { parse as parseHtml, HTMLElement, TextNode } from 'node-html-parser';
+import prisma from '@/lib/db';
+import { createNote, createTaskComment } from '@/lib/repositories/notes-repo';
+import type { CreateNoteInput, GeneralNote, TaskNote } from '@/lib/types';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+interface MailEnvelope {
+  sender: string;
+  recipient: string;
+  mailbox: string;
+}
+
+interface MailHeaders {
+  from?: string | null;
+  to?: string | null;
+  cc?: string | null;
+  subject?: string | null;
+  date?: string | null;
+  message_id?: string | null;
+  reply_to?: string | null;
+}
+
+interface MailMeta {
+  client_ip?: string | null;
+  spam_score?: number | null;
+  spam_flag: boolean;
+  spam_status?: string | null;
+  received_at: string;
+}
+
+interface MailBody {
+  text_plain?: string | null;
+  text_html?: string | null;
+  raw_base64?: string;
+}
+
+interface MailAttachment {
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  content_base64: string;
+}
+
+interface MailPayload {
+  envelope: MailEnvelope;
+  headers: MailHeaders;
+  meta: MailMeta;
+  body: MailBody;
+  attachments: MailAttachment[];
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function sanitizeFilename(filename: string): string {
+  return filename
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/_+/g, '_')
+    .slice(0, 100);
+}
+
+// ---------------------------------------------------------------------------
+// TipTap node builders
+// ---------------------------------------------------------------------------
+
+type TipTapNode = Record<string, unknown>;
+
+function textNode(text: string, marks: TipTapNode[] = []): TipTapNode {
+  const node: TipTapNode = { type: 'text', text };
+  if (marks.length) node.marks = marks;
+  return node;
+}
+
+/** Collect inline marks from an element and its ancestors */
+function getMarks(el: HTMLElement): TipTapNode[] {
+  const marks: TipTapNode[] = [];
+  const tag = el.tagName?.toLowerCase();
+  if (tag === 'strong' || tag === 'b') marks.push({ type: 'bold' });
+  if (tag === 'em' || tag === 'i') marks.push({ type: 'italic' });
+  if (tag === 'u') marks.push({ type: 'underline' });
+  if (tag === 's' || tag === 'del' || tag === 'strike') marks.push({ type: 'strike' });
+  if (tag === 'code') marks.push({ type: 'code' });
+  if (tag === 'a') {
+    const href = el.getAttribute('href') ?? '';
+    marks.push({ type: 'link', attrs: { href, target: '_blank', rel: 'noopener noreferrer nofollow', class: null } });
+  }
+  return marks;
+}
+
+/** Recursively extract inline TipTap nodes (text + marks) from a node */
+function inlineNodes(node: HTMLElement | TextNode, inheritedMarks: TipTapNode[] = []): TipTapNode[] {
+  if (node instanceof TextNode) {
+    const text = node.text;
+    if (!text) return [];
+    return [textNode(text, inheritedMarks)];
+  }
+
+  const tag = node.tagName?.toLowerCase();
+
+  if (tag === 'br') return [{ type: 'hardBreak' }];
+
+  // inline elements — pass marks down
+  const marks = [...inheritedMarks, ...getMarks(node)];
+  const result: TipTapNode[] = [];
+  for (const child of node.childNodes) {
+    result.push(...inlineNodes(child as HTMLElement | TextNode, marks));
+  }
+  return result;
+}
+
+/** Convert a block-level element to TipTap block nodes */
+function blockNodes(el: HTMLElement): TipTapNode[] {
+  const tag = el.tagName?.toLowerCase();
+
+  // headings
+  const headingMatch = tag?.match(/^h([1-6])$/);
+  if (headingMatch) {
+    const level = parseInt(headingMatch[1]);
+    const content = inlineNodes(el);
+    if (!content.length) return [];
+    return [{ type: 'heading', attrs: { level }, content }];
+  }
+
+  if (tag === 'p') {
+    const content = inlineNodes(el);
+    return [{ type: 'paragraph', content: content.length ? content : undefined }];
+  }
+
+  if (tag === 'br') {
+    return [{ type: 'paragraph' }];
+  }
+
+  if (tag === 'hr') {
+    return [{ type: 'horizontalRule' }];
+  }
+
+  if (tag === 'blockquote') {
+    const inner: TipTapNode[] = [];
+    for (const child of el.childNodes) {
+      if (child instanceof HTMLElement) inner.push(...blockNodes(child));
+    }
+    if (!inner.length) return [];
+    return [{ type: 'blockquote', content: inner }];
+  }
+
+  if (tag === 'pre') {
+    const code = el.querySelector('code');
+    const text = (code ?? el).text;
+    return [{ type: 'codeBlock', attrs: { language: null }, content: [{ type: 'text', text }] }];
+  }
+
+  if (tag === 'ul' || tag === 'ol') {
+    const listType = tag === 'ul' ? 'bulletList' : 'orderedList';
+    const items: TipTapNode[] = [];
+    for (const child of el.childNodes) {
+      if (child instanceof HTMLElement && child.tagName?.toLowerCase() === 'li') {
+        // li can contain block children or just inline text
+        const hasBlockChild = child.childNodes.some(
+          (c) => c instanceof HTMLElement && /^(p|ul|ol|div|blockquote|pre)$/.test(c.tagName?.toLowerCase() ?? '')
+        );
+        let liContent: TipTapNode[];
+        if (hasBlockChild) {
+          liContent = [];
+          for (const c of child.childNodes) {
+            if (c instanceof HTMLElement) liContent.push(...blockNodes(c));
+          }
+        } else {
+          const inline = inlineNodes(child);
+          liContent = [{ type: 'paragraph', content: inline.length ? inline : undefined }];
+        }
+        items.push({ type: 'listItem', content: liContent });
+      }
+    }
+    if (!items.length) return [];
+    return [{ type: listType, content: items }];
+  }
+
+  if (tag === 'div' || tag === 'section' || tag === 'article' || tag === 'main') {
+    const nodes: TipTapNode[] = [];
+    for (const child of el.childNodes) {
+      if (child instanceof HTMLElement) {
+        nodes.push(...blockNodes(child));
+      } else if (child instanceof TextNode) {
+        const text = child.text.trim();
+        if (text) nodes.push({ type: 'paragraph', content: [{ type: 'text', text }] });
+      }
+    }
+    return nodes;
+  }
+
+  // fallback: treat as paragraph with inline content
+  const content = inlineNodes(el);
+  if (!content.length) return [];
+  return [{ type: 'paragraph', content }];
+}
+
+/**
+ * Converts a plain-text email body to a TipTap-compatible JSON document.
+ * Each line becomes a paragraph; blank lines produce empty paragraphs.
+ */
+function plainTextToTipTap(text: string): object {
+  const lines = text.split('\n');
+  const content = lines.map((line) => {
+    const trimmed = line.trimEnd();
+    if (trimmed === '') {
+      return { type: 'paragraph' };
+    }
+    return {
+      type: 'paragraph',
+      content: [{ type: 'text', text: trimmed }],
+    };
+  });
+
+  // Remove trailing empty paragraphs
+  while (content.length > 1 && content[content.length - 1].type === 'paragraph' &&
+    !('content' in content[content.length - 1])) {
+    content.pop();
+  }
+
+  return { type: 'doc', content };
+}
+
+// ---------------------------------------------------------------------------
+// Inbox parsing (RF-02, RF-12)
+// ---------------------------------------------------------------------------
+
+const TYPE_KEYWORDS = new Set(['tasks', 'notes']);
+
+/**
+ * Parses the recipient address to infer note type and client name.
+ *
+ * Format: <type>.<client>@domain  or  <client>@domain
+ * Examples:
+ *   tasks.veolia@x  → { type: 'task',    clientName: 'veolia' }
+ *   notes.acme@x    → { type: 'general', clientName: 'acme'   }
+ *   veolia@x        → { type: 'general', clientName: 'veolia' }
+ *   tasks@x         → { type: 'task',    clientName: null     }
+ */
+function parseInboxAddress(recipient: string): { type: 'task' | 'general'; clientName: string | null } {
+  const localPart = (recipient.split('@')[0] ?? '').toLowerCase();
+  const segments = localPart.split('.');
+
+  if (segments.length >= 2 && TYPE_KEYWORDS.has(segments[0])) {
+    return {
+      type: segments[0] === 'tasks' ? 'task' : 'general',
+      clientName: segments[1] || null,
+    };
+  }
+
+  // Single segment
+  if (segments.length >= 1) {
+    const first = segments[0];
+    if (first === 'tasks') return { type: 'task',    clientName: null };
+    if (first === 'notes') return { type: 'general', clientName: null };
+    return { type: 'general', clientName: first || null };
+  }
+
+  return { type: 'general', clientName: null };
+}
+
+/**
+ * Resolves a client ID by name (case-insensitive).
+ * Returns null if no matching client is found.
+ */
+async function resolveClientByName(name: string): Promise<string | null> {
+  const client = await prisma.client.findFirst({
+    where: { name: { equals: name, mode: 'insensitive' }, active: true },
+    select: { id: true },
+  });
+  return client?.id ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Ticket code detection (RF-11)
+// ---------------------------------------------------------------------------
+
+/**
+ * Extracts the first occurrence of #XXXXX (# followed by exactly 5 digits)
+ * from the email subject. Returns the 5-digit string or null.
+ */
+function extractTicketCode(subject: string): string | null {
+  const match = subject.match(/#(\d{5})/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Finds an active (non-archived) task whose taskTicketPhaseCode contains
+ * the given 5-digit code.
+ */
+async function findTaskByTicketCode(code: string): Promise<{ id: string; title: string } | null> {
+  const task = await prisma.note.findFirst({
+    where: {
+      type: 'TASK',
+      archived: false,
+      taskTicketPhaseCode: { contains: code },
+    },
+    select: { id: true, title: true },
+  });
+  return task ?? null;
+}
+
+/**
+ * Checks the Authorization header against MAIL_API_TOKEN env var.
+ * If the env var is not set, all requests are allowed (open mode).
+ */
+function isAuthorized(request: NextRequest): boolean {
+  const token = process.env.MAIL_API_TOKEN;
+  if (!token) return true; // token not configured → open
+
+  const authHeader = request.headers.get('authorization') ?? '';
+  const parts = authHeader.split(' ');
+  if (parts.length !== 2 || parts[0].toLowerCase() !== 'bearer') return false;
+  return parts[1] === token;
+}
+
+// ---------------------------------------------------------------------------
+// Route handler
+// ---------------------------------------------------------------------------
+
+export async function POST(request: NextRequest) {
+  // 1. Auth
+  if (!isAuthorized(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // 2. Parse payload
+  let payload: MailPayload;
+  try {
+    payload = (await request.json()) as MailPayload;
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  const { envelope, headers, meta, body, attachments = [] } = payload;
+
+  if (!envelope?.sender || !meta?.received_at) {
+    return NextResponse.json(
+      { error: 'Missing required fields: envelope.sender, meta.received_at' },
+      { status: 400 },
+    );
+  }
+
+  // 3. Discard spam (return 200 so the forwarder does not retry)
+  if (meta.spam_flag === true) {
+    console.log(`[mail] Spam discarded from ${envelope.sender} — score: ${meta.spam_score}`);
+    return NextResponse.json({ status: 'rejected', reason: 'spam' }, { status: 200 });
+  }
+
+  // 4. Parse inbox address → { type, clientName }
+  const { type: noteType, clientName } = parseInboxAddress(envelope.recipient ?? '');
+  const clientId = clientName ? await resolveClientByName(clientName) : null;
+
+  if (clientName && !clientId) {
+    console.log(`[mail] Client "${clientName}" not found — note/task will be created without client`);
+  }
+
+  // 5. Build TipTap content (shared by both flows)
+  const subject   = headers?.subject?.trim() || '(Sin asunto)';
+  const textHtml  = body?.text_html?.trim()  ?? '';
+  const textPlain = body?.text_plain?.trim() ?? '';
+
+  let contentJson: object;
+  if (textHtml) {
+    // Store raw HTML so the UI can render it more faithfully (option 1)
+    contentJson = { type: 'html', html: textHtml };
+  } else if (textPlain) {
+    contentJson = plainTextToTipTap(textPlain);
+  } else {
+    contentJson = plainTextToTipTap(`Correo de ${envelope.sender}`);
+  }
+
+  // 6. Ticket code detection — try UPDATE FLOW first
+  const ticketCode = extractTicketCode(subject);
+  if (ticketCode) {
+    const existingTask = await findTaskByTicketCode(ticketCode);
+    if (existingTask) {
+      // ----------------------------------------------------------------
+      // UPDATE FLOW: add system comment to existing task
+      // ----------------------------------------------------------------
+      let comment: { id: string };
+      try {
+        comment = await createTaskComment({
+          taskId: existingTask.id,
+          author: 'mail-ingest',
+          content: contentJson as import('@prisma/client').Prisma.InputJsonValue,
+        });
+      } catch (err) {
+        console.error('[mail] Failed to create task comment:', err);
+        return NextResponse.json({ error: 'Failed to create task comment' }, { status: 500 });
+      }
+
+      // Save attachments linked to the task note
+      const savedAttachments: string[] = [];
+      for (const att of attachments) {
+        try {
+          const buffer = Buffer.from(att.content_base64, 'base64');
+          const saved = await prisma.attachment.create({
+            data: {
+              noteId: existingTask.id,
+              filename: sanitizeFilename(att.filename),
+              originalName: att.filename,
+              mimeType: att.content_type || 'application/octet-stream',
+              size: att.size_bytes ?? buffer.length,
+              data: buffer,
+            },
+          });
+          savedAttachments.push(saved.id);
+        } catch (err) {
+          console.error(`[mail] Failed to save attachment "${att.filename}":`, err);
+        }
+      }
+
+      console.log(
+        `[mail] Comment added to task ${existingTask.id} (ticket #${ticketCode}) | from: ${envelope.sender} | subject: "${subject}" | attachments: ${savedAttachments.length}`,
+      );
+
+      return NextResponse.json(
+        {
+          status: 'ok',
+          flow: 'update',
+          taskId: existingTask.id,
+          commentId: comment.id,
+          attachmentsSaved: savedAttachments.length,
+        },
+        { status: 201 },
+      );
+    }
+    // Ticket code present but no matching task → fall through to CREATE FLOW
+    console.log(`[mail] Ticket code #${ticketCode} from subject not matched — proceeding to create`);
+  }
+
+  // ----------------------------------------------------------------
+  // CREATE FLOW: create a new note or task
+  // ----------------------------------------------------------------
+  const noteInput = {
+    type: noteType,
+    title: subject,
+    contentJson,
+    contentText: textPlain,
+    ...(clientId ? { clientId } : {}),
+  } as unknown as CreateNoteInput<GeneralNote | TaskNote>;
+
+  let note: GeneralNote | TaskNote;
+  try {
+    note = await createNote(noteInput);
+  } catch (err) {
+    console.error('[mail] Failed to create note/task:', err);
+    return NextResponse.json({ error: 'Failed to create note' }, { status: 500 });
+  }
+
+  // Save attachments linked to the new note/task
+  const savedAttachments: string[] = [];
+  for (const att of attachments) {
+    try {
+      const buffer = Buffer.from(att.content_base64, 'base64');
+      const saved = await prisma.attachment.create({
+        data: {
+          noteId: note.id,
+          filename: sanitizeFilename(att.filename),
+          originalName: att.filename,
+          mimeType: att.content_type || 'application/octet-stream',
+          size: att.size_bytes ?? buffer.length,
+          data: buffer,
+        },
+      });
+      savedAttachments.push(saved.id);
+    } catch (err) {
+      console.error(`[mail] Failed to save attachment "${att.filename}":`, err);
+    }
+  }
+
+  console.log(
+    `[mail] ${noteType === 'task' ? 'Task' : 'Note'} created: ${note.id} | client: ${clientId ?? 'none'} | from: ${envelope.sender} | subject: "${subject}" | attachments: ${savedAttachments.length}`,
+  );
+
+  return NextResponse.json(
+    {
+      status: 'ok',
+      flow: 'create',
+      noteId: note.id,
+      noteType,
+      clientId: clientId ?? null,
+      title: note.title,
+      attachmentsSaved: savedAttachments.length,
+    },
+    { status: 201 },
+  );
+}

@@ -31,6 +31,7 @@ model Client {
 model Project {
   id          String   @id
   name        String
+  code        String?  @map("code")
   description String?
   clientId    String   @map("client_id")
   createdAt   DateTime @default(now()) @map("created_at")

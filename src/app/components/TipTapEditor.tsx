@@ -5,6 +5,7 @@ import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
+import DOMPurify from 'dompurify';
 import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { 
   Bold, 
@@ -101,6 +102,8 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
       return null;
     }
   }, [getValidNoteId]); // Uses getValidNoteId
+
+  const isRawHTML = content && typeof content === 'object' && (content as { type?: string }).type === 'html' && typeof (content as { html?: unknown }).html === 'string';
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -219,6 +222,20 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
       }
     }
   }, [editor, content]);
+
+  if (isRawHTML) {
+    const html = (content as { html?: string }).html ?? '';
+    const clean = DOMPurify.sanitize(html, {
+      ADD_TAGS: ['iframe'],
+      ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling'],
+    });
+    return (
+      <div
+        className="prose prose-invert max-w-none"
+        dangerouslySetInnerHTML={{ __html: clean }}
+      />
+    );
+  }
 
   if (!editor) {
     return <div className="animate-pulse bg-gray-800 h-48 rounded" />;

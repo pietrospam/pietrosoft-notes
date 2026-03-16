@@ -14,6 +14,7 @@ export interface TimeSheetGridEntry {
   taskShortDescription: string; // Short description from the task
   projectId: string;
   projectName: string;
+  projectCode: string; // Optional project code (e.g. PRJ-001)
   clientId: string;
   clientName: string;
   state: string; // DRAFT or FINAL
@@ -96,6 +97,7 @@ export async function GET(request: Request) {
       taskShortDescription: ts.task?.taskShortDescription || '',
       projectId: ts.projectId || ts.task?.projectId || '',
       projectName: ts.project?.name || ts.task?.project?.name || 'Sin proyecto',
+      projectCode: ts.project?.code || ts.task?.project?.code || '',
       clientId: ts.clientId || ts.task?.project?.clientId || '',
       clientName: ts.client?.name || ts.task?.project?.client?.name || 'Sin cliente',
       state: ts.state || 'DRAFT',

@@ -722,11 +722,17 @@ export function AppProvider({ children }: AppProviderProps) {
       if (n.type === 'text' && n.text) {
         return n.text;
       }
-      
+
+      // Support special raw HTML nodes produced by mail ingest
+      if (n.type === 'html' && typeof (n as any).html === 'string') {
+        // Strip tags for search indexing
+        return (n as any).html.replace(/<[^>]*>/g, ' ');
+      }
+
       if (Array.isArray(n.content)) {
         return n.content.map(extractText).join(' ');
       }
-      
+
       return '';
     };
     

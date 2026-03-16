@@ -20,6 +20,7 @@ interface TimeSheetGridEntry {
   taskShortDescription: string;
   projectId: string;
   projectName: string;
+  projectCode: string; // Optional project code (e.g. PRJ-001)
   clientId: string;
   clientName: string;
   parentClientId?: string; // REQ-010: Added for parent client grouping
@@ -1895,6 +1896,7 @@ export function TimeSheetView() {
           hoursWorked: ts.hoursWorked,
           description: ts.description,
           projectName: ts.projectName,
+          projectCode: ts.projectCode || '',
           taskCode: ts.taskCode,
           taskShortDescription: ts.taskShortDescription,
           state: ts.state,
