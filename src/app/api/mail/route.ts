@@ -233,10 +233,26 @@ export async function POST(request: NextRequest) {
   // Helper: remove null bytes (0x00) that break Postgres UTF8 encoding
   const stripNulls = (value: string) => value.replace(/\u0000/g, '');
 
+  // Detect binary-like data (e.g. base64 payload) and avoid storing it as plain text
+  const isLikelyBinary = (value: string) => {
+    if (!value) return false;
+    const len = value.length;
+    let nonPrintable = 0;
+    for (let i = 0; i < len; i += 1) {
+      const code = value.charCodeAt(i);
+      if (code === 9 || code === 10 || code === 13) continue; // tab/newline/carriage return
+      if (code < 32 || code > 126) nonPrintable += 1;
+    }
+    return nonPrintable / len > 0.3;
+  };
+
   // 5. Build TipTap content (shared by both flows)
-  const subject   = stripNulls((headers?.subject ?? '(Sin asunto)').trim());
-  const textHtml  = stripNulls((body?.text_html ?? '').trim());
-  const textPlain = stripNulls((body?.text_plain ?? '').trim());
+  const subjectRaw   = stripNulls((headers?.subject ?? '(Sin asunto)').trim());
+  const subject      = isLikelyBinary(subjectRaw) ? '(Sin asunto)' : subjectRaw;
+  const textHtmlRaw  = stripNulls((body?.text_html ?? '').trim());
+  const textHtml     = isLikelyBinary(textHtmlRaw) ? '' : textHtmlRaw;
+  const textPlainRaw = stripNulls((body?.text_plain ?? '').trim());
+  const textPlain    = isLikelyBinary(textPlainRaw) ? '' : textPlainRaw;
 
   let contentJson: object;
   if (textHtml) {
