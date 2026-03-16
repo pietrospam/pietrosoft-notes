@@ -8,7 +8,7 @@ import type { ConfigTab } from '../components/ConfigPanel';
 // Types
 // ============================================================================
 
-export type ViewType = 'all' | 'general' | 'task' | 'connection' | 'timesheets' | 'archived' | 'config' | 'favorites' | 'todos'; // REQ-006: Added favorites, REQ-021: Added todos
+export type ViewType = 'all' | 'general' | 'task' | 'connection' | 'timesheets' | 'archived' | 'config' | 'favorites' | 'todos' | 'recents'; // REQ-006: Added favorites, REQ-011: Added recents, REQ-021: Added todos
 
 export type ActiveTab = 'bitacora' | 'conexiones' | 'timesheets'; // REQ-010: Main navigation tabs
 
@@ -46,6 +46,7 @@ interface AppState {
   isNotesListCollapsed: boolean; // REQ-001.13.2: NotesList collapsed state
   isAttachmentsSidebarOpen: boolean; // REQ-015: Collapsible attachments panel
   isSidebarVisible: boolean; // visibility of the left navigation sidebar
+  recentHours: number; // REQ-011: Intervalo de "Recientes" en horas
   // REQ-010: Tab navigation
   activeTab: ActiveTab;
   selectedTimesheetClientId: string | null; // null = all, string = specific client
@@ -74,6 +75,7 @@ interface AppContextValue extends AppState {
   toggleTypeFilter: (type: NoteType) => void;
   clearTypeFilters: () => void;
   setSearchQuery: (query: string) => void;
+  setRecentHours: (hours: number) => void; // REQ-011
   setTaskFilters: (filters: TaskFilters) => void;
   setTimeSheetFilters: (filters: TimeSheetFilters) => void;
   setIsSaving: (saving: boolean) => void;
@@ -177,6 +179,7 @@ export function AppProvider({ children }: AppProviderProps) {
     isNotesListCollapsed: false, // REQ-001.13.2: NotesList collapsed state
     isAttachmentsSidebarOpen: false, // REQ-015: sidebar collapsed by default
     isSidebarVisible: true, // track sidebar visibility for collapse behaviour
+    recentHours: 8, // REQ-011: Recents view interval (hours)
     // REQ-010: Tab navigation
     activeTab: 'bitacora',
     configRequest: null,
@@ -202,6 +205,14 @@ export function AppProvider({ children }: AppProviderProps) {
     const saved = localStorage.getItem('bitacora-autosave');
     if (saved !== null) {
       setState(s => ({ ...s, autoSaveEnabled: saved === 'true' }));
+    }
+
+    const savedRecentHours = localStorage.getItem('bitacora-recents-hours');
+    if (savedRecentHours !== null) {
+      const parsed = parseInt(savedRecentHours, 10);
+      if (!Number.isNaN(parsed) && parsed >= 1 && parsed <= 168) {
+        setState(s => ({ ...s, recentHours: parsed }));
+      }
     }
     
     // REQ-010: Load tab preferences from localStorage
@@ -724,9 +735,9 @@ export function AppProvider({ children }: AppProviderProps) {
       }
 
       // Support special raw HTML nodes produced by mail ingest
-      if (n.type === 'html' && typeof (n as any).html === 'string') {
+      if (n.type === 'html' && typeof (n as { html?: unknown }).html === 'string') {
         // Strip tags for search indexing
-        return (n as any).html.replace(/<[^>]*>/g, ' ');
+        return (n as { html: string }).html.replace(/<[^>]*>/g, ' ');
       }
 
       if (Array.isArray(n.content)) {
@@ -746,9 +757,15 @@ export function AppProvider({ children }: AppProviderProps) {
     
     // When searching, ignore all filters except archived (search across everything)
     if (state.searchQuery) {
-      // Still exclude archived unless in archived view
-      if (note.archivedAt && state.currentView !== 'archived') return false;
-      
+      // Still exclude archived unless in archived or recents view
+      if (note.archivedAt && state.currentView !== 'archived' && state.currentView !== 'recents') return false;
+
+      // Apply recents time window even when searching
+      if (state.currentView === 'recents') {
+        const cutoff = Date.now() - state.recentHours * 3600 * 1000;
+        if (new Date(note.updatedAt).getTime() < cutoff) return false;
+      }
+
       const query = state.searchQuery.toLowerCase();
       const titleMatch = note.title.toLowerCase().includes(query);
       const contentTextMatch = note.contentText.toLowerCase().includes(query);
@@ -771,6 +788,13 @@ export function AppProvider({ children }: AppProviderProps) {
       return titleMatch || contentTextMatch || jsonMatch || ticketMatch || shortDescMatch;
     }
     
+    // Recents view shows notes updated within the configured interval (ignore other filters)
+    if (state.currentView === 'recents') {
+      const cutoff = Date.now() - state.recentHours * 3600 * 1000;
+      if (new Date(note.updatedAt).getTime() < cutoff) return false;
+      return true;
+    }
+
     // Archived view shows only archived notes (but still applies type filters)
     if (state.currentView === 'archived') {
       if (!note.archivedAt) return false;
@@ -824,10 +848,12 @@ export function AppProvider({ children }: AppProviderProps) {
     return true;
   });
 
-  // REQ-008.2: Sort favorites by favoriteOrder
+  // Sort notes list order
+  // - Favorites: user-defined order (favoriteOrder)
+  // - All other views: most recently updated first
   const sortedFilteredNotes = state.currentView === 'favorites'
     ? filteredNotes.sort((a, b) => (a.favoriteOrder || 999) - (b.favoriteOrder || 999))
-    : filteredNotes;
+    : [...filteredNotes].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
   // REQ-006: Count favorites (non-archived non-timesheets)
   const favoritesCount = state.notes.filter(n => 
@@ -851,6 +877,11 @@ export function AppProvider({ children }: AppProviderProps) {
     }),
     clearTypeFilters: () => setState(s => ({ ...s, activeTypeFilters: [] })),
     setSearchQuery: (query) => setState(s => ({ ...s, searchQuery: query })),
+    setRecentHours: (hours) => {
+      const validHours = Math.min(168, Math.max(1, Math.round(hours)));
+      localStorage.setItem('bitacora-recents-hours', String(validHours));
+      setState(s => ({ ...s, recentHours: validHours }));
+    },
     setTaskFilters: (filters) => setState(s => ({ ...s, taskFilters: filters })),
     setTimeSheetFilters: (filters) => setState(s => ({ ...s, timeSheetFilters: filters })),
     setIsSaving: (saving) => setState(s => ({ ...s, isSaving: saving })),

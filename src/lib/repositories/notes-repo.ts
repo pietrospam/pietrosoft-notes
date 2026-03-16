@@ -472,6 +472,11 @@ export async function createTaskComment(data: {
       ...data,
     } 
   });
+  // update task last-modified timestamp so it appears in "Recientes"
+  await prisma.note.update({
+    where: { id: data.taskId },
+    data: { updatedAt: new Date() },
+  });
   // record in activity log
   await prisma.taskActivityLog.create({
     data: {
@@ -486,6 +491,11 @@ export async function createTaskComment(data: {
 
 export async function updateTaskComment(id: string, content: Prisma.InputJsonValue): Promise<TaskCommentRecord> {
   const rec = await prisma.taskComment.update({ where: { id }, data: { content } });
+  // update task last-modified timestamp so it appears in "Recientes"
+  await prisma.note.update({
+    where: { id: rec.taskId },
+    data: { updatedAt: new Date() },
+  });
   // log update (author not tracked here)
   await prisma.taskActivityLog.create({
     data: {
@@ -501,6 +511,11 @@ export async function updateTaskComment(id: string, content: Prisma.InputJsonVal
 export async function deleteTaskComment(id: string): Promise<void> {
   const rec = await prisma.taskComment.findUnique({ where: { id } });
   if (rec) {
+    // update task last-modified timestamp so it appears in "Recientes"
+    await prisma.note.update({
+      where: { id: rec.taskId },
+      data: { updatedAt: new Date() },
+    });
     await prisma.taskActivityLog.create({
       data: {
         id: randomUUID(),

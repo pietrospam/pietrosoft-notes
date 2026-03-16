@@ -122,6 +122,7 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
       setNewContent({ type: 'doc', content: [] }); // Reset to empty doc
       load();
       onAttachmentsChange?.(); // Refresh attachments in case images were pasted
+      onSaveTask?.(); // Refresh notes list (updatedAt changed)
       return true;
     }
     return false;
@@ -138,6 +139,7 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
       stopEditing();
       load();
       onAttachmentsChange?.(); // Refresh attachments in case images were pasted
+      onSaveTask?.(); // Refresh notes list (updatedAt changed)
       return true;
     }
     return false;
@@ -161,6 +163,7 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
   const handleDelete = async (id: string) => {
     await fetch(`/api/tasks/${taskId}/comments?id=${id}`, { method: 'DELETE' });
     load();
+    onSaveTask?.(); // Refresh notes list (updatedAt changed)
   };
 
   return (

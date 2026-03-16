@@ -13,7 +13,8 @@ import {
   ChevronDown,
   LayoutGrid,
   Check,
-  Cable
+  Cable,
+  Clock
 } from 'lucide-react';
 
 export function Sidebar() {
@@ -25,6 +26,7 @@ export function Sidebar() {
     clients, 
     notes,
     favoritesCount, // REQ-006
+    recentHours, // REQ-011
     confirmNavigation,
     setSearchQuery, // Clear search when navigating
     // REQ-010: Tab navigation
@@ -65,6 +67,12 @@ export function Sidebar() {
     return true;
   }).length;
 
+  // REQ-011: Recents count (updated within configured hours)
+  const recentCount = notes.filter(n => {
+    const cutoff = Date.now() - recentHours * 3600 * 1000;
+    return new Date(n.updatedAt).getTime() >= cutoff;
+  }).length;
+
   // REQ-010: Get parent clients (clients that have sub-clients)
   const hasSubClients = (clientId: string) => clients.some(c => !c.disabled && c.parentClientId === clientId);
   // For Bitácora: all top-level clients (no parentClientId)
@@ -101,6 +109,30 @@ export function Sidebar() {
             <span className={`ml-auto text-xs opacity-0 group-hover:opacity-100 lg:opacity-100 transition-opacity ${
               currentView === 'favorites' ? 'text-yellow-200' : 'text-gray-500'
             }`}>{favoritesCount}
+            </span>
+          )}
+        </button>
+
+        {/* REQ-011: Recientes */}
+        <button
+          onClick={() => handleNavigate(() => {
+            setSelectedClientId(null);
+            setCurrentView('recents');
+          })}
+          className={`
+            w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm
+            transition-colors whitespace-nowrap
+            ${currentView === 'recents'
+              ? 'bg-blue-600 text-white' 
+              : 'text-gray-400 hover:bg-gray-800 hover:text-white'}
+          `}
+        >
+          <Clock size={18} className="flex-shrink-0" />
+          <span className="opacity-0 lg:opacity-100 transition-opacity">Recientes</span>
+          {recentCount > 0 && (
+            <span className={`ml-auto text-xs opacity-0 group-hover:opacity-100 lg:opacity-100 transition-opacity ${
+              currentView === 'recents' ? 'text-blue-200' : 'text-gray-500'
+            }`}>{recentCount}
             </span>
           )}
         </button>

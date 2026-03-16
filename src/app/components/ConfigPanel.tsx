@@ -694,7 +694,7 @@ function BackupManager() {
 }
 
 function PreferencesManager() {
-  const { autoSaveEnabled, toggleAutoSave } = useApp();
+  const { autoSaveEnabled, toggleAutoSave, recentHours, setRecentHours } = useApp();
   
   // TimeSheet preferences with original tracking
   const [dailyHoursTarget, setDailyHoursTarget] = useState<number>(8);
@@ -702,6 +702,11 @@ function PreferencesManager() {
   const [originalDailyHours, setOriginalDailyHours] = useState<number>(8);
   const [originalExportFormat, setOriginalExportFormat] = useState<string>('DD/MM/YYYY');
   const [timesheetSaved, setTimesheetSaved] = useState(false);
+
+  // Recents preferences
+  const [recentsHours, setRecentsHours] = useState<number>(8);
+  const [originalRecentsHours, setOriginalRecentsHours] = useState<number>(8);
+  const [recentsSaved, setRecentsSaved] = useState(false);
   
   // Lazy import TelegramConfig to avoid SSR issues
   const [TelegramConfigComponent, setTelegramConfigComponent] = useState<React.ComponentType | null>(null);
@@ -722,11 +727,21 @@ function PreferencesManager() {
     setOriginalDailyHours(hours);
     setExportDateFormat(format);
     setOriginalExportFormat(format);
-  }, []);
+
+    // Recents view interval
+    const savedRecent = localStorage.getItem('bitacora-recents-hours');
+    const recent = savedRecent ? parseInt(savedRecent, 10) : recentHours;
+    setRecentsHours(!Number.isNaN(recent) ? recent : recentHours);
+    setOriginalRecentsHours(!Number.isNaN(recent) ? recent : recentHours);
+  }, [recentHours]);
   
   // Check if timesheet settings have changed
   const hasTimesheetChanges = () => {
     return dailyHoursTarget !== originalDailyHours || exportDateFormat !== originalExportFormat;
+  };
+
+  const hasRecentsChanges = () => {
+    return recentsHours !== originalRecentsHours;
   };
   
   const handleSaveTimesheetSettings = () => {
@@ -736,6 +751,14 @@ function PreferencesManager() {
     setOriginalExportFormat(exportDateFormat);
     setTimesheetSaved(true);
     setTimeout(() => setTimesheetSaved(false), 3000);
+  };
+
+  const handleSaveRecentsSettings = () => {
+    const validHours = Math.min(168, Math.max(1, Math.round(recentsHours)));
+    setRecentHours(validHours);
+    setOriginalRecentsHours(validHours);
+    setRecentsSaved(true);
+    setTimeout(() => setRecentsSaved(false), 3000);
   };
 
   return (
@@ -850,6 +873,65 @@ function PreferencesManager() {
                 )}
               </button>
               {hasTimesheetChanges() && (
+                <p className="text-xs text-yellow-400 text-center mt-2">
+                  Tienes cambios sin guardar
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Recents settings */}
+        <div className="bg-gray-900 rounded-lg p-4 border border-gray-800">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-blue-500/20 rounded-lg">
+              <Clock size={20} className="text-blue-400" />
+            </div>
+            <div>
+              <h3 className="text-lg font-medium text-white">Recientes</h3>
+              <p className="text-gray-400 text-sm">Notas modificadas en las últimas horas</p>
+            </div>
+          </div>
+
+          <div className="space-y-4 ml-11">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-sm text-white">Intervalo (horas)</label>
+                <p className="text-xs text-gray-500">Muestra notas actualizadas en las últimas N horas</p>
+              </div>
+              <input
+                type="number"
+                min={1}
+                max={168}
+                value={recentsHours}
+                onChange={(e) => setRecentsHours(parseInt(e.target.value, 10) || 1)}
+                className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-white w-20 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+
+            <div className="pt-3 border-t border-gray-700">
+              <button
+                onClick={handleSaveRecentsSettings}
+                disabled={!hasRecentsChanges()}
+                className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all ${
+                  hasRecentsChanges()
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                    : 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                {recentsSaved ? (
+                  <>
+                    <span className="text-green-400">✓</span>
+                    ¡Guardado!
+                  </>
+                ) : (
+                  <>
+                    <Save size={16} />
+                    {hasRecentsChanges() ? 'Guardar cambios' : 'Sin cambios pendientes'}
+                  </>
+                )}
+              </button>
+              {hasRecentsChanges() && (
                 <p className="text-xs text-yellow-400 text-center mt-2">
                   Tienes cambios sin guardar
                 </p>

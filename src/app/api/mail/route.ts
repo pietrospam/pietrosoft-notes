@@ -6,7 +6,6 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { parse as parseHtml, HTMLElement, TextNode } from 'node-html-parser';
 import prisma from '@/lib/db';
 import { createNote, createTaskComment } from '@/lib/repositories/notes-repo';
 import type { CreateNoteInput, GeneralNote, TaskNote } from '@/lib/types';
@@ -69,141 +68,6 @@ function sanitizeFilename(filename: string): string {
     .replace(/[^a-zA-Z0-9._-]/g, '_')
     .replace(/_+/g, '_')
     .slice(0, 100);
-}
-
-// ---------------------------------------------------------------------------
-// TipTap node builders
-// ---------------------------------------------------------------------------
-
-type TipTapNode = Record<string, unknown>;
-
-function textNode(text: string, marks: TipTapNode[] = []): TipTapNode {
-  const node: TipTapNode = { type: 'text', text };
-  if (marks.length) node.marks = marks;
-  return node;
-}
-
-/** Collect inline marks from an element and its ancestors */
-function getMarks(el: HTMLElement): TipTapNode[] {
-  const marks: TipTapNode[] = [];
-  const tag = el.tagName?.toLowerCase();
-  if (tag === 'strong' || tag === 'b') marks.push({ type: 'bold' });
-  if (tag === 'em' || tag === 'i') marks.push({ type: 'italic' });
-  if (tag === 'u') marks.push({ type: 'underline' });
-  if (tag === 's' || tag === 'del' || tag === 'strike') marks.push({ type: 'strike' });
-  if (tag === 'code') marks.push({ type: 'code' });
-  if (tag === 'a') {
-    const href = el.getAttribute('href') ?? '';
-    marks.push({ type: 'link', attrs: { href, target: '_blank', rel: 'noopener noreferrer nofollow', class: null } });
-  }
-  return marks;
-}
-
-/** Recursively extract inline TipTap nodes (text + marks) from a node */
-function inlineNodes(node: HTMLElement | TextNode, inheritedMarks: TipTapNode[] = []): TipTapNode[] {
-  if (node instanceof TextNode) {
-    const text = node.text;
-    if (!text) return [];
-    return [textNode(text, inheritedMarks)];
-  }
-
-  const tag = node.tagName?.toLowerCase();
-
-  if (tag === 'br') return [{ type: 'hardBreak' }];
-
-  // inline elements — pass marks down
-  const marks = [...inheritedMarks, ...getMarks(node)];
-  const result: TipTapNode[] = [];
-  for (const child of node.childNodes) {
-    result.push(...inlineNodes(child as HTMLElement | TextNode, marks));
-  }
-  return result;
-}
-
-/** Convert a block-level element to TipTap block nodes */
-function blockNodes(el: HTMLElement): TipTapNode[] {
-  const tag = el.tagName?.toLowerCase();
-
-  // headings
-  const headingMatch = tag?.match(/^h([1-6])$/);
-  if (headingMatch) {
-    const level = parseInt(headingMatch[1]);
-    const content = inlineNodes(el);
-    if (!content.length) return [];
-    return [{ type: 'heading', attrs: { level }, content }];
-  }
-
-  if (tag === 'p') {
-    const content = inlineNodes(el);
-    return [{ type: 'paragraph', content: content.length ? content : undefined }];
-  }
-
-  if (tag === 'br') {
-    return [{ type: 'paragraph' }];
-  }
-
-  if (tag === 'hr') {
-    return [{ type: 'horizontalRule' }];
-  }
-
-  if (tag === 'blockquote') {
-    const inner: TipTapNode[] = [];
-    for (const child of el.childNodes) {
-      if (child instanceof HTMLElement) inner.push(...blockNodes(child));
-    }
-    if (!inner.length) return [];
-    return [{ type: 'blockquote', content: inner }];
-  }
-
-  if (tag === 'pre') {
-    const code = el.querySelector('code');
-    const text = (code ?? el).text;
-    return [{ type: 'codeBlock', attrs: { language: null }, content: [{ type: 'text', text }] }];
-  }
-
-  if (tag === 'ul' || tag === 'ol') {
-    const listType = tag === 'ul' ? 'bulletList' : 'orderedList';
-    const items: TipTapNode[] = [];
-    for (const child of el.childNodes) {
-      if (child instanceof HTMLElement && child.tagName?.toLowerCase() === 'li') {
-        // li can contain block children or just inline text
-        const hasBlockChild = child.childNodes.some(
-          (c) => c instanceof HTMLElement && /^(p|ul|ol|div|blockquote|pre)$/.test(c.tagName?.toLowerCase() ?? '')
-        );
-        let liContent: TipTapNode[];
-        if (hasBlockChild) {
-          liContent = [];
-          for (const c of child.childNodes) {
-            if (c instanceof HTMLElement) liContent.push(...blockNodes(c));
-          }
-        } else {
-          const inline = inlineNodes(child);
-          liContent = [{ type: 'paragraph', content: inline.length ? inline : undefined }];
-        }
-        items.push({ type: 'listItem', content: liContent });
-      }
-    }
-    if (!items.length) return [];
-    return [{ type: listType, content: items }];
-  }
-
-  if (tag === 'div' || tag === 'section' || tag === 'article' || tag === 'main') {
-    const nodes: TipTapNode[] = [];
-    for (const child of el.childNodes) {
-      if (child instanceof HTMLElement) {
-        nodes.push(...blockNodes(child));
-      } else if (child instanceof TextNode) {
-        const text = child.text.trim();
-        if (text) nodes.push({ type: 'paragraph', content: [{ type: 'text', text }] });
-      }
-    }
-    return nodes;
-  }
-
-  // fallback: treat as paragraph with inline content
-  const content = inlineNodes(el);
-  if (!content.length) return [];
-  return [{ type: 'paragraph', content }];
 }
 
 /**
@@ -366,10 +230,13 @@ export async function POST(request: NextRequest) {
     console.log(`[mail] Client "${clientName}" not found — note/task will be created without client`);
   }
 
+  // Helper: remove null bytes (0x00) that break Postgres UTF8 encoding
+  const stripNulls = (value: string) => value.replace(/\u0000/g, '');
+
   // 5. Build TipTap content (shared by both flows)
-  const subject   = headers?.subject?.trim() || '(Sin asunto)';
-  const textHtml  = body?.text_html?.trim()  ?? '';
-  const textPlain = body?.text_plain?.trim() ?? '';
+  const subject   = stripNulls((headers?.subject ?? '(Sin asunto)').trim());
+  const textHtml  = stripNulls((body?.text_html ?? '').trim());
+  const textPlain = stripNulls((body?.text_plain ?? '').trim());
 
   let contentJson: object;
   if (textHtml) {

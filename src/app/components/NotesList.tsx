@@ -578,8 +578,8 @@ export function NotesList() {
             
             // REQ-001.13.3: Get client for color indicator (always)
             const noteClient = getClientForNote(note);
-            // REQ-008.3: Only show badge in "all" or "favorites" view
-            const showClientBadge = (currentView === 'all' && !selectedClientId) || currentView === 'favorites';
+            // REQ-008.3 & REQ-011: Show client badge in "all", "favorites" and "recents" views
+            const showClientBadge = (currentView === 'all' && !selectedClientId) || currentView === 'favorites' || currentView === 'recents';
             
             return (
               <div
