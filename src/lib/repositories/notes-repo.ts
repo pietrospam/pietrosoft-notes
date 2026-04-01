@@ -161,6 +161,7 @@ export interface ListNotesOptions {
   includeArchived?: boolean;
   search?: string;
   taskStatus?: TaskStatus;
+  updatedAfter?: Date; // Filter notes updated strictly after this timestamp (used for polling)
 }
 
 export async function listNotes(options: ListNotesOptions = {}): Promise<Note[]> {
@@ -192,6 +193,10 @@ export async function listNotes(options: ListNotesOptions = {}): Promise<Note[]>
   }
   if (taskStatus && taskStatus !== 'NONE') {
     where.taskStatus = taskStatusToDb(taskStatus);
+  }
+
+  if (options.updatedAfter) {
+    where.updatedAt = { gt: options.updatedAfter };
   }
 
   const notes = await prisma.note.findMany({
@@ -274,6 +279,42 @@ export async function createNote<T extends Note>(input: CreateNoteInput<T>): Pro
 // Update Note
 // ============================================================================
 
+export async function findTaskByTicketAndProject(ticketPhaseCode: string, projectId?: string | null): Promise<Note | null> {
+  if (!ticketPhaseCode) return null;
+
+  const existing = await prisma.note.findFirst({
+    where: {
+      type: PrismaNoteType.TASK,
+      taskTicketPhaseCode: ticketPhaseCode,
+      projectId: projectId || null,
+    },
+    include: { attachmentFiles: true },
+  });
+
+  return existing ? toNote(existing) : null;
+}
+
+export async function hideNoteFromRecents(id: string): Promise<Note | null> {
+  const existing = await prisma.note.findUnique({ where: { id } });
+  if (!existing) return null;
+
+  // For recents view, recency is determined by updatedAt; set updatedAt to a far past date.
+  // Prisma's @updatedAt auto value may override updates via prisma.note.update, so use raw SQL.
+  const hiddenDate = new Date(0);
+  await prisma.$executeRaw`
+    UPDATE notes
+    SET updated_at = ${hiddenDate}
+    WHERE id = ${id}
+  `;
+
+  const updated = await prisma.note.findUnique({
+    where: { id },
+    include: { attachmentFiles: true },
+  });
+
+  return updated ? toNote(updated) : null;
+}
+
 export async function updateNote<T extends Note>(
   id: string,
   input: UpdateNoteInput<T>
@@ -349,6 +390,12 @@ export async function updateNote<T extends Note>(
   // REQ-006: Favorites field
   if ('isFavorite' in input) {
     data.isFavorite = anyInput.isFavorite as boolean;
+
+    // When *unfavoriting*, avoid bumping updatedAt so it doesn't count as "recent".
+    // This allows users to remove from favorites without moving it to the top of recent items.
+    if (existing.isFavorite && data.isFavorite === false) {
+      data.updatedAt = existing.updatedAt;
+    }
   }
 
   // REQ-008.2: Favorite order field

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { X, Save, Loader2, Maximize2, Minimize2, Pencil, Clock, ChevronDown, Plus, Check, Star, Archive, ArchiveRestore, Trash2, Copy, History, Paperclip, Code, Flag } from 'lucide-react';
 import { TipTapEditor, TipTapEditorHandle } from './TipTapEditor';
 import { AttachmentsModal } from './AttachmentsModal';
@@ -76,18 +76,24 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
   const [isDirty, setIsDirtyLocal] = useState(!taskId); // New notes start dirty
   const [isMaximized, setIsMaximized] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(!taskId); // Auto-edit title for new notes
-  const [toast, setToast] = useState<{ message: string } | null>(null);
+  const [toast, setToast] = useState<{ message: string; action?: { label: string; onClick: () => void } } | null>(null);
   const [showTimeSheetModal, setShowTimeSheetModal] = useState(false);
   const [showActivityLog, setShowActivityLog] = useState(false); // REQ-010: Activity log modal
   const [showCoderHintsModal, setShowCoderHintsModal] = useState(false);
   const [showTodosModal, setShowTodosModal] = useState(false); // REQ-021: TODOs modal
-  
+
   // Header fields edit mode - enabled by default for NEW tasks, disabled for existing
   const [isHeaderEditing, setIsHeaderEditing] = useState(!taskId);
   
   // Task fields state
   const [clients, setClients] = useState<Client[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+
+  const isGeneralProject = useMemo(() => {
+    const project = projects.find(p => p.id === task.projectId);
+    return project?.name?.toLowerCase() === 'general';
+  }, [projects, task.projectId]);
+
   const [selectedClientId, setSelectedClientId] = useState<string>(defaultClientId || '');
   const [showCreateClient, setShowCreateClient] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
@@ -484,7 +490,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
     // Update fields based on parsed data
     const updates: Partial<TaskNote> = {};
     
-    if (parsed.ticket && !task.ticketPhaseCode) {
+    if (parsed.ticket && !task.ticketPhaseCode && isGeneralProject) {
       updates.ticketPhaseCode = parsed.ticket;
     }
     
@@ -500,7 +506,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
     if (Object.keys(updates).length > 0) {
       trackChange(updates);
     }
-  }, [title, task.ticketPhaseCode, task.shortDescription, parseTaskTitle, trackChange]);
+  }, [title, task.ticketPhaseCode, task.shortDescription, parseTaskTitle, trackChange, isGeneralProject]);
 
   const handleContentChange = (contentJson: object) => {
     // Ignore TipTap's initial onChange events during load
@@ -549,6 +555,16 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
           setSelectedNoteId(savedTask.id);
           onClose();
           onSaved?.();
+        } else if (res.status === 409) {
+          const body = (await res.json().catch(() => ({}))) as { existingId?: string; error?: string };
+          const existingId = body.existingId;
+          setToast({ message: body.error || 'Ya existe una tarea con ese ticket/fase', action: existingId ? {
+            label: 'Abrir existente',
+            onClick: () => {
+              setSelectedNoteId(existingId);
+              onClose();
+            },
+          } : undefined });
         } else {
           setToast({ message: 'Error al crear la tarea' });
         }
@@ -569,6 +585,16 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
           setToast({ message: 'Guardado exitosamente' });
           await refreshNotes();
           onSaved?.();
+        } else if (res.status === 409) {
+          const body = (await res.json().catch(() => ({}))) as { existingId?: string; error?: string };
+          const existingId = body.existingId;
+          setToast({ message: body.error || 'Ya existe una tarea con ese ticket/fase', action: existingId ? {
+            label: 'Abrir existente',
+            onClick: () => {
+              setSelectedNoteId(existingId);
+              onClose();
+            },
+          } : undefined });
         } else {
           setToast({ message: 'Error al guardar' });
         }
@@ -981,7 +1007,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
                 <h2 className="text-lg font-semibold text-white truncate">
                   {task.ticketPhaseCode ? (
                     <>
-                      <span className="text-blue-400 font-semibold">#{task.ticketPhaseCode}</span>{' '}
+                      <span className="text-blue-400 font-semibold">{isGeneralProject ? `#${task.ticketPhaseCode}` : task.ticketPhaseCode}</span>{' '}
                       {task.shortDescription || title || 'Sin título'}
                     </>
                   ) : (
@@ -991,7 +1017,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
                 <button
                   onClick={() => {
                     const titleText = task.ticketPhaseCode 
-                      ? `#${task.ticketPhaseCode} ${task.shortDescription || title || ''}`.trim()
+                      ? `${isGeneralProject ? '#' : ''}${task.ticketPhaseCode} ${task.shortDescription || title || ''}`.trim()
                       : (title || '');
                     navigator.clipboard.writeText(titleText);
                     setToast({ message: 'Título copiado' });
@@ -1210,6 +1236,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
         {toast && (
           <Toast
             message={toast.message}
+            action={toast.action}
             onClose={() => setToast(null)}
           />
         )}
@@ -1331,7 +1358,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
                 <h2 className="text-lg font-semibold text-white truncate">
                   {task.ticketPhaseCode ? (
                     <>
-                      <span className="text-blue-400 font-semibold">#{task.ticketPhaseCode}</span>{' '}
+                      <span className="text-blue-400 font-semibold">{isGeneralProject ? `#${task.ticketPhaseCode}` : task.ticketPhaseCode}</span>{' '}
                       {task.shortDescription || title || 'Sin título'}
                     </>
                   ) : (
@@ -1341,7 +1368,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
                 <button
                   onClick={() => {
                     const titleText = task.ticketPhaseCode 
-                      ? `#${task.ticketPhaseCode} ${task.shortDescription || title || ''}`.trim()
+                      ? `${isGeneralProject ? '#' : ''}${task.ticketPhaseCode} ${task.shortDescription || title || ''}`.trim()
                       : (title || '');
                     navigator.clipboard.writeText(titleText);
                     setToast({ message: 'Título copiado' });

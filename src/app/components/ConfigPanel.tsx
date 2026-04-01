@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Building2, FolderKanban, Database, Download, Upload, Loader2, Settings, Save, Clock, Trash2, Server, Shield, ShieldOff, RotateCcw, RefreshCw, Plus, FolderOpen, Timer, Calendar } from 'lucide-react';
+import { Building2, FolderKanban, Database, Download, Upload, Loader2, Settings, Save, Clock, Trash2, Server, Shield, ShieldOff, RotateCcw, RefreshCw, Plus, FolderOpen, Timer, Calendar, Clipboard } from 'lucide-react';
 import { ClientsManager } from './ClientsManager';
 import { ProjectsManager } from './ProjectsManager';
 import { useApp } from '../context/AppContext';
@@ -694,7 +694,7 @@ function BackupManager() {
 }
 
 function PreferencesManager() {
-  const { autoSaveEnabled, toggleAutoSave, recentHours, setRecentHours } = useApp();
+  const { autoSaveEnabled, toggleAutoSave, copyWithImagesOnCopy, setCopyWithImagesOnCopy, recentHours, setRecentHours } = useApp();
   
   // TimeSheet preferences with original tracking
   const [dailyHoursTarget, setDailyHoursTarget] = useState<number>(8);
@@ -798,6 +798,42 @@ function PreferencesManager() {
               <span className="text-green-400">✓ Auto-guardado activado</span>
             ) : (
               <span className="text-yellow-400">⚠ Deberás guardar manualmente con el botón de guardar</span>
+            )}
+          </div>
+        </div>
+
+        {/* Copy with images on Ctrl+C */}
+        <div className="bg-gray-900 rounded-lg p-4 border border-gray-800">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-indigo-500/20 rounded-lg">
+                <Clipboard size={20} className="text-indigo-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-medium text-white">Copiar con imágenes (Ctrl+C)</h3>
+                <p className="text-gray-400 text-sm">
+                  Al usar Ctrl+C dentro del editor, convierte imágenes en datos embebidos para pegar en Outlook u otros editores.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setCopyWithImagesOnCopy(!copyWithImagesOnCopy)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                copyWithImagesOnCopy ? 'bg-indigo-600' : 'bg-gray-600'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  copyWithImagesOnCopy ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+          <div className="mt-3 text-sm text-gray-500">
+            {copyWithImagesOnCopy ? (
+              <span className="text-green-400">✓ Activado</span>
+            ) : (
+              <span className="text-yellow-400">⚠ El portapapeles funcionará normalmente sin embebidos</span>
             )}
           </div>
         </div>

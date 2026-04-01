@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, ReactNode } from 'react';
-import { X, Save, Loader2, Maximize2, Minimize2, Pencil, Check, ExternalLink, Star, Archive, ArchiveRestore, Trash2, Paperclip } from 'lucide-react';
+import { X, Save, Loader2, Maximize2, Minimize2, Pencil, Check, ExternalLink, Star, Archive, ArchiveRestore, Trash2, Paperclip, Copy } from 'lucide-react';
 import { TipTapEditor, TipTapEditorHandle } from './TipTapEditor';
 import { AttachmentsModal } from './AttachmentsModal';
 import { Toast } from './Toast';
 import { UnsavedChangesModal } from './UnsavedChangesModal';
 import { useApp } from '../context/AppContext';
+import { copyHtmlWithEmbeddedImages } from '@/lib/clipboard';
 import type { Note } from '@/lib/types';
 
 interface BaseEditorModalProps {
@@ -32,7 +33,7 @@ export function BaseEditorModal({
   headerActions,
   inline = false,
 }: BaseEditorModalProps) {
-  const { updateNote, refreshNotes, toggleFavorite, autoSaveEnabled, setIsDirty: setGlobalIsDirty, setPendingChanges: setGlobalPendingChanges, deleteNote, setSelectedNoteId, filteredNotes } = useApp();
+  const { updateNote, refreshNotes, toggleFavorite, autoSaveEnabled, copyWithImagesOnCopy, setIsDirty: setGlobalIsDirty, setPendingChanges: setGlobalPendingChanges, deleteNote, setSelectedNoteId, filteredNotes } = useApp();
   const [showAttachmentsModal, setShowAttachmentsModal] = useState(false);
   
   const [note, setNote] = useState<Note>(defaultNote);
@@ -58,6 +59,7 @@ export function BaseEditorModal({
   }, [inline, setGlobalIsDirty, setGlobalPendingChanges]);
   
   const editorRef = useRef<TipTapEditorHandle>(null);
+  const [copying, setCopying] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const pendingChangesRef = useRef<Partial<Note>>({});
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -133,6 +135,23 @@ export function BaseEditorModal({
       await deleteNote(targetId);
       setSelectedNoteId(null);
       onClose();
+    }
+  };
+
+  // Copy content with embedded images (for Outlook, etc.)
+  const handleCopyWithImages = async () => {
+    const html = editorRef.current?.getHTML();
+    if (!html) return;
+
+    setCopying(true);
+    try {
+      await copyHtmlWithEmbeddedImages(html, editorRef.current?.getText() ?? '');
+      setToast({ message: 'Copiado con imágenes al portapapeles' });
+    } catch (err) {
+      console.error('Error copiando contenido con imágenes:', err);
+      setToast({ message: 'Error al copiar contenido' });
+    } finally {
+      setCopying(false);
     }
   };
 
@@ -460,6 +479,16 @@ export function BaseEditorModal({
             
             {/* Custom header actions */}
             {headerActions}
+
+            {/* Copy note content (with images) */}
+            <button
+              onClick={handleCopyWithImages}
+              disabled={copying}
+              className="p-2 rounded transition-colors text-gray-400 hover:text-white hover:bg-gray-800"
+              title="Copiar con imágenes"
+            >
+              {copying ? <Loader2 size={16} className="animate-spin" /> : <Copy size={20} />}
+            </button>
             
             {/* Save status indicator */}
             {saved && (
@@ -523,6 +552,7 @@ export function BaseEditorModal({
             {renderedFields && <h3 className="text-sm font-medium text-gray-400 mb-3">Contenido</h3>}
             <TipTapEditor
               ref={editorRef}
+              copyWithImagesOnCopy={copyWithImagesOnCopy}
 
               content={note.contentJson}
               onChange={handleContentChange}
@@ -675,6 +705,16 @@ export function BaseEditorModal({
             
             {/* Custom header actions */}
             {headerActions}
+
+            {/* Copy note content (with images) */}
+            <button
+              onClick={handleCopyWithImages}
+              disabled={copying}
+              className="p-2 rounded transition-colors text-gray-400 hover:text-white hover:bg-gray-800"
+              title="Copiar con imágenes"
+            >
+              {copying ? <Loader2 size={16} className="animate-spin" /> : <Copy size={20} />}
+            </button>
             
             {/* Save status indicator */}
             {saved && (
@@ -727,6 +767,7 @@ export function BaseEditorModal({
             {renderedFields && <h3 className="text-sm font-medium text-gray-400 mb-3">Contenido</h3>}
             <TipTapEditor
               ref={editorRef}
+              copyWithImagesOnCopy={copyWithImagesOnCopy}
 
               content={note.contentJson}
               onChange={handleContentChange}

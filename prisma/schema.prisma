@@ -20,6 +20,7 @@ model Client {
   notes           Note[]    @relation("ClientNotes")
   projects        Project[]
   timesheetEntries Timesheet[] @relation("TimesheetClient")
+  taskTodos        TaskTodo[] @relation("ClientTodos")
   
   parentClient    Client?   @relation("ClientHierarchy", fields: [parentClientId], references: [id], onUpdate: NoAction)
   subClients      Client[]  @relation("ClientHierarchy")
@@ -190,7 +191,8 @@ model TaskComment {
 // TODOs attached to tasks (REQ-021)
 model TaskTodo {
   id                  String    @id @default(uuid())
-  taskId              String    @map("task_id")
+  taskId              String?   @map("task_id")
+  clientId            String?   @map("client_id")
   author              String
   content             Json
   deadline            DateTime?
@@ -202,12 +204,14 @@ model TaskTodo {
   recurrenceParentId  String?   @map("recurrence_parent_id")
   createdAt           DateTime  @default(now()) @map("created_at")
 
-  task                Note      @relation("TaskTodos", fields: [taskId], references: [id], onDelete: Cascade)
+  task                Note?     @relation("TaskTodos", fields: [taskId], references: [id], onDelete: Cascade)
+  client              Client?   @relation("ClientTodos", fields: [clientId], references: [id], onDelete: Cascade)
   recurrenceParent    TaskTodo? @relation("RecurrenceTodos", fields: [recurrenceParentId], references: [id])
   recurrenceChildren  TaskTodo[] @relation("RecurrenceTodos")
   notificationsSent   TodoNotificationSent[]
 
   @@index([taskId, status])
+  @@index([clientId, status])
   @@index([deadline, status])
   @@index([snoozedUntil])
   @@map("task_todos")

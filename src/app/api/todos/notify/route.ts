@@ -95,8 +95,8 @@ export async function POST() {
         id: todo.id,
         content: extractText(todo.content),
         deadline: todo.deadline,
-        taskTitle: todo.task.title,
-        ticketCode: todo.task.ticketPhaseCode,
+        taskTitle: todo.task?.title ?? '',
+        ticketCode: todo.task?.ticketPhaseCode,
         isOverdue: todo.deadline ? new Date(todo.deadline) < now : false,
       }));
       
@@ -130,8 +130,8 @@ export async function POST() {
               id: todo.id,
               content: extractText(todo.content),
               deadline: todo.deadline,
-              taskTitle: todo.task.title,
-              ticketCode: todo.task.ticketPhaseCode,
+              taskTitle: todo.task?.title ?? '',
+              ticketCode: todo.task?.ticketPhaseCode,
               isOverdue: false,
             };
             
@@ -157,8 +157,8 @@ export async function POST() {
           id: todo.id,
           content: extractText(todo.content),
           deadline: todo.deadline,
-          taskTitle: todo.task.title,
-          ticketCode: todo.task.ticketPhaseCode,
+          taskTitle: todo.task?.title ?? '',
+          ticketCode: todo.task?.ticketPhaseCode,
           isOverdue: true,
         };
         

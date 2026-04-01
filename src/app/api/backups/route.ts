@@ -35,6 +35,7 @@ interface BackupManifest {
     taskComments?: number;
     taskTodos?: number;
   };
+  taskTodosError?: string;
   appVersion: string;
 }
 
@@ -242,8 +243,8 @@ export async function POST(request: NextRequest) {
     
     // Export database tables
     const { prisma } = await import('@/lib/db');
-    
-    const [clients, projects, notes, attachments, activityLogs, timesheets, taskComments, taskTodos] = await Promise.all([
+
+    const [clients, projects, notes, attachments, activityLogs, timesheets, taskComments] = await Promise.all([
       prisma.client.findMany(),
       prisma.project.findMany(),
       prisma.note.findMany(),
@@ -251,8 +252,25 @@ export async function POST(request: NextRequest) {
       prisma.taskActivityLog.findMany(),
       prisma.timesheet.findMany(),
       prisma.taskComment.findMany(),
-      prisma.taskTodo.findMany(),
     ]);
+
+    // Task todos may not exist in older schemas (missing client_id column), so fallback gracefully.
+    let taskTodos: unknown[] = [];
+    let taskTodosError: string | undefined;
+
+    try {
+      taskTodos = await prisma.taskTodo.findMany();
+    } catch (err) {
+      console.warn('Failed to fetch taskTodos with Prisma (schema mismatch), falling back to raw SQL:', err);
+      taskTodosError = String(err);
+      try {
+        // Raw query should work even if schema differs; it selects existing columns only
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        taskTodos = await prisma.$queryRawUnsafe('SELECT * FROM task_todos');
+      } catch (rawErr) {
+        console.error('Fallback raw query for task_todos failed:', rawErr);
+      }
+    }
     
     // Create manifest
     const manifest: BackupManifest = {
@@ -271,6 +289,7 @@ export async function POST(request: NextRequest) {
         taskComments: taskComments.length,
         taskTodos: taskTodos.length,
       },
+      taskTodosError,
       appVersion: '1.0.0',
     };
     

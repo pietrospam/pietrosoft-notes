@@ -1,8 +1,11 @@
 'use client';
 
-import { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
-import { TipTapEditor } from './TipTapEditor';
-import { Pencil, Trash2 } from 'lucide-react';
+import { useState, useEffect, useImperativeHandle, forwardRef, useRef } from 'react';
+import { useApp } from '../context/AppContext';
+import { TipTapEditor, TipTapEditorHandle } from './TipTapEditor';
+import { Pencil, Trash2, Copy, Loader2 } from 'lucide-react';
+import { Toast } from './Toast';
+import { copyHtmlWithEmbeddedImages } from '@/lib/clipboard';
 import type { TaskComment } from '@/lib/types';
 
 export interface TaskCommentsRef {
@@ -20,6 +23,7 @@ interface TaskCommentsProps {
 }
 
 export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(function TaskComments({ taskId, currentUser, onAttachmentsChange, onCommentsLoaded, onSaveTask, onEditingChange }, ref) {
+  const { copyWithImagesOnCopy } = useApp();
   const [comments, setComments] = useState<TaskComment[]>([]);
   const [loading, setLoading] = useState(false);
   const [newContent, setNewContent] = useState<object>({ type: 'doc', content: [] });
@@ -27,6 +31,10 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
   const [originalContent, setOriginalContent] = useState<object | null>(null); // Original content when editing started
   const [pendingEdit, setPendingEdit] = useState<{ id: string; content: object } | null>(null); // Comment waiting to be edited
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
+  const [savingComment, setSavingComment] = useState(false);
+  const [copyingCommentId, setCopyingCommentId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string } | null>(null);
+  const commentEditorRefs = useRef<Record<string, TipTapEditorHandle | null>>({});
 
   const load = async () => {
     setLoading(true);
@@ -110,39 +118,48 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
   };
 
   const handleAdd = async (): Promise<boolean> => {
+    if (savingComment) return false;
     // Check if there's actual content (not just empty doc)
     if (!hasContentText(newContent)) return false;
-    
-    const res = await fetch(`/api/tasks/${taskId}/comments`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ author: currentUser, content: newContent }),
-    });
-    if (res.ok) {
-      setNewContent({ type: 'doc', content: [] }); // Reset to empty doc
-      load();
-      onAttachmentsChange?.(); // Refresh attachments in case images were pasted
-      onSaveTask?.(); // Refresh notes list (updatedAt changed)
-      return true;
+
+    setSavingComment(true);
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ author: currentUser, content: newContent }),
+      });
+      if (res.ok) {
+        setNewContent({ type: 'doc', content: [] }); // Reset to empty doc
+        load();
+        onAttachmentsChange?.(); // Refresh attachments in case images were pasted
+        return true;
+      }
+      return false;
+    } finally {
+      setSavingComment(false);
     }
-    return false;
   };
 
   const handleUpdate = async (): Promise<boolean> => {
-    if (!editing) return false;
-    const res = await fetch(`/api/tasks/${taskId}/comments`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: editing.id, content: editing.content }),
-    });
-    if (res.ok) {
-      stopEditing();
-      load();
-      onAttachmentsChange?.(); // Refresh attachments in case images were pasted
-      onSaveTask?.(); // Refresh notes list (updatedAt changed)
-      return true;
+    if (!editing || savingComment) return false;
+    setSavingComment(true);
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/comments`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: editing.id, content: editing.content }),
+      });
+      if (res.ok) {
+        stopEditing();
+        load();
+        onAttachmentsChange?.(); // Refresh attachments in case images were pasted
+        return true;
+      }
+      return false;
+    } finally {
+      setSavingComment(false);
     }
-    return false;
   };
 
   // Expose functions to parent via ref
@@ -159,6 +176,22 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
       load();
     }
   }));
+
+  const handleCopyComment = async (id: string) => {
+    const editorHandle = commentEditorRefs.current[id];
+    if (!editorHandle) return;
+
+    setCopyingCommentId(id);
+    try {
+      await copyHtmlWithEmbeddedImages(editorHandle.getHTML(), editorHandle.getText());
+      setToast({ message: 'Comentario copiado con imágenes' });
+    } catch (err) {
+      console.error('Error copiando comentario:', err);
+      setToast({ message: 'Error al copiar comentario' });
+    } finally {
+      setCopyingCommentId(null);
+    }
+  };
 
   const handleDelete = async (id: string) => {
     await fetch(`/api/tasks/${taskId}/comments?id=${id}`, { method: 'DELETE' });
@@ -195,12 +228,15 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
                     stopEditing();
                   } else if ((e.ctrlKey || e.metaKey) && e.key === 's') {
                     e.preventDefault();
-                    // Just call onSaveTask - it will save the comment via savePendingComment
-                    onSaveTask?.();
+                    // Only save if content has actually changed
+                    if (hasContentChanged()) {
+                      handleUpdate();
+                    }
                   }
                 }}
               >
                 <TipTapEditor
+                  copyWithImagesOnCopy={copyWithImagesOnCopy}
                   content={editing.content}
                   onChange={json => setEditing(prev => prev ? { ...prev, content: json } : null)}
                   placeholder="Escribe tu comentario..."
@@ -224,29 +260,46 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
               <>
                 <div className={c.author === currentUser ? 'cursor-pointer' : ''}>
                   <TipTapEditor
+                    ref={(instance) => {
+                      if (instance) commentEditorRefs.current[c.id] = instance;
+                    }}
+                    copyWithImagesOnCopy={copyWithImagesOnCopy}
                     content={c.content as object}
                     onChange={() => {}}
                     readOnly={true}
                   />
                 </div>
-                {c.author === currentUser && (
-                  <div className="flex gap-2 mt-1 text-gray-400 justify-end">
-                    <button
-                      onClick={() => startEditing(c.id, c.content as object)}
-                      className="p-1 hover:text-white"
-                      title="Editar"
-                    >
-                      <Pencil size={14} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(c.id)}
-                      className="p-1 hover:text-white"
-                      title="Eliminar"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                )}
+                <div className="flex gap-2 mt-1 text-gray-400 justify-end">
+                  <button
+                    onClick={() => handleCopyComment(c.id)}
+                    className="p-1 hover:text-white"
+                    title="Copiar comentario con imágenes"
+                  >
+                    {copyingCommentId === c.id ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <Copy size={14} />
+                    )}
+                  </button>
+                  {c.author === currentUser && (
+                    <>
+                      <button
+                        onClick={() => startEditing(c.id, c.content as object)}
+                        className="p-1 hover:text-white"
+                        title="Editar"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(c.id)}
+                        className="p-1 hover:text-white"
+                        title="Eliminar"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </>
+                  )}
+                </div>
               </>
             )}
           </div>
@@ -277,7 +330,8 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
           <div className="flex gap-2 mt-1">
             <button
               onClick={handleAdd}
-              className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 rounded text-xs"
+              disabled={savingComment}
+              className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 rounded text-xs disabled:opacity-50"
             >guardar</button>
             <button
               onClick={() => setNewContent({ type: 'doc', content: [] })}
@@ -311,6 +365,10 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
             </div>
           </div>
         </div>
+      )}
+
+      {toast && (
+        <Toast message={toast.message} onClose={() => setToast(null)} />
       )}
     </div>
   );

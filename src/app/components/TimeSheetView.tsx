@@ -742,17 +742,17 @@ export function TimeSheetView() {
     const today = new Date().toISOString().split('T')[0];
     
     try {
-      const res = await fetch('/api/notes', {
+      const res = await fetch('/api/timesheets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          type: 'timesheet',
-          title: `TimeSheet - ${task.title}`,
           taskId: task.id,
           workDate: today,
           hoursWorked: 0,
           description: task.title,
           state: 'DRAFT',
+          projectId: task.projectId || null,
+          clientId: null,
         }),
       });
       

@@ -6,6 +6,93 @@ import type {
   TodoWithTask, TodoStatus, RecurrenceRule 
 } from '../types';
 
+let hasClientIdColumnCache: boolean | null = null;
+let isTaskIdNullableCache: boolean | null = null;
+
+async function hasClientIdColumn(): Promise<boolean> {
+  if (hasClientIdColumnCache !== null) return hasClientIdColumnCache;
+
+  try {
+    const result = await prisma.$queryRaw<
+      Array<{ exists: boolean }>
+    >`
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'task_todos'
+          AND column_name = 'client_id'
+      ) as "exists"
+    `;
+    hasClientIdColumnCache = !!result?.[0]?.exists;
+  } catch {
+    hasClientIdColumnCache = false;
+  }
+
+  return hasClientIdColumnCache;
+}
+
+async function isTaskIdNullable(): Promise<boolean> {
+  if (isTaskIdNullableCache !== null) return isTaskIdNullableCache;
+
+  try {
+    const result = await prisma.$queryRaw<
+      Array<{ is_nullable: string }>
+    >`
+      SELECT is_nullable
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'task_todos'
+        AND column_name = 'task_id'
+    `;
+
+    isTaskIdNullableCache = result?.[0]?.is_nullable === 'YES';
+  } catch {
+    // Assume not nullable if we can't determine
+    isTaskIdNullableCache = false;
+  }
+
+  return isTaskIdNullableCache;
+}
+
+interface PrismaKnownError {
+  code?: string;
+  meta?: {
+    column?: string;
+  };
+}
+
+function isMissingColumnError(err: unknown, column: string): boolean {
+  const maybe = err as PrismaKnownError;
+  return maybe?.code === 'P2022' && maybe?.meta?.column === column;
+}
+
+function mapRawTodoRow(row: Record<string, unknown>): PrismaTodo {
+  return {
+    id: String(row.id),
+    taskId: row.task_id ? String(row.task_id) : null,
+    clientId: row.client_id ? String(row.client_id) : null,
+    author: String(row.author),
+    content: row.content as Prisma.JsonValue,
+    deadline: row.deadline ? new Date(row.deadline as string) : null,
+    status: String(row.status) as TodoStatus,
+    completedAt: row.completed_at ? new Date(String(row.completed_at)) : null,
+    deletedAt: row.deleted_at ? new Date(String(row.deleted_at)) : null,
+    snoozedUntil: row.snoozed_until ? new Date(String(row.snoozed_until)) : null,
+    recurrenceRule: row.recurrence_rule ? String(row.recurrence_rule) : null,
+    recurrenceParentId: row.recurrence_parent_id ? String(row.recurrence_parent_id) : null,
+    createdAt: new Date(String(row.created_at)),
+  };
+}
+
+function toTodoWithTaskFallback(p: PrismaTodo): TodoWithTask {
+  return {
+    ...toTodo(p),
+    task: undefined,
+    client: undefined,
+  };
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -22,6 +109,12 @@ type PrismaTodoWithTask = Prisma.TaskTodoGetPayload<{
         projectId: true;
       };
     };
+    client: {
+      select: {
+        id: true;
+        name: true;
+      };
+    };
   };
 }>;
 
@@ -32,7 +125,8 @@ type PrismaTodoWithTask = Prisma.TaskTodoGetPayload<{
 function toTodo(p: PrismaTodo): TaskTodo {
   return {
     id: p.id,
-    taskId: p.taskId,
+    taskId: p.taskId ?? undefined,
+    clientId: p.clientId ?? undefined,
     author: p.author,
     content: p.content,
     deadline: p.deadline?.toISOString(),
@@ -47,14 +141,23 @@ function toTodo(p: PrismaTodo): TaskTodo {
 }
 
 function toTodoWithTask(p: PrismaTodoWithTask): TodoWithTask {
+  const base = toTodo(p);
   return {
-    ...toTodo(p),
-    task: {
-      id: p.task.id,
-      title: p.task.title,
-      ticketPhaseCode: p.task.taskTicketPhaseCode ?? undefined,
-      projectId: p.task.projectId ?? undefined,
-    },
+    ...base,
+    task: p.task
+      ? {
+          id: p.task.id,
+          title: p.task.title,
+          ticketPhaseCode: p.task.taskTicketPhaseCode ?? undefined,
+          projectId: p.task.projectId ?? undefined,
+        }
+      : undefined,
+    client: p.client
+      ? {
+          id: p.client.id,
+          name: p.client.name,
+        }
+      : undefined,
   };
 }
 
@@ -66,30 +169,57 @@ function toTodoWithTask(p: PrismaTodoWithTask): TodoWithTask {
  * Create a new TODO for a task
  */
 export async function createTodo(data: CreateTodoInput): Promise<TaskTodo> {
-  const record = await prisma.taskTodo.create({
-    data: {
-      id: randomUUID(),
-      taskId: data.taskId,
-      author: data.author,
-      content: data.content as Prisma.InputJsonValue,
-      deadline: data.deadline ? new Date(data.deadline) : null,
-      recurrenceRule: data.recurrenceRule ? JSON.stringify(data.recurrenceRule) : null,
-      status: 'pending',
-    },
-  });
+  const hasClientColumn = await hasClientIdColumn();
+  const taskIdNullable = await isTaskIdNullable();
 
-  // Log activity
-  await prisma.taskActivityLog.create({
-    data: {
-      id: randomUUID(),
-      taskId: data.taskId,
-      eventType: 'TODO_CREATED',
-      description: data.author,
-    },
-  });
+  if (!taskIdNullable && !data.taskId) {
+    throw new Error(
+      'Database schema requires a task association for TODOs. Please select a task or run migrations to allow standalone TODOs.'
+    );
+  }
 
-  return toTodo(record);
+  let todoRecord: PrismaTodo;
+
+  if (hasClientColumn) {
+    const record = await prisma.taskTodo.create({
+      data: {
+        id: randomUUID(),
+        taskId: data.taskId ?? null,
+        clientId: data.clientId ?? null,
+        author: data.author,
+        content: data.content as Prisma.InputJsonValue,
+        deadline: data.deadline ? new Date(data.deadline) : null,
+        recurrenceRule: data.recurrenceRule ? JSON.stringify(data.recurrenceRule) : null,
+        status: 'pending',
+      },
+    });
+    todoRecord = record;
+  } else {
+    const record = await prisma.$queryRaw<Record<string, unknown>>`
+      INSERT INTO task_todos
+        (id, task_id, author, content, deadline, status, recurrence_rule, created_at)
+      VALUES
+        (${randomUUID()}, ${data.taskId ?? null}, ${data.author}, ${data.content as Prisma.InputJsonValue}, ${data.deadline ? new Date(data.deadline) : null}, 'pending', ${data.recurrenceRule ? JSON.stringify(data.recurrenceRule) : null}, now())
+      RETURNING *
+    `;
+    todoRecord = mapRawTodoRow(record);
+  }
+
+  // Log activity (only if tied to a task)
+  if (data.taskId) {
+    await prisma.taskActivityLog.create({
+      data: {
+        id: randomUUID(),
+        taskId: data.taskId,
+        eventType: 'TODO_CREATED',
+        description: data.author,
+      },
+    });
+  }
+
+  return toTodo(todoRecord);
 }
+
 
 /**
  * Get a TODO by ID
@@ -114,6 +244,12 @@ export async function getTodoWithTaskById(id: string): Promise<TodoWithTask | nu
           projectId: true,
         },
       },
+      client: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
     },
   });
   return record ? toTodoWithTask(record) : null;
@@ -133,36 +269,82 @@ export async function listTodosByTask(taskId: string): Promise<TaskTodo[]> {
   return records.map(toTodo);
 }
 
+export async function listTodosByClient(clientId: string): Promise<TaskTodo[]> {
+  try {
+    const records = await prisma.taskTodo.findMany({
+      where: { clientId, status: { not: 'deleted' } },
+      orderBy: [
+        { deadline: { sort: 'asc', nulls: 'last' } },
+        { createdAt: 'asc' },
+      ],
+    });
+    return records.map(toTodo);
+  } catch (err) {
+    if (isMissingColumnError(err, 'task_todos.client_id')) {
+      // Schema missing client_id, so just return all todos (no filtering)
+      const all = await listAllTodos();
+      return all.map((t) => {
+        const { task: _task, client: _client, ...base } = t;
+        void _task;
+        void _client;
+        return base;
+      });
+    }
+    throw err;
+  }
+}
+
 /**
  * List all pending/snoozed TODOs across all tasks (for sidebar)
  * Includes task information for display
  */
 export async function listAllPendingTodos(): Promise<TodoWithTask[]> {
   const now = new Date();
-  const records = await prisma.taskTodo.findMany({
-    where: {
-      status: 'pending',
-      OR: [
-        { snoozedUntil: null },
-        { snoozedUntil: { lte: now } },
-      ],
-    },
-    include: {
-      task: {
-        select: {
-          id: true,
-          title: true,
-          taskTicketPhaseCode: true,
-          projectId: true,
+  try {
+    const records = await prisma.taskTodo.findMany({
+      where: {
+        status: 'pending',
+        OR: [
+          { snoozedUntil: null },
+          { snoozedUntil: { lte: now } },
+        ],
+      },
+      include: {
+        task: {
+          select: {
+            id: true,
+            title: true,
+            taskTicketPhaseCode: true,
+            projectId: true,
+          },
+        },
+        client: {
+          select: {
+            id: true,
+            name: true,
+          },
         },
       },
-    },
-    orderBy: [
-      { deadline: { sort: 'asc', nulls: 'last' } },
-      { createdAt: 'asc' },
-    ],
-  });
-  return records.map(toTodoWithTask);
+      orderBy: [
+        { deadline: { sort: 'asc', nulls: 'last' } },
+        { createdAt: 'asc' },
+      ],
+    });
+    return records.map(toTodoWithTask);
+  } catch (err) {
+    if (isMissingColumnError(err, 'task_todos.client_id')) {
+      const rawRecords = await prisma.$queryRaw<Array<Record<string, unknown>>>
+        `
+        SELECT id, task_id, author, content, deadline, status, completed_at, deleted_at,
+               snoozed_until, recurrence_rule, recurrence_parent_id, created_at
+        FROM task_todos
+        WHERE status = 'pending' AND (snoozed_until IS NULL OR snoozed_until <= NOW())
+        ORDER BY deadline ASC NULLS LAST
+      `;
+    return rawRecords.map(r => toTodoWithTaskFallback(mapRawTodoRow(r)));
+    }
+    throw err;
+  }
 }
 
 /**
@@ -171,27 +353,48 @@ export async function listAllPendingTodos(): Promise<TodoWithTask[]> {
  * Excludes deleted TODOs
  */
 export async function listAllTodos(): Promise<TodoWithTask[]> {
-  const records = await prisma.taskTodo.findMany({
-    where: {
-      status: { not: 'deleted' },
-      deletedAt: null,
-    },
-    include: {
-      task: {
-        select: {
-          id: true,
-          title: true,
-          taskTicketPhaseCode: true,
-          projectId: true,
+  try {
+    const records = await prisma.taskTodo.findMany({
+      where: {
+        status: { not: 'deleted' },
+        deletedAt: null,
+      },
+      include: {
+        task: {
+          select: {
+            id: true,
+            title: true,
+            taskTicketPhaseCode: true,
+            projectId: true,
+          },
+        },
+        client: {
+          select: {
+            id: true,
+            name: true,
+          },
         },
       },
-    },
-    orderBy: [
-      { deadline: { sort: 'asc', nulls: 'last' } },
-      { createdAt: 'asc' },
-    ],
-  });
-  return records.map(toTodoWithTask);
+      orderBy: [
+        { deadline: { sort: 'asc', nulls: 'last' } },
+        { createdAt: 'asc' },
+      ],
+    });
+    return records.map(toTodoWithTask);
+  } catch (err) {
+    if (isMissingColumnError(err, 'task_todos.client_id')) {
+      const rawRecords = await prisma.$queryRaw<Array<Record<string, unknown>>>
+        `
+        SELECT id, task_id, author, content, deadline, status, completed_at, deleted_at,
+               snoozed_until, recurrence_rule, recurrence_parent_id, created_at
+        FROM task_todos
+        WHERE status <> 'deleted' AND deleted_at IS NULL
+        ORDER BY deadline ASC NULLS LAST, created_at ASC
+      `;
+    return rawRecords.map(r => toTodoWithTaskFallback(mapRawTodoRow(r)));
+    }
+    throw err;
+  }
 }
 
 /**
@@ -200,32 +403,54 @@ export async function listAllTodos(): Promise<TodoWithTask[]> {
 export async function listTodosWithUpcomingDeadlines(withinMinutes: number): Promise<TodoWithTask[]> {
   const now = new Date();
   const future = new Date(now.getTime() + withinMinutes * 60 * 1000);
-  
-  const records = await prisma.taskTodo.findMany({
-    where: {
-      status: 'pending',
-      deadline: {
-        gte: now,
-        lte: future,
+
+  try {
+    const records = await prisma.taskTodo.findMany({
+      where: {
+        status: 'pending',
+        deadline: {
+          gte: now,
+          lte: future,
+        },
+        OR: [
+          { snoozedUntil: null },
+          { snoozedUntil: { lte: now } },
+        ],
       },
-      OR: [
-        { snoozedUntil: null },
-        { snoozedUntil: { lte: now } },
-      ],
-    },
-    include: {
-      task: {
-        select: {
-          id: true,
-          title: true,
-          taskTicketPhaseCode: true,
-          projectId: true,
+      include: {
+        task: {
+          select: {
+            id: true,
+            title: true,
+            taskTicketPhaseCode: true,
+            projectId: true,
+          },
+        },
+        client: {
+          select: {
+            id: true,
+            name: true,
+          },
         },
       },
-    },
-    orderBy: { deadline: 'asc' },
-  });
-  return records.map(toTodoWithTask);
+      orderBy: { deadline: 'asc' },
+    });
+    return records.map(toTodoWithTask);
+  } catch (err) {
+    if (isMissingColumnError(err, 'task_todos.client_id')) {
+      const rawRecords = await prisma.$queryRaw<Array<Record<string, unknown>>>
+        `
+        SELECT id, task_id, author, content, deadline, status, completed_at, deleted_at,
+               snoozed_until, recurrence_rule, recurrence_parent_id, created_at
+        FROM task_todos
+        WHERE status = 'pending' AND deadline >= $1 AND deadline <= $2
+          AND (snoozed_until IS NULL OR snoozed_until <= $3)
+        ORDER BY deadline ASC
+      `;
+      return rawRecords.map(r => toTodoWithTaskFallback(mapRawTodoRow(r)));
+    }
+    throw err;
+  }
 }
 
 /**
@@ -234,28 +459,49 @@ export async function listTodosWithUpcomingDeadlines(withinMinutes: number): Pro
 export async function listOverdueTodos(): Promise<TodoWithTask[]> {
   const now = new Date();
   
-  const records = await prisma.taskTodo.findMany({
-    where: {
-      status: 'pending',
-      deadline: { lt: now },
-      OR: [
-        { snoozedUntil: null },
-        { snoozedUntil: { lte: now } },
-      ],
-    },
-    include: {
-      task: {
-        select: {
-          id: true,
-          title: true,
-          taskTicketPhaseCode: true,
-          projectId: true,
+  try {
+    const records = await prisma.taskTodo.findMany({
+      where: {
+        status: 'pending',
+        deadline: { lt: now },
+        OR: [
+          { snoozedUntil: null },
+          { snoozedUntil: { lte: now } },
+        ],
+      },
+      include: {
+        task: {
+          select: {
+            id: true,
+            title: true,
+            taskTicketPhaseCode: true,
+            projectId: true,
+          },
+        },
+        client: {
+          select: {
+            id: true,
+            name: true,
+          },
         },
       },
-    },
-    orderBy: { deadline: 'asc' },
-  });
-  return records.map(toTodoWithTask);
+      orderBy: { deadline: 'asc' },
+    });
+    return records.map(toTodoWithTask);
+  } catch (err) {
+    if (isMissingColumnError(err, 'task_todos.client_id')) {
+      const rawRecords = await prisma.$queryRaw<Array<Record<string, unknown>>>
+        `
+        SELECT id, task_id, author, content, deadline, status, completed_at, deleted_at,
+               snoozed_until, recurrence_rule, recurrence_parent_id, created_at
+        FROM task_todos
+        WHERE status = 'pending' AND deadline < NOW() AND (snoozed_until IS NULL OR snoozed_until <= NOW())
+        ORDER BY deadline ASC
+      `;
+    return rawRecords.map(r => toTodoWithTaskFallback(mapRawTodoRow(r)));
+    }
+    throw err;
+  }
 }
 
 /**
@@ -308,15 +554,17 @@ export async function completeTodo(id: string): Promise<TaskTodo> {
     },
   });
 
-  // Log activity
-  await prisma.taskActivityLog.create({
-    data: {
-      id: randomUUID(),
-      taskId: record.taskId,
-      eventType: 'TODO_COMPLETED',
-      description: id,
-    },
-  });
+  // Log activity (only if TODO is tied to a task)
+  if (record.taskId) {
+    await prisma.taskActivityLog.create({
+      data: {
+        id: randomUUID(),
+        taskId: record.taskId,
+        eventType: 'TODO_COMPLETED',
+        description: id,
+      },
+    });
+  }
 
   // If recurring, create next occurrence
   if (existing.recurrenceRule) {
@@ -341,15 +589,17 @@ export async function deleteTodo(id: string): Promise<void> {
     },
   });
 
-  // Log activity
-  await prisma.taskActivityLog.create({
-    data: {
-      id: randomUUID(),
-      taskId: record.taskId,
-      eventType: 'TODO_DELETED',
-      description: id,
-    },
-  });
+  // Log activity (only if TODO is tied to a task)
+  if (record.taskId) {
+    await prisma.taskActivityLog.create({
+      data: {
+        id: randomUUID(),
+        taskId: record.taskId,
+        eventType: 'TODO_DELETED',
+        description: id,
+      },
+    });
+  }
 }
 
 /**
@@ -361,15 +611,17 @@ export async function snoozeTodo(id: string, until: string): Promise<TaskTodo> {
     data: { snoozedUntil: new Date(until) },
   });
 
-  // Log activity
-  await prisma.taskActivityLog.create({
-    data: {
-      id: randomUUID(),
-      taskId: record.taskId,
-      eventType: 'TODO_SNOOZED',
-      description: until,
-    },
-  });
+  // Log activity (only if TODO is tied to a task)
+  if (record.taskId) {
+    await prisma.taskActivityLog.create({
+      data: {
+        id: randomUUID(),
+        taskId: record.taskId,
+        eventType: 'TODO_SNOOZED',
+        description: until,
+      },
+    });
+  }
 
   return toTodo(record);
 }

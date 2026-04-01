@@ -247,7 +247,8 @@ export interface RecurrenceRule {
 
 export interface TaskTodo {
   id: UUID;
-  taskId: UUID;
+  taskId?: UUID;
+  clientId?: UUID;
   author: string;
   content: unknown; // TipTap JSON
   deadline?: string; // ISO 8601 datetime (null for checklist-style TODO)
@@ -261,7 +262,8 @@ export interface TaskTodo {
 }
 
 export type CreateTodoInput = {
-  taskId: UUID;
+  taskId?: UUID;
+  clientId?: UUID;
   author: string;
   content: unknown;
   deadline?: string;
@@ -278,11 +280,15 @@ export type UpdateTodoInput = Partial<{
 
 // Todo with related task info for sidebar display
 export interface TodoWithTask extends TaskTodo {
-  task: {
+  task?: {
     id: UUID;
     title: string;
     ticketPhaseCode?: string;
     projectId?: UUID;
+  };
+  client?: {
+    id: UUID;
+    name: string;
   };
 }
 

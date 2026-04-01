@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getNote, updateNote, deleteNote } from '@/lib/repositories/notes-repo';
+import { getNote, updateNote, deleteNote, findTaskByTicketAndProject } from '@/lib/repositories/notes-repo';
 import { 
   createActivityLogs, 
   createPlaceholderTimesheet,
@@ -47,6 +47,27 @@ export async function PUT(request: Request, { params }: RouteParams) {
     // REQ-010: Get old note for comparison (for task activity logging)
     const oldNote = await getNote(params.id);
     
+    // REQ: Prevent duplicate task ticket-phase within same project on update
+    const existingTask = oldNote;
+    if (existingTask?.type === 'task' && ('ticketPhaseCode' in body || 'projectId' in body)) {
+      const candidateTicket = (body as Partial<TaskNote>).ticketPhaseCode || (existingTask as TaskNote).ticketPhaseCode;
+      const candidateProject = (body as Partial<TaskNote>).projectId || (existingTask as TaskNote).projectId || null;
+
+      if (candidateTicket) {
+        const collision = await findTaskByTicketAndProject(candidateTicket, candidateProject);
+        if (collision && collision.id !== params.id) {
+          return NextResponse.json(
+            {
+              error: 'Task with this ticket/phase already exists',
+              existingId: collision.id,
+              existingTitle: collision.title,
+            },
+            { status: 409 }
+          );
+        }
+      }
+    }
+
     const note = await updateNote(params.id, body);
     if (!note) {
       return NextResponse.json(

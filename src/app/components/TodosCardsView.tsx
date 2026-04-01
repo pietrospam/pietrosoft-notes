@@ -9,9 +9,10 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Flag, Check, Clock, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
+import { Flag, Check, Clock, ChevronLeft, ChevronRight, Pencil, Plus } from 'lucide-react';
 import type { TodoWithTask, TaskTodo } from '@/lib/types';
 import { TodoEditModal } from './TodoEditModal';
+import { TodoCreateModal } from './TodoCreateModal';
 
 interface TodosCardsViewProps {
   filterTaskId?: string | null;  // null = all TODOs, string = specific task
@@ -29,6 +30,7 @@ export function TodosCardsView({ filterTaskId, onNavigateToTask, onClose }: Todo
   
   // Edit modal state
   const [editingTodo, setEditingTodo] = useState<TodoWithTask | null>(null);
+  const [creatingTodo, setCreatingTodo] = useState(false);
 
   const fetchTodos = useCallback(async () => {
     setLoading(true);
@@ -237,13 +239,30 @@ export function TodosCardsView({ filterTaskId, onNavigateToTask, onClose }: Todo
   }
 
   return (
-    <div style={{ width: 320 }} className="bg-gray-900 border-r border-gray-800 flex flex-col overflow-hidden">
+    <>
+      <TodoCreateModal
+        isOpen={creatingTodo}
+        onClose={() => setCreatingTodo(false)}
+        onCreated={() => {
+          setCreatingTodo(false);
+          fetchTodos();
+        }}
+      />
+      <div style={{ width: 320 }} className="bg-gray-900 border-r border-gray-800 flex flex-col overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-gray-800">
-        <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-          <Flag className="text-orange-500" size={16} />
-          {filterTaskId ? 'TODOs de tarea' : 'TODOs'}
-        </h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+            <Flag className="text-orange-500" size={16} />
+            {filterTaskId ? 'TODOs de tarea' : 'TODOs'}
+          </h2>
+          <button
+            onClick={() => setCreatingTodo(true)}
+            className="text-xs text-blue-400 hover:text-white flex items-center gap-1"
+          >
+            <Plus size={14} /> Nuevo
+          </button>
+        </div>
         {onClose && (
           <button
             onClick={onClose}
@@ -365,7 +384,9 @@ export function TodosCardsView({ filterTaskId, onNavigateToTask, onClose }: Todo
               return (
                 <div
                   key={todo.id}
-                  onClick={() => onNavigateToTask(todo.taskId)}
+                  onClick={() => {
+                    if (todo.taskId) onNavigateToTask(todo.taskId);
+                  }}
                   className={`px-3 py-2 border-b border-gray-800 cursor-pointer transition-colors ${
                     isCompleted
                       ? 'opacity-50 hover:opacity-70'
@@ -477,5 +498,6 @@ export function TodosCardsView({ filterTaskId, onNavigateToTask, onClose }: Todo
         />
       )}
     </div>
+    </>
   );
 }

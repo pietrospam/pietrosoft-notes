@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/db';
-import { createNote, createTaskComment } from '@/lib/repositories/notes-repo';
+import { createNote, createTaskComment, updateTaskComment } from '@/lib/repositories/notes-repo';
 import type { CreateNoteInput, GeneralNote, TaskNote } from '@/lib/types';
 
 // ---------------------------------------------------------------------------
@@ -216,10 +216,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // 3. Discard spam (return 200 so the forwarder does not retry)
+  // 3. Discard spam (return 204 so the forwarder treats it as accepted but no content)
   if (meta.spam_flag === true) {
     console.log(`[mail] Spam discarded from ${envelope.sender} — score: ${meta.spam_score}`);
-    return NextResponse.json({ status: 'rejected', reason: 'spam' }, { status: 200 });
+    return new NextResponse(null, { status: 204 });
   }
 
   // 4. Parse inbox address → { type, clientName }
@@ -230,29 +230,224 @@ export async function POST(request: NextRequest) {
     console.log(`[mail] Client "${clientName}" not found — note/task will be created without client`);
   }
 
-  // Helper: remove null bytes (0x00) that break Postgres UTF8 encoding
-  const stripNulls = (value: string) => value.replace(/\u0000/g, '');
+  // Helper: remove null bytes (0x00) and replacement characters (�) that break PostgreSQL UTF8
+  const stripNulls = (value: string) => value.replace(/\u0000/g, '').replace(/\uFFFD/g, '');
 
-  // Detect binary-like data (e.g. base64 payload) and avoid storing it as plain text
+  // Detect binary-like or raw MIME payloads (Gmail often sends full MIME in the body fields)
   const isLikelyBinary = (value: string) => {
     if (!value) return false;
+
+    // Common signs of raw MIME messages (including multipart boundaries)
+    const rawMimePatterns = [/^Content-Type:/mi, /^MIME-Version:/mi, /boundary=/i, /^--/m];
+    if (rawMimePatterns.some((re) => re.test(value))) return true;
+
+    // If the value contains replacement chars, it likely came from decoding binary.
+    if (value.includes('\uFFFD')) return true;
+
     const len = value.length;
     let nonPrintable = 0;
     for (let i = 0; i < len; i += 1) {
       const code = value.charCodeAt(i);
       if (code === 9 || code === 10 || code === 13) continue; // tab/newline/carriage return
-      if (code < 32 || code > 126) nonPrintable += 1;
+      // Treat non-control Unicode characters as printable (UTF-8)
+      if (code < 32) nonPrintable += 1;
     }
     return nonPrintable / len > 0.3;
+  };
+
+  const normalizeLineEndings = (input: string) => input.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  const parseHeaders = (rawHeaders: string) => {
+    const result: Record<string, string> = {};
+    const lines = rawHeaders.split('\n');
+    let currentKey = '';
+    for (const line of lines) {
+      if (/^\s/.test(line) && currentKey) {
+        // Folded header continuation.
+        result[currentKey] += ' ' + line.trim();
+        continue;
+      }
+      const [key, ...rest] = line.split(':');
+      if (!key) continue;
+      currentKey = key.trim().toLowerCase();
+      result[currentKey] = rest.join(':').trim();
+    }
+    return result;
+  };
+
+  const decodeQuotedPrintable = (input: string) =>
+    input
+      .replace(/=(\r\n|\n|\r)/g, '')
+      .replace(/=([0-9A-F]{2})/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+
+  const decodeMimePartBody = (body: string, encoding?: string) => {
+    const normalized = body.trim();
+    if (!encoding) return normalized;
+
+    const enc = encoding.trim().toLowerCase();
+    if (enc === 'base64') {
+      try {
+        return Buffer.from(normalized, 'base64').toString('utf-8');
+      } catch {
+        return normalized;
+      }
+    }
+
+    if (enc === 'quoted-printable') {
+      return decodeQuotedPrintable(normalized);
+    }
+
+    return normalized;
+  };
+
+  type MimeNode = {
+    headers: Record<string, string>;
+    body: string;
+    parts?: MimeNode[];
+  };
+
+  const parseMimeNode = (raw: string): MimeNode => {
+    const normalized = normalizeLineEndings(raw);
+    const [rawHeaders, ...rest] = normalized.split('\n\n');
+    const headers = parseHeaders(rawHeaders);
+    const body = rest.join('\n\n');
+
+    const contentType = headers['content-type']?.toLowerCase() ?? '';
+    const boundaryMatch = contentType.match(/boundary="?([^"\n;]+)"?/i);
+    const boundary = boundaryMatch ? boundaryMatch[1] : null;
+
+    if (boundary && contentType.startsWith('multipart/')) {
+      const parts: MimeNode[] = [];
+      const rawParts = body
+        .split(`--${boundary}`)
+        .slice(1)
+        .map((p) => p.trim())
+        .filter((p) => p && !p.startsWith('--'));
+
+      for (const partRaw of rawParts) {
+        parts.push(parseMimeNode(partRaw));
+      }
+
+      return { headers, body, parts };
+    }
+
+    return { headers, body };
+  };
+
+  const decodeMimeNodeBody = (node: MimeNode): string => {
+    const transferEncoding = node.headers['content-transfer-encoding'];
+    return decodeMimePartBody(node.body, transferEncoding);
+  };
+
+  const findMimePart = (node: MimeNode, match: (contentType: string) => boolean): MimeNode | null => {
+    const contentType = node.headers['content-type']?.toLowerCase() ?? '';
+    if (match(contentType)) return node;
+    if (!node.parts) return null;
+    for (const child of node.parts) {
+      const found = findMimePart(child, match);
+      if (found) return found;
+    }
+    return null;
+  };
+
+  const tryExtractFromRawMime = (rawBase64: string, type: 'text/plain' | 'text/html'): string => {
+    try {
+      const decoded = Buffer.from(rawBase64, 'base64').toString('utf-8');
+      const root = parseMimeNode(decoded);
+
+      const match = findMimePart(root, (ct) => ct.includes(type));
+      if (match) {
+        return decodeMimeNodeBody(match).trim();
+      }
+
+      // If we couldn't find an explicit part, fall back to raw HTML extraction
+      if (type === 'text/html') {
+        const htmlMatch = decoded.match(/<html[\s\S]*?<\/html>/i);
+        if (htmlMatch) return htmlMatch[0];
+
+        const bodyMatch = decoded.match(/<body[\s\S]*?<\/body>/i);
+        if (bodyMatch) return bodyMatch[0];
+      }
+
+      const fallbackBody = decoded.split(/\r?\n\r?\n/).slice(1).join('\n\n').trim();
+      return fallbackBody;
+    } catch {
+      return '';
+    }
+  };
+
+  type InlineAttachment = {
+    cid: string;
+    filename: string;
+    mimeType: string;
+    contentBase64: string;
+  };
+
+  const collectInlineAttachments = (node: MimeNode, out: InlineAttachment[]) => {
+    const contentType = node.headers['content-type']?.toLowerCase() ?? '';
+    const contentIdRaw = node.headers['content-id'] ?? '';
+    const contentId = contentIdRaw.replace(/[<>]/g, '').trim();
+
+    if (contentId && contentType.startsWith('image/')) {
+      const transferEncoding = node.headers['content-transfer-encoding'];
+      let contentBase64 = node.body.trim();
+      if (transferEncoding?.toLowerCase().includes('quoted-printable')) {
+        const decoded = decodeQuotedPrintable(contentBase64);
+        contentBase64 = Buffer.from(decoded, 'utf-8').toString('base64');
+      }
+
+      const filenameFromDisposition = (node.headers['content-disposition'] || '')
+        .match(/filename="?([^";]+)"?/i)?.[1];
+      const filenameFromType = contentType.match(/name="?([^";]+)"?/i)?.[1];
+      const extension = contentType.split('/')[1]?.split(';')[0]?.trim();
+      const filename = filenameFromDisposition || filenameFromType || `${contentId}.${extension || 'bin'}`;
+
+      out.push({
+        cid: contentId,
+        filename,
+        mimeType: contentType.split(';')[0].trim(),
+        contentBase64,
+      });
+    }
+
+    if (node.parts) {
+      for (const child of node.parts) collectInlineAttachments(child, out);
+    }
+  };
+
+  const extractInlineAttachmentsFromRawMime = (rawBase64: string): InlineAttachment[] => {
+    try {
+      const decoded = Buffer.from(rawBase64, 'base64').toString('utf-8');
+      const root = parseMimeNode(decoded);
+      const attachments: InlineAttachment[] = [];
+      collectInlineAttachments(root, attachments);
+      return attachments;
+    } catch {
+      return [];
+    }
   };
 
   // 5. Build TipTap content (shared by both flows)
   const subjectRaw   = stripNulls((headers?.subject ?? '(Sin asunto)').trim());
   const subject      = isLikelyBinary(subjectRaw) ? '(Sin asunto)' : subjectRaw;
-  const textHtmlRaw  = stripNulls((body?.text_html ?? '').trim());
-  const textHtml     = isLikelyBinary(textHtmlRaw) ? '' : textHtmlRaw;
+
   const textPlainRaw = stripNulls((body?.text_plain ?? '').trim());
-  const textPlain    = isLikelyBinary(textPlainRaw) ? '' : textPlainRaw;
+  const textHtmlRaw  = stripNulls((body?.text_html ?? '').trim());
+
+  let textPlain = isLikelyBinary(textPlainRaw) ? '' : textPlainRaw;
+  let textHtml  = isLikelyBinary(textHtmlRaw) ? '' : textHtmlRaw;
+
+  // If body fields are empty/invalid, try extracting from raw_base64 MIME payload
+  const rawBase64 = body?.raw_base64 || '';
+  if (!textPlain && rawBase64) {
+    textPlain = tryExtractFromRawMime(rawBase64, 'text/plain');
+  }
+  if (!textHtml && rawBase64) {
+    textHtml = tryExtractFromRawMime(rawBase64, 'text/html');
+  }
+
+  // Extract inline attachments (e.g. embedded images with cid: in HTML)
+  const inlineAttachments = rawBase64 ? extractInlineAttachmentsFromRawMime(rawBase64) : [];
 
   let contentJson: object;
   if (textHtml) {
@@ -263,6 +458,32 @@ export async function POST(request: NextRequest) {
   } else {
     contentJson = plainTextToTipTap(`Correo de ${envelope.sender}`);
   }
+
+  // Helper: replace CID references in HTML with attachment URLs
+  const renderCidImages = (
+    html: string,
+    attachmentMap: Record<string, string>, // filename -> attachmentId
+  ) => {
+    if (!html || Object.keys(attachmentMap).length === 0) return html;
+
+    return html.replace(/cid:([^"'\s>]+)/gi, (_match, cidRaw) => {
+      const cid = cidRaw.split('@')[0];
+      const candidates = [cid, `${cid}.jpg`, `${cid}.png`, `${cid}.jpeg`, `${cid}.gif`];
+      for (const candidate of candidates) {
+        const attachmentId = attachmentMap[candidate];
+        if (attachmentId) {
+          return `/api/attachments/${attachmentId}`;
+        }
+      }
+      // Try to match by filename suffix
+      for (const [filename, attachmentId] of Object.entries(attachmentMap)) {
+        if (cid.endsWith(filename) || filename.endsWith(cid)) {
+          return `/api/attachments/${attachmentId}`;
+        }
+      }
+      return _match;
+    });
+  };
 
   // 6. Ticket code detection — try UPDATE FLOW first
   const ticketCode = extractTicketCode(subject);
@@ -284,24 +505,62 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Failed to create task comment' }, { status: 500 });
       }
 
-      // Save attachments linked to the task note
+      // Save attachments (including inline images) linked to the task note
+      const allAttachments = [...attachments];
+      for (const inline of inlineAttachments) {
+        if (!allAttachments.some((a) => a.filename === inline.filename)) {
+          allAttachments.push({
+            filename: inline.filename,
+            content_type: inline.mimeType,
+            size_bytes: Buffer.from(inline.contentBase64, 'base64').length,
+            content_base64: inline.contentBase64,
+          });
+        }
+      }
+
       const savedAttachments: string[] = [];
-      for (const att of attachments) {
+      const attachmentMap: Record<string, string> = {};
+      for (let i = 0; i < allAttachments.length; i += 1) {
+        const att = allAttachments[i];
+        const filename = (typeof att.filename === 'string' && att.filename.trim()) ? att.filename : `attachment-${i}`;
+        const contentBase64 = typeof att.content_base64 === 'string' ? att.content_base64 : '';
+        if (!contentBase64) {
+          console.warn('[mail] Skipping attachment without base64 content', filename);
+          continue;
+        }
+
         try {
-          const buffer = Buffer.from(att.content_base64, 'base64');
+          const buffer = Buffer.from(contentBase64, 'base64');
           const saved = await prisma.attachment.create({
             data: {
               noteId: existingTask.id,
-              filename: sanitizeFilename(att.filename),
-              originalName: att.filename,
+              filename: sanitizeFilename(filename),
+              originalName: filename,
               mimeType: att.content_type || 'application/octet-stream',
               size: att.size_bytes ?? buffer.length,
               data: buffer,
             },
           });
           savedAttachments.push(saved.id);
+
+          const attWithCid = att as { filename: string; cid?: string };
+          attachmentMap[filename] = saved.id;
+          if (attWithCid.cid) {
+            attachmentMap[attWithCid.cid] = saved.id;
+          }
         } catch (err) {
-          console.error(`[mail] Failed to save attachment "${att.filename}":`, err);
+          console.error(`[mail] Failed to save attachment "${filename}":`, err);
+        }
+      }
+
+      // If the comment contains cid images, update it to use web-accessible URLs
+      if (typeof contentJson === 'object' && contentJson !== null) {
+        const json = contentJson as Record<string, unknown>;
+        if (json.type === 'html' && typeof json.html === 'string') {
+          const replaced = renderCidImages(json.html, attachmentMap);
+          if (replaced !== json.html) {
+            await updateTaskComment(comment.id, { content: { ...json, html: replaced } });
+          }
         }
       }
 
@@ -343,24 +602,52 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to create note' }, { status: 500 });
   }
 
-  // Save attachments linked to the new note/task
+  // Save attachments (including inline images) linked to the new note/task
+  const allAttachments = [...attachments];
+  for (const inline of inlineAttachments) {
+    if (!allAttachments.some((a) => a.filename === inline.filename)) {
+      allAttachments.push({
+        filename: inline.filename,
+        content_type: inline.mimeType,
+        size_bytes: Buffer.from(inline.contentBase64, 'base64').length,
+        content_base64: inline.contentBase64,
+      });
+    }
+  }
+
   const savedAttachments: string[] = [];
-  for (const att of attachments) {
+  const attachmentMap: Record<string, string> = {};
+
+  for (let i = 0; i < allAttachments.length; i += 1) {
+    const att = allAttachments[i];
+    const filename = (typeof att.filename === 'string' && att.filename.trim()) ? att.filename : `attachment-${i}`;
+    const contentBase64 = typeof att.content_base64 === 'string' ? att.content_base64 : '';
+    if (!contentBase64) {
+      console.warn('[mail] Skipping attachment without base64 content', filename);
+      continue;
+    }
+
     try {
-      const buffer = Buffer.from(att.content_base64, 'base64');
+      const buffer = Buffer.from(contentBase64, 'base64');
       const saved = await prisma.attachment.create({
         data: {
           noteId: note.id,
-          filename: sanitizeFilename(att.filename),
-          originalName: att.filename,
+          filename: sanitizeFilename(filename),
+          originalName: filename,
           mimeType: att.content_type || 'application/octet-stream',
           size: att.size_bytes ?? buffer.length,
           data: buffer,
         },
       });
       savedAttachments.push(saved.id);
+
+      const attWithCid = att as { filename: string; cid?: string };
+      attachmentMap[filename] = saved.id;
+      if (attWithCid.cid) {
+        attachmentMap[attWithCid.cid] = saved.id;
+      }
     } catch (err) {
-      console.error(`[mail] Failed to save attachment "${att.filename}":`, err);
+      console.error(`[mail] Failed to save attachment "${filename}":`, err);
     }
   }
 

@@ -53,6 +53,7 @@ export function NotesList() {
     selectedClientId,
     setSelectedClientId,
     clients,
+    projects,
     refreshNotes,
     editorModal,
     openEditorModal,
@@ -84,8 +85,10 @@ export function NotesList() {
     let titleText = '';
     if (note.type === 'task') {
       const taskNote = note as TaskNote;
+      const project = projects.find(p => p.id === taskNote.projectId);
+      const isGeneralTask = project?.name?.toLowerCase() === 'general';
       if (taskNote.ticketPhaseCode) {
-        titleText = `#${taskNote.ticketPhaseCode} ${taskNote.shortDescription || note.title || ''}`;
+        titleText = `${isGeneralTask ? '#' : ''}${taskNote.ticketPhaseCode} ${taskNote.shortDescription || note.title || ''}`;
       } else {
         titleText = note.title || '';
       }
@@ -679,6 +682,36 @@ export function NotesList() {
 
                     {/* type icon */}
                     <Icon size={14} className={`flex-shrink-0 ${typeColors[note.type]}`} />
+
+                    {/* Hide from Recents (only shown in Recents view) */}
+                    {currentView === 'recents' && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void (async () => {
+                            try {
+                              const res = await fetch(`/api/notes/${note.id}/hide-from-recents`, { method: 'POST' });
+                              if (!res.ok) {
+                                const body = await res.json().catch(() => null);
+                                const errMsg = body?.error || `HTTP ${res.status}`;
+                                console.error('Failed to hide note from recents', errMsg);
+                                setToast({ message: `Error al quitar de recientes: ${errMsg}` });
+                                return;
+                              }
+                              setToast({ message: 'Nota removida de Recientes' });
+                              await refreshNotes();
+                            } catch (err) {
+                              console.error('Failed to hide note from recents', err);
+                              setToast({ message: 'Error al quitar de recientes' });
+                            }
+                          })();
+                        }}
+                        title="Quitar de recientes"
+                        className="p-1 text-gray-500 hover:text-white transition-colors"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
                   </div>
                 </div>
                 
@@ -690,7 +723,12 @@ export function NotesList() {
                       <h3 className="text-sm font-medium text-white flex-1 break-words">
                         {note.type === 'task' && (note as TaskNote).ticketPhaseCode ? (
                           <>
-                            <span className="text-blue-400 font-semibold">#{(note as TaskNote).ticketPhaseCode}</span>
+                            {(() => {
+                              const task = note as TaskNote;
+                              const project = projects.find(p => p.id === task.projectId);
+                              const isGeneralTask = project?.name?.toLowerCase() === 'general';
+                              return <span className="text-blue-400 font-semibold">{`${isGeneralTask ? '#' : ''}${task.ticketPhaseCode}`}</span>;
+                            })()}
                             {' '}{(note as TaskNote).shortDescription || note.title || 'Sin título'}
                           </>
                         ) : (

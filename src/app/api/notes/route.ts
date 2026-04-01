@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
-import { listNotes, createNote } from '@/lib/repositories/notes-repo';
+import { listNotes, createNote, findTaskByTicketAndProject } from '@/lib/repositories/notes-repo';
 import { 
   createActivityLog, 
   createPlaceholderTimesheet,
   getPlaceholderTimesheetDescription,
   shouldCreatePlaceholderTimesheet 
 } from '@/lib/repositories/activity-log-repo';
-import type { Note, NoteType, CreateNoteInput } from '@/lib/types';
+import type { Note, NoteType, CreateNoteInput, TaskNote } from '@/lib/types';
 
 // GET /api/notes - List all notes
 export async function GET(request: Request) {
@@ -16,10 +16,12 @@ export async function GET(request: Request) {
     const includeArchived = searchParams.get('includeArchived') === 'true';
     const search = searchParams.get('search') || undefined;
     
+    const updatedAfter = searchParams.get('since');
     const notes = await listNotes({
       type: type || undefined,
       includeArchived,
       search,
+      updatedAfter: updatedAfter ? new Date(updatedAfter) : undefined,
     });
     
     return NextResponse.json(notes);
@@ -44,7 +46,25 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    
+
+    // REQ: Prevent duplicate task ticket-phase within same project
+    if (body.type === 'task') {
+      const taskBody = body as CreateNoteInput<TaskNote>;
+      if (taskBody.ticketPhaseCode) {
+        const collision = await findTaskByTicketAndProject(taskBody.ticketPhaseCode, taskBody.projectId || null);
+        if (collision) {
+          return NextResponse.json(
+            {
+              error: 'Task with this ticket/phase already exists',
+              existingId: collision.id,
+              existingTitle: collision.title,
+            },
+            { status: 409 }
+          );
+        }
+      }
+    }
+
     if (!body.title || typeof body.title !== 'string') {
       return NextResponse.json(
         { error: 'Title is required' },

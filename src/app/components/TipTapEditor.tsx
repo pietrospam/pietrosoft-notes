@@ -6,7 +6,8 @@ import Placeholder from '@tiptap/extension-placeholder';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
 import DOMPurify from 'dompurify';
-import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle, useState } from 'react';
+import { useApp } from '../context/AppContext';
 import { 
   Bold, 
   Italic, 
@@ -20,6 +21,8 @@ import {
   Redo,
   ImagePlus,
 } from 'lucide-react';
+import { copyHtmlWithEmbeddedImages } from '@/lib/clipboard';
+import { Toast } from './Toast';
 
 interface TipTapEditorProps {
   content: object | null;
@@ -30,16 +33,22 @@ interface TipTapEditorProps {
   onAttachmentAdded?: () => void; // Called when an image/attachment is added (for refreshing comments)
   readOnly?: boolean; // disable editing and hide toolbar
   compact?: boolean; // reduce height for inline comment inputs
+  copyWithImagesOnCopy?: boolean; // If enabled, intercept Ctrl+C and embed images
 }
 
 export interface TipTapEditorHandle {
   focus: () => void;
+  getHTML: () => string;
+  getText: () => string;
 }
 
-export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(function TipTapEditor({ content, onChange, placeholder = 'Start writing...', noteId, onPersistNote, onAttachmentAdded, readOnly = false, compact = false }, ref) {
+export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(function TipTapEditor({ content, onChange, placeholder = 'Start writing...', noteId, onPersistNote, onAttachmentAdded, readOnly = false, compact = false, copyWithImagesOnCopy }, ref) {
+  const { copyWithImagesOnCopy: globalCopyWithImagesOnCopy } = useApp();
+  const effectiveCopyWithImagesOnCopy = copyWithImagesOnCopy ?? globalCopyWithImagesOnCopy;
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   
   // Use ref for noteId to avoid stale closure in editor handlers
   const noteIdRef = useRef(noteId);
@@ -188,17 +197,50 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
         
         return true;
       },
+      handleKeyDown: (view, event) => {
+        if (!effectiveCopyWithImagesOnCopy) return false;
+        if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'c') return false;
+
+        const selection = getSelectionHtml();
+        if (!selection) return false;
+
+        event.preventDefault();
+        const htmlToCopy = selection.html || editor?.getHTML() || '';
+        const textToCopy = selection.text || editor?.getText() || '';
+        copyHtmlWithEmbeddedImages(htmlToCopy, textToCopy)
+          .then(() => setToastMessage('Copiado con imágenes al portapapeles'))
+          .catch((err) => {
+            console.error('Copy with images failed:', err);
+            setToastMessage('Error al copiar con imágenes');
+          });
+        return true;
+      },
     },
     onUpdate: ({ editor }) => {
       onChangeRef.current(editor.getJSON());
     },
   });
 
+  const getSelectionHtml = useCallback(() => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return null;
+
+    const anchor = selection.anchorNode;
+    if (!anchor || !editor?.view.dom.contains(anchor)) return null;
+
+    const range = selection.getRangeAt(0);
+    const container = document.createElement('div');
+    container.appendChild(range.cloneContents());
+    return { html: container.innerHTML, text: selection.toString() };
+  }, [editor]);
+
   // Expose focus method via ref
   useImperativeHandle(ref, () => ({
     focus: () => {
       editor?.chain().focus().run();
     },
+    getHTML: () => editor?.getHTML() ?? '',
+    getText: () => editor?.getText() ?? '',
   }), [editor]);
 
   // Sync editable state with readOnly prop
@@ -226,8 +268,12 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
   if (isRawHTML) {
     const html = (content as { html?: string }).html ?? '';
     const clean = DOMPurify.sanitize(html, {
-      ADD_TAGS: ['iframe'],
-      ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling'],
+      ADD_TAGS: ['iframe', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'style', 'span', 'div', 'font'],
+      ADD_ATTR: [
+        'allow', 'allowfullscreen', 'frameborder', 'scrolling',
+        'style', 'class', 'id', 'dir', 'cellpadding', 'cellspacing', 'valign', 'align', 'border',
+      ],
+      FORBID_TAGS: ['meta', 'link', 'base'],
     });
     return (
       <div
@@ -371,6 +417,10 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
       
       {/* Editor */}
       <EditorContent editor={editor} />
+
+      {toastMessage && (
+        <Toast message={toastMessage} onClose={() => setToastMessage(null)} />
+      )}
     </div>
   );
 });

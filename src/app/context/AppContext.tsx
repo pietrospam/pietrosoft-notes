@@ -38,6 +38,7 @@ interface AppState {
   isDirty: boolean; // Has unsaved changes
   isNewNote: boolean; // Is the selected note new (not yet saved to DB)
   autoSaveEnabled: boolean; // Auto-save preference
+  copyWithImagesOnCopy: boolean; // Intercept Ctrl+C and embed images (Outlook-friendly)
   showUnsavedModal: boolean; // Show unsaved changes modal
   pendingAction: (() => void) | null; // Action to execute after save/discard
   lastSaved: Date | null;
@@ -84,6 +85,7 @@ interface AppContextValue extends AppState {
   setIsNewNote: (isNew: boolean) => void;
   setPendingChanges: (changes: Partial<Note>) => void; // Sync pending changes from inline editors
   toggleAutoSave: () => void;
+  setCopyWithImagesOnCopy: (enabled: boolean) => void;
   confirmNavigation: (action: () => void) => boolean; // Returns true if can proceed immediately
   saveCurrentNote: () => Promise<void>;
   persistNewNote: (noteData: Partial<Note>) => Promise<Note | null>; // Save new note to DB for first time
@@ -171,6 +173,7 @@ export function AppProvider({ children }: AppProviderProps) {
     isDirty: false,
     isNewNote: false, // Is current note new (not yet in DB)
     autoSaveEnabled: true, // Default to enabled
+    copyWithImagesOnCopy: false, // Ctrl+C should embed images by default off
     showUnsavedModal: false,
     pendingAction: null,
     lastSaved: null,
@@ -205,6 +208,11 @@ export function AppProvider({ children }: AppProviderProps) {
     const saved = localStorage.getItem('bitacora-autosave');
     if (saved !== null) {
       setState(s => ({ ...s, autoSaveEnabled: saved === 'true' }));
+    }
+
+    const savedCopyImages = localStorage.getItem('bitacora-copy-images-on-copy');
+    if (savedCopyImages !== null) {
+      setState(s => ({ ...s, copyWithImagesOnCopy: savedCopyImages === 'true' }));
     }
 
     const savedRecentHours = localStorage.getItem('bitacora-recents-hours');
@@ -249,9 +257,32 @@ export function AppProvider({ children }: AppProviderProps) {
   // Ref to track current notes for optimistic updates (avoids stale closure)
   const notesRef = useRef<Note[]>([]);
   notesRef.current = state.notes;
-  
+
+  // Ref to track last seen updatedAt (for polling new/updated notes)
+  const lastUpdateRef = useRef<string | null>(null);
+
   // Ref to track pending changes for save
   const pendingChangesRef = useRef<Partial<Note>>({});
+
+  // Audio notification for new/updated notes via mail ingest
+  const playNotificationSound = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ctx = new ((window as any).AudioContext || (window as any).webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+      gain.gain.value = 0.1;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.12);
+    } catch {
+      // ignore if audio not available
+    }
+  }, []);
 
   // Fetch clients from API
   const refreshClients = useCallback(async () => {
@@ -276,8 +307,14 @@ export function AppProvider({ children }: AppProviderProps) {
       setState(s => ({ ...s, isLoading: true }));
       const response = await fetch('/api/notes');
       if (response.ok) {
-        const notes = await response.json();
+        const notes: Note[] = await response.json();
         setState(s => ({ ...s, notes, isLoading: false }));
+        // Track last updatedAt for polling
+        const maxUpdated = notes.reduce((max, note) => {
+          const t = new Date(note.updatedAt).toISOString();
+          return t > max ? t : max;
+        }, lastUpdateRef.current || new Date(0).toISOString());
+        lastUpdateRef.current = maxUpdated;
       }
     } catch (error) {
       console.error('Failed to fetch notes:', error);
@@ -695,11 +732,40 @@ export function AppProvider({ children }: AppProviderProps) {
     });
   }, []);
 
+  // Enable/disable embedding images when copying (Ctrl+C)
+  const setCopyWithImagesOnCopy = useCallback((enabled: boolean) => {
+    setState(s => {
+      localStorage.setItem('bitacora-copy-images-on-copy', String(enabled));
+      return { ...s, copyWithImagesOnCopy: enabled };
+    });
+  }, []);
+
   // Initial load
   useEffect(() => {
     refreshNotes();
     refreshClients();
   }, [refreshNotes, refreshClients]);
+
+  // Poll for new/updated notes (used for mail-ingest notifications)
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const lastUpdate = lastUpdateRef.current;
+        if (!lastUpdate) return;
+        const res = await fetch(`/api/notes?since=${encodeURIComponent(lastUpdate)}`);
+        if (!res.ok) return;
+        const newNotes: Note[] = await res.json();
+        if (newNotes.length > 0) {
+          playNotificationSound();
+          refreshNotes();
+        }
+      } catch {
+        // ignore polling errors
+      }
+    }, 8000);
+
+    return () => clearInterval(interval);
+  }, [refreshNotes, playNotificationSound]);
 
   // Helper to get client for a note
   const getClientForNote = useCallback((note: Note): Client | null => {
@@ -890,6 +956,7 @@ export function AppProvider({ children }: AppProviderProps) {
     setPendingChanges: (changes) => { pendingChangesRef.current = changes; },
     setIsNewNote: (isNew) => setState(s => ({ ...s, isNewNote: isNew })),
     toggleAutoSave,
+    setCopyWithImagesOnCopy,
     confirmNavigation,
     saveCurrentNote,
     discardAndExecute,
