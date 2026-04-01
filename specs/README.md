@@ -16,6 +16,8 @@ Este directorio contiene las especificaciones técnicas del proyecto Pietrosoft 
 | [SPEC-008](SPEC-008-system-comments.md) | System Comments | ✅ Completed | Comentarios automáticos del sistema en tareas |
 | [SPEC-009](SPEC-009-todos.md) | Sistema de TODOs | 📝 Draft | Recordatorios con deadline, notificaciones in-app y Telegram |
 | [SPEC-010](SPEC-010-attachment-ux.md) | Mejoras UX de Anexos | ✅ Completed | Multi-upload, iconos por tipo, preview condicional |
+| [SPEC-011](SPEC-011-recientes.md) | Recientes | ✅ Completed | Vista de notas recientes |
+| [SPEC-012](SPEC-012-facturacion.md) | Facturación | 📝 Draft | Facturación de TimeSheets por Cliente Padre con API externa |
 ## Estados
 
 - ✅ **Completed** - Implementación finalizada

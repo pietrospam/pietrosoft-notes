@@ -34,6 +34,8 @@ interface BackupManifest {
     activityLogs: number;
     taskComments?: number;
     taskTodos?: number;
+    billingMethods?: number;
+    billingRuns?: number;
   };
   taskTodosError?: string;
   appVersion: string;
@@ -244,7 +246,7 @@ export async function POST(request: NextRequest) {
     // Export database tables
     const { prisma } = await import('@/lib/db');
 
-    const [clients, projects, notes, attachments, activityLogs, timesheets, taskComments] = await Promise.all([
+    const [clients, projects, notes, attachments, activityLogs, timesheets, taskComments, billingMethods, billingRuns] = await Promise.all([
       prisma.client.findMany(),
       prisma.project.findMany(),
       prisma.note.findMany(),
@@ -252,6 +254,8 @@ export async function POST(request: NextRequest) {
       prisma.taskActivityLog.findMany(),
       prisma.timesheet.findMany(),
       prisma.taskComment.findMany(),
+      prisma.billingMethod.findMany(),
+      prisma.billingRun.findMany(),
     ]);
 
     // Task todos may not exist in older schemas (missing client_id column), so fallback gracefully.
@@ -288,6 +292,8 @@ export async function POST(request: NextRequest) {
         activityLogs: activityLogs.length,
         taskComments: taskComments.length,
         taskTodos: taskTodos.length,
+        billingMethods: billingMethods.length,
+        billingRuns: billingRuns.length,
       },
       taskTodosError,
       appVersion: '1.0.0',
@@ -311,6 +317,16 @@ export async function POST(request: NextRequest) {
       data: a.data.toString('base64'),
     }));
     archive.append(JSON.stringify(attachmentsWithData, null, 2), { name: 'db/attachments.json' });
+    
+    // Billing methods (no binary data)
+    archive.append(JSON.stringify(billingMethods, null, 2), { name: 'db/billingMethods.json' });
+    
+    // Billing runs - encode pdfData (Bytes?) to base64
+    const billingRunsWithData = billingRuns.map(r => ({
+      ...r,
+      pdfData: r.pdfData ? r.pdfData.toString('base64') : null,
+    }));
+    archive.append(JSON.stringify(billingRunsWithData, null, 2), { name: 'db/billingRuns.json' });
     
     // Add data directory if exists
     const dataDir = process.env.DATA_DIR || './data';

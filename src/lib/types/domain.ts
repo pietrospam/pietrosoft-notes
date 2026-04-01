@@ -303,3 +303,84 @@ export interface TodoNotificationConfig {
 }
 
 export type TodoNotificationType = 'daily_summary' | 'reminder' | 'overdue';
+
+// ============================================================================
+// REQ-026: Billing Types
+// ============================================================================
+
+export type BillingAuthType = 'none' | 'bearer' | 'basic' | 'apiKeyHeader' | 'apiKeyQuery';
+
+export interface BillingAuthConfig {
+  token?: string;        // For bearer
+  username?: string;     // For basic
+  password?: string;     // For basic
+  headerName?: string;   // For apiKeyHeader
+  headerValue?: string;  // For apiKeyHeader
+  queryParam?: string;   // For apiKeyQuery
+  queryValue?: string;   // For apiKeyQuery
+}
+
+export interface BillingMethod {
+  id: UUID;
+  name: string;
+  endpointUrl: string;
+  authType: BillingAuthType;
+  authConfig?: BillingAuthConfig;
+  payloadTemplate?: Record<string, unknown>; // Template JSON for invoice payload
+  nextInvoiceNumber: number; // Per-method invoice counter
+  invoicePrefix?: string; // Optional prefix e.g. "FAC-"
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CreateBillingMethodInput = Omit<BillingMethod, 'id' | 'createdAt' | 'updatedAt'>;
+export type UpdateBillingMethodInput = Partial<CreateBillingMethodInput>;
+
+export type BillingRunStatus = 'pending' | 'success' | 'failed';
+
+export interface BillingRun {
+  id: UUID;
+  clientParentId: UUID;
+  year: number;
+  month: number;
+  methodId: UUID;
+  invoiceNumber?: string;
+  totalHours: number;
+  totalAmount?: number;
+  currency?: string;
+  requestJson: Record<string, unknown>;
+  responseStatus?: number;
+  responseBody?: string;
+  pdfFilename?: string;
+  status: BillingRunStatus;
+  errorText?: string;
+  createdAt: string;
+  updatedAt: string;
+  // Enriched (optional, from joins)
+  clientName?: string;
+  methodName?: string;
+}
+
+export interface BillingPreview {
+  clientParentId: UUID;
+  clientName: string;
+  year: number;
+  month: number;
+  totalHours: number;
+  entryCount: number;
+  entries: Array<{
+    taskCode: string;
+    taskTitle: string;
+    projectName: string;
+    hours: number;
+  }>;
+}
+
+export interface CreateBillingRunInput {
+  clientParentId: UUID;
+  year: number;
+  month: number;
+  methodId: UUID;
+  requestJsonOverride?: Record<string, unknown>; // Optional override of generated payload
+}

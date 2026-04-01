@@ -2,7 +2,7 @@
 
 import { useEffect, useCallback, useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
-import { TopBar, Sidebar, NotesList, ConfigPanel, TimeSheetView, UnsavedChangesModal, FloatingActionButton, Toast, GlobalDropZone, TodosCardsView } from './components';
+import { TopBar, Sidebar, NotesList, ConfigPanel, TimeSheetView, UnsavedChangesModal, FloatingActionButton, Toast, GlobalDropZone, TodosCardsView, BillingScreen } from './components';
 import { TaskEditorModal } from './components/TaskEditorModal';
 import { NoteEditorModal } from './components/NoteEditorModal';
 import { ConnectionEditorModal } from './components/ConnectionEditorModal';
@@ -120,6 +120,21 @@ function MainContent() {
     return (
       <>
         <TimeSheetView />
+        <UnsavedChangesModal
+          isOpen={showUnsavedModal}
+          onDiscard={discardAndExecute}
+          onCancel={cancelPendingAction}
+          onSave={saveAndExecute}
+        />
+      </>
+    );
+  }
+
+  // REQ-026: Billing view
+  if (currentView === 'billing') {
+    return (
+      <>
+        <BillingScreen />
         <UnsavedChangesModal
           isOpen={showUnsavedModal}
           onDiscard={discardAndExecute}

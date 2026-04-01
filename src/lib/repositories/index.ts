@@ -4,3 +4,4 @@ export * from './projects-repo';
 export * from './notes-repo';
 export * from './activity-log-repo';  // REQ-010
 export * from './todo-repo';  // REQ-021
+export * from './billing-repo';  // REQ-026

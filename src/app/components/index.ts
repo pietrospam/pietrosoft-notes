@@ -30,3 +30,5 @@ export { TodoEditModal } from './TodoEditModal';
 export { Toast } from './Toast';
 export { GlobalDropZone } from './GlobalDropZone';
 export { TelegramConfig } from './TelegramConfig';
+export { BillingScreen } from './BillingScreen';
+export { BillingMethodsManager } from './BillingMethodsManager';

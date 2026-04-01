@@ -8,7 +8,7 @@ import type { ConfigTab } from '../components/ConfigPanel';
 // Types
 // ============================================================================
 
-export type ViewType = 'all' | 'general' | 'task' | 'connection' | 'timesheets' | 'archived' | 'config' | 'favorites' | 'todos' | 'recents'; // REQ-006: Added favorites, REQ-011: Added recents, REQ-021: Added todos
+export type ViewType = 'all' | 'general' | 'task' | 'connection' | 'timesheets' | 'archived' | 'config' | 'favorites' | 'todos' | 'recents' | 'billing'; // REQ-006: Added favorites, REQ-011: Added recents, REQ-021: Added todos, REQ-026: Added billing
 
 export type ActiveTab = 'bitacora' | 'conexiones' | 'timesheets'; // REQ-010: Main navigation tabs
 

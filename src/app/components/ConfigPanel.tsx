@@ -4,10 +4,11 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Building2, FolderKanban, Database, Download, Upload, Loader2, Settings, Save, Clock, Trash2, Server, Shield, ShieldOff, RotateCcw, RefreshCw, Plus, FolderOpen, Timer, Calendar, Clipboard } from 'lucide-react';
 import { ClientsManager } from './ClientsManager';
 import { ProjectsManager } from './ProjectsManager';
+import { BillingMethodsManager } from './BillingMethodsManager';
 import { useApp } from '../context/AppContext';
 import { InfoModal } from './InfoModal';
 
-export type ConfigTab = 'clients' | 'projects' | 'backup' | 'preferences';
+export type ConfigTab = 'clients' | 'projects' | 'backup' | 'preferences' | 'billing';
 
 interface BackupMetadata {
   filename: string;
@@ -1065,6 +1066,19 @@ export function ConfigPanel() {
               <Settings size={18} />
               Preferencias
             </button>
+            <button
+              onClick={() => setActiveTab('billing')}
+              className={`
+                w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors
+                ${activeTab === 'billing'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                }
+              `}
+            >
+              <Clipboard size={18} />
+              Facturación
+            </button>
           </nav>
         </div>
       </div>
@@ -1075,6 +1089,7 @@ export function ConfigPanel() {
         {activeTab === 'projects' && <ProjectsManager />}
         {activeTab === 'backup' && <BackupManager />}
         {activeTab === 'preferences' && <PreferencesManager />}
+        {activeTab === 'billing' && <BillingMethodsManager />}
       </div>
     </div>
   );

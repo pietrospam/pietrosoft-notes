@@ -59,10 +59,14 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       attachments: 0,
       activityLogs: 0,
       taskComments: 0,
+      billingMethods: 0,
+      billingRuns: 0,
     };
     
     // Delete existing data in correct order (respecting FK constraints)
     await prisma.$transaction([
+      prisma.billingRun.deleteMany(),
+      prisma.billingMethod.deleteMany(),
       prisma.taskComment.deleteMany(),
       prisma.taskActivityLog.deleteMany(),
       prisma.attachment.deleteMany(),
@@ -126,6 +130,27 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await prisma.taskComment.createMany({ data: taskComments as any });
       counts.taskComments = taskComments.length;
+    }
+    
+    // Restore billing methods
+    const billingMethods = await readJson('db/billingMethods.json');
+    if (billingMethods && Array.isArray(billingMethods)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await prisma.billingMethod.createMany({ data: billingMethods as any });
+      counts.billingMethods = billingMethods.length;
+    }
+    
+    // Restore billing runs - decode pdfData from base64
+    const billingRuns = await readJson('db/billingRuns.json');
+    if (billingRuns && Array.isArray(billingRuns)) {
+      interface BillingRunJson { [key: string]: unknown; pdfData: string | null; }
+      const withBinary = (billingRuns as BillingRunJson[]).map(r => ({
+        ...r,
+        pdfData: r.pdfData ? Buffer.from(r.pdfData, 'base64') : null,
+      }));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await prisma.billingRun.createMany({ data: withBinary as any });
+      counts.billingRuns = billingRuns.length;
     }
     
     // Optionally restore data directory files

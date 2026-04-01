@@ -217,6 +217,54 @@ model TaskTodo {
   @@map("task_todos")
 }
 
+// REQ-026: Billing Method configuration
+model BillingMethod {
+  id               String   @id @default(uuid())
+  name             String   @db.VarChar(255)
+  endpointUrl      String   @map("endpoint_url")
+  authType         String   @default("none") @map("auth_type") @db.VarChar(50) // none, bearer, basic, apiKeyHeader, apiKeyQuery
+  authConfig       Json?    @map("auth_config") // { token, username, password, headerName, queryParam, etc. }
+  payloadTemplate    Json?    @map("payload_template") // Template JSON for building the request
+  nextInvoiceNumber  Int      @default(1) @map("next_invoice_number") // Per-method invoice counter
+  invoicePrefix      String?  @map("invoice_prefix") @db.VarChar(20) // Optional prefix e.g. "FAC-"
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @default(now()) @map("updated_at")
+
+  billingRuns      BillingRun[]
+
+  @@map("billing_methods")
+}
+
+// REQ-026: Billing Run (each invoice execution)
+model BillingRun {
+  id              String   @id @default(uuid())
+  clientParentId  String   @map("client_parent_id")
+  year            Int
+  month           Int
+  methodId        String   @map("method_id")
+  invoiceNumber   String?  @map("invoice_number") @db.VarChar(50)
+  totalHours      Float    @map("total_hours")
+  totalAmount     Float?   @map("total_amount")
+  currency        String?  @db.VarChar(10)
+  requestJson     Json     @map("request_json")
+  responseStatus  Int?     @map("response_status")
+  responseBody    String?  @map("response_body")
+  pdfData         Bytes?   @map("pdf_data")
+  pdfFilename     String?  @map("pdf_filename") @db.VarChar(255)
+  status          String   @default("pending") @db.VarChar(20) // pending, success, failed
+  errorText       String?  @map("error_text")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @map("updated_at")
+
+  method          BillingMethod @relation(fields: [methodId], references: [id], onUpdate: NoAction)
+
+  @@index([clientParentId])
+  @@index([methodId])
+  @@index([year, month])
+  @@map("billing_runs")
+}
+
 // Tracking sent notifications to avoid duplicates (REQ-021)
 model TodoNotificationSent {
   id               String   @id @default(uuid())
