@@ -34,6 +34,7 @@ interface BackupManifest {
     activityLogs: number;
     taskComments?: number;
     taskTodos?: number;
+    todoNotificationsSent?: number;
     billingMethods?: number;
     billingRuns?: number;
   };
@@ -246,7 +247,7 @@ export async function POST(request: NextRequest) {
     // Export database tables
     const { prisma } = await import('@/lib/db');
 
-    const [clients, projects, notes, attachments, activityLogs, timesheets, taskComments, billingMethods, billingRuns] = await Promise.all([
+    const [clients, projects, notes, attachments, activityLogs, timesheets, taskComments, billingMethods, billingRuns, todoNotificationsSent] = await Promise.all([
       prisma.client.findMany(),
       prisma.project.findMany(),
       prisma.note.findMany(),
@@ -256,6 +257,7 @@ export async function POST(request: NextRequest) {
       prisma.taskComment.findMany(),
       prisma.billingMethod.findMany(),
       prisma.billingRun.findMany(),
+      prisma.todoNotificationSent.findMany(),
     ]);
 
     // Task todos may not exist in older schemas (missing client_id column), so fallback gracefully.
@@ -284,7 +286,7 @@ export async function POST(request: NextRequest) {
       description,
       protected: isProtected,
       stats: {
-        notes: notes.length,
+          notes: notes.length,
         clients: clients.length,
         projects: projects.length,
         attachments: attachments.length,
@@ -292,6 +294,7 @@ export async function POST(request: NextRequest) {
         activityLogs: activityLogs.length,
         taskComments: taskComments.length,
         taskTodos: taskTodos.length,
+        todoNotificationsSent: todoNotificationsSent.length,
         billingMethods: billingMethods.length,
         billingRuns: billingRuns.length,
       },
@@ -310,6 +313,7 @@ export async function POST(request: NextRequest) {
     archive.append(JSON.stringify(activityLogs, null, 2), { name: 'db/activityLogs.json' });
     archive.append(JSON.stringify(taskComments, null, 2), { name: 'db/taskComments.json' });
     archive.append(JSON.stringify(taskTodos, null, 2), { name: 'db/taskTodos.json' });
+    archive.append(JSON.stringify(todoNotificationsSent, null, 2), { name: 'db/todoNotificationsSent.json' });
     
     // Encode attachment data to base64
     const attachmentsWithData = attachments.map(a => ({
@@ -330,6 +334,9 @@ export async function POST(request: NextRequest) {
     
     // Add data directory if exists
     const dataDir = process.env.DATA_DIR || './data';
+    const telegramConfigPath = process.env.WORKSPACE_PATH
+      ? path.join(process.env.WORKSPACE_PATH, 'telegram-config.json')
+      : path.join(dataDir, 'telegram-config.json');
     try {
       await fs.access(dataDir);
       
@@ -352,6 +359,14 @@ export async function POST(request: NextRequest) {
       await addDirectory(dataDir, 'data');
     } catch {
       // Data directory doesn't exist - that's fine
+    }
+
+    // Add Telegram configuration if exists
+    try {
+      const telegramConfigContent = await fs.readFile(telegramConfigPath);
+      archive.append(telegramConfigContent, { name: 'config/telegram-config.json' });
+    } catch {
+      // Telegram config file doesn't exist - that's fine
     }
 
     // Add backup settings if exists

@@ -61,10 +61,12 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       taskComments: 0,
       billingMethods: 0,
       billingRuns: 0,
+      todoNotificationsSent: 0,
     };
     
     // Delete existing data in correct order (respecting FK constraints)
     await prisma.$transaction([
+      prisma.todoNotificationSent.deleteMany(),
       prisma.billingRun.deleteMany(),
       prisma.billingMethod.deleteMany(),
       prisma.taskComment.deleteMany(),
@@ -131,6 +133,13 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       await prisma.taskComment.createMany({ data: taskComments as any });
       counts.taskComments = taskComments.length;
     }
+
+    const todoNotificationsSent = await readJson('db/todoNotificationsSent.json');
+    if (todoNotificationsSent && Array.isArray(todoNotificationsSent)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await prisma.todoNotificationSent.createMany({ data: todoNotificationsSent as any });
+      counts.todoNotificationsSent = todoNotificationsSent.length;
+    }
     
     // Restore billing methods
     const billingMethods = await readJson('db/billingMethods.json');
@@ -157,6 +166,24 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     const dataDir = process.env.WORKSPACE_PATH || './data';
     const dataFolders = ['notes', 'clients', 'projects', 'attachments'];
     
+    // Restore config files, if present
+    const telegramConfigFile = zip.file('config/telegram-config.json');
+    if (telegramConfigFile) {
+      const telegramConfigBuffer = await telegramConfigFile.async('nodebuffer');
+      const telegramConfigPath = process.env.WORKSPACE_PATH
+        ? path.join(process.env.WORKSPACE_PATH, 'telegram-config.json')
+        : path.join(process.env.DATA_DIR || './data', 'telegram-config.json');
+      await fs.mkdir(path.dirname(telegramConfigPath), { recursive: true });
+      await fs.writeFile(telegramConfigPath, telegramConfigBuffer);
+    }
+
+    const backupSettingsFile = zip.file('config/backup-settings.json');
+    if (backupSettingsFile) {
+      const backupSettingsBuffer = await backupSettingsFile.async('nodebuffer');
+      const backupSettingsPath = path.join(BACKUP_DIR, 'backup-settings.json');
+      await fs.writeFile(backupSettingsPath, backupSettingsBuffer);
+    }
+
     let filesRestored = 0;
     for (const folder of dataFolders) {
       const prefix = `data/${folder}/`;
