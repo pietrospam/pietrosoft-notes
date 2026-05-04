@@ -262,24 +262,29 @@ export async function getBillingPreview(
     select: { name: true },
   });
 
-  // Get sub-client IDs (including the parent itself)
-  const subClients = await prisma.client.findMany({
+  // Get direct sub-client IDs following the TimeSheet filter semantics.
+  // If the selected client has children, the TimeSheet view counts only those sub-clients.
+  const directChildren = await prisma.client.findMany({
     where: { parentClientId: clientParentId },
     select: { id: true },
   });
-  const clientIds = [clientParentId, ...subClients.map(c => c.id)];
+  const clientIds = directChildren.length > 0
+    ? directChildren.map(c => c.id)
+    : [clientParentId];
 
-  // Date range for the month
-  const startDate = new Date(year, month - 1, 1);
-  const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+  // Date range for the month in UTC, to match the TimeSheet UI month filter
+  const startDate = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
+  const endDate = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
 
-  // Find all FINAL timesheets for these clients in this period
+  // Find all FINAL positive timesheets for these clients in this period
   const timesheets = await prisma.timesheet.findMany({
     where: {
       state: 'FINAL',
+      hoursWorked: { gt: 0 },
       workDate: { gte: startDate, lte: endDate },
       OR: [
         { clientId: { in: clientIds } },
+        { project: { clientId: { in: clientIds } } },
         { task: { project: { clientId: { in: clientIds } } } },
       ],
     },
