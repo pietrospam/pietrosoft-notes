@@ -354,6 +354,8 @@ export interface BillingRun {
   responseBody?: string;
   pdfFilename?: string;
   status: BillingRunStatus;
+  validated: boolean;
+  sentToClient: boolean;
   errorText?: string;
   createdAt: string;
   updatedAt: string;

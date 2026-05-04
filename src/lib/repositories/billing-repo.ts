@@ -112,6 +112,8 @@ function toBillingRun(row: {
   pdfData?: Buffer | null;
   pdfFilename: string | null;
   status: string;
+  validated: boolean;
+  sentToClient: boolean;
   errorText: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -132,6 +134,8 @@ function toBillingRun(row: {
     responseBody: row.responseBody ?? undefined,
     pdfFilename: row.pdfFilename ?? undefined,
     status: row.status as BillingRun['status'],
+    validated: row.validated,
+    sentToClient: row.sentToClient,
     errorText: row.errorText ?? undefined,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -198,6 +202,8 @@ export async function createBillingRun(data: {
       pdfData: data.pdfData ?? null,
       pdfFilename: data.pdfFilename ?? null,
       status: data.status,
+      validated: false,
+      sentToClient: false,
       errorText: data.errorText ?? null,
     },
     include: { method: { select: { name: true } } },
@@ -212,6 +218,9 @@ export async function updateBillingRun(id: string, data: {
   pdfData?: Buffer;
   pdfFilename?: string;
   status?: string;
+  validated?: boolean;
+  sentToClient?: boolean;
+  invoiceNumber?: string;
   errorText?: string;
 }): Promise<BillingRun> {
   const updateData: Record<string, unknown> = { updatedAt: new Date() };
@@ -221,6 +230,9 @@ export async function updateBillingRun(id: string, data: {
   if (data.pdfData !== undefined) updateData.pdfData = data.pdfData;
   if (data.pdfFilename !== undefined) updateData.pdfFilename = data.pdfFilename;
   if (data.status !== undefined) updateData.status = data.status;
+  if (data.validated !== undefined) updateData.validated = data.validated;
+  if (data.sentToClient !== undefined) updateData.sentToClient = data.sentToClient;
+  if (data.invoiceNumber !== undefined) updateData.invoiceNumber = data.invoiceNumber;
   if (data.errorText !== undefined) updateData.errorText = data.errorText;
 
   const row = await prisma.billingRun.update({
@@ -238,13 +250,45 @@ export async function deleteBillingRun(id: string): Promise<void> {
 export async function getBillingRunPdf(id: string): Promise<{ data: Buffer; filename: string } | null> {
   const row = await prisma.billingRun.findUnique({
     where: { id },
-    select: { pdfData: true, pdfFilename: true },
+    select: {
+      pdfData: true,
+      invoiceNumber: true,
+      year: true,
+      month: true,
+      validated: true,
+      clientParentId: true,
+      pdfFilename: true,
+    },
   });
   if (!row?.pdfData) return null;
+
+  const client = await prisma.client.findUnique({
+    where: { id: row.clientParentId },
+    select: { name: true },
+  });
+
+  const clientName = client?.name || 'client';
+  const filename = buildBillingPdfFilename(
+    clientName,
+    row.year,
+    row.month,
+    row.invoiceNumber ?? '00000000',
+    row.validated
+  );
   return {
     data: Buffer.from(row.pdfData),
-    filename: row.pdfFilename || `invoice-${id}.pdf`,
+    filename,
   };
+}
+
+function buildBillingPdfFilename(clientName: string, year: number, month: number, invoiceNumber: string, validated: boolean): string {
+  const cleanClient = clientName
+    .trim()
+    .replace(/\s+/g, '_')
+    .replace(/[^A-Za-z0-9_-]/g, '');
+  const monthStr = String(month).padStart(2, '0');
+  const prefix = validated ? '' : 'TEST_';
+  return `${prefix}${cleanClient}_${year}_${monthStr}_${invoiceNumber}.pdf`;
 }
 
 // ============================================================================
@@ -368,12 +412,28 @@ export async function getNextInvoiceNumber(methodId: string): Promise<string> {
   const method = await prisma.billingMethod.update({
     where: { id: methodId },
     data: { nextInvoiceNumber: { increment: 1 } },
-    select: { nextInvoiceNumber: true, invoicePrefix: true },
+    select: { nextInvoiceNumber: true },
   });
 
   // The value BEFORE increment is nextInvoiceNumber - 1
   const num = method.nextInvoiceNumber - 1;
-  const padded = String(num).padStart(8, '0');
-  const prefix = method.invoicePrefix || '';
-  return `${prefix}${padded}`;
+  return String(num).padStart(8, '0');
+}
+
+export async function peekNextInvoiceNumber(methodId: string): Promise<string> {
+  const method = await prisma.billingMethod.findUnique({
+    where: { id: methodId },
+    select: { nextInvoiceNumber: true },
+  });
+  if (!method) {
+    throw new Error('Billing method not found');
+  }
+  return String(method.nextInvoiceNumber).padStart(8, '0');
+}
+
+export async function bumpBillingMethodInvoiceNumber(methodId: string): Promise<void> {
+  await prisma.billingMethod.update({
+    where: { id: methodId },
+    data: { nextInvoiceNumber: { increment: 1 } },
+  });
 }

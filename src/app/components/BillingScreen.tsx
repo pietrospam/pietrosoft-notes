@@ -11,7 +11,6 @@ import {
   RotateCcw,
   Eye,
   X,
-  ChevronDown,
   AlertCircle,
   CheckCircle,
   Clock,
@@ -42,7 +41,6 @@ export function BillingScreen() {
   const [methods, setMethods] = useState<BillingMethod[]>([]);
   const [preview, setPreview] = useState<BillingPreview | null>(null);
   const [billingRuns, setBillingRuns] = useState<BillingRun[]>([]);
-  const [invoiceHours, setInvoiceHours] = useState('');
   const [expandedPreviewDays, setExpandedPreviewDays] = useState<Set<string>>(new Set());
 
   // States
@@ -57,9 +55,6 @@ export function BillingScreen() {
 
   // PDF viewer
   const [viewingPdfId, setViewingPdfId] = useState<string | null>(null);
-
-  // Parent clients (clients with sub-clients)
-  const parentClients = clients.filter(c => !c.disabled && !c.parentClientId && clients.some(sc => sc.parentClientId === c.id));
 
   // Also include standalone clients (no parent, no children but have timesheets)
   const topLevelClients = clients.filter(c => !c.disabled && !c.parentClientId);
@@ -190,7 +185,8 @@ export function BillingScreen() {
       } else {
         setToast({ message: data.error || 'Error al facturar', type: 'error' });
       }
-    } catch (err) {
+    } catch (error) {
+      console.error('Error during billing:', error);
       setToast({ message: 'Error de conexión al facturar', type: 'error' });
     } finally {
       setInvoicing(false);
@@ -252,6 +248,36 @@ export function BillingScreen() {
     } catch {
       setToast({ message: 'JSON inválido', type: 'error' });
     }
+  };
+
+  const updateBillingRunFlags = async (run: BillingRun, validated?: boolean, sentToClient?: boolean) => {
+    try {
+      const res = await fetch(`/api/billing/runs/${run.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ validated, sentToClient }),
+      });
+      if (res.ok) {
+        await res.json();
+        setToast({ message: 'Factura actualizada', type: 'success' });
+        fetchRuns();
+      } else {
+        const body = await res.json();
+        setToast({ message: body.error || 'Error al actualizar factura', type: 'error' });
+      }
+    } catch {
+      setToast({ message: 'Error de conexión', type: 'error' });
+    }
+  };
+
+  const handleMarkValidated = async (run: BillingRun) => {
+    if (run.validated) return;
+    await updateBillingRunFlags(run, true, undefined);
+  };
+
+  const handleMarkSent = async (run: BillingRun) => {
+    if (run.sentToClient) return;
+    await updateBillingRunFlags(run, undefined, true);
   };
 
   // Handle delete
@@ -527,12 +553,32 @@ export function BillingScreen() {
                             {MONTHS[(run.month || 1) - 1]} {run.year}
                           </span>
                         </div>
-                        <div className="text-xs text-gray-500 flex items-center gap-3 mt-0.5">
+                        <div className="text-xs text-gray-500 flex flex-wrap items-center gap-2 mt-0.5">
                           <span>{run.totalHours.toFixed(1)}h</span>
                           {run.totalAmount && <span>{run.currency || 'EUR'} {run.totalAmount.toFixed(2)}</span>}
-                          <span>{statusLabel(run.status)}</span>
-                          <span>{run.methodName}</span>
-                          <span>{new Date(run.createdAt).toLocaleString()}</span>
+                          <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-xs text-slate-300">{statusLabel(run.status)}</span>
+                          <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-xs text-slate-300">{run.methodName}</span>
+                          <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-xs text-slate-300">{new Date(run.createdAt).toLocaleString()}</span>
+                          {run.validated ? (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-600 text-xs text-emerald-300">Validada</span>
+                          ) : (
+                            <button
+                              onClick={() => handleMarkValidated(run)}
+                              className="px-2 py-0.5 rounded-full bg-yellow-950 border border-yellow-600 text-xs text-yellow-300 hover:bg-yellow-900"
+                            >
+                              Marcar validada
+                            </button>
+                          )}
+                          {run.sentToClient ? (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-600 text-xs text-emerald-300">Enviada</span>
+                          ) : (
+                            <button
+                              onClick={() => handleMarkSent(run)}
+                              className="px-2 py-0.5 rounded-full bg-blue-950 border border-blue-600 text-xs text-blue-300 hover:bg-blue-900"
+                            >
+                              Marcar enviada
+                            </button>
+                          )}
                         </div>
                         {run.errorText && (
                           <div className="text-xs text-red-400 mt-1 truncate">{run.errorText}</div>

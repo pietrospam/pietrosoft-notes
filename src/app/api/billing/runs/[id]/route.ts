@@ -3,6 +3,7 @@ import {
   getBillingRunById,
   updateBillingRun,
   deleteBillingRun,
+  bumpBillingMethodInvoiceNumber,
 } from '@/lib/repositories/billing-repo';
 
 // GET /api/billing/runs/[id] - Get a single billing run
@@ -23,7 +24,28 @@ export async function GET(_request: Request, { params }: { params: { id: string 
 export async function PUT(request: Request, { params }: { params: { id: string } }) {
   try {
     const body = await request.json();
-    const run = await updateBillingRun(params.id, body);
+    const existingRun = await getBillingRunById(params.id);
+    if (!existingRun) {
+      return NextResponse.json({ error: 'Billing run not found' }, { status: 404 });
+    }
+
+    if (body.sentToClient === true && !existingRun.sentToClient) {
+      await bumpBillingMethodInvoiceNumber(existingRun.methodId);
+    }
+
+    const payload: {
+      requestJson?: object;
+      validated?: boolean;
+      sentToClient?: boolean;
+      invoiceNumber?: string;
+    } = {};
+
+    if (body.requestJson !== undefined) payload.requestJson = body.requestJson;
+    if (body.validated !== undefined) payload.validated = body.validated;
+    if (body.sentToClient !== undefined) payload.sentToClient = body.sentToClient;
+    if (body.invoiceNumber !== undefined) payload.invoiceNumber = body.invoiceNumber;
+
+    const run = await updateBillingRun(params.id, payload);
     return NextResponse.json(run);
   } catch (error) {
     console.error('Error updating billing run:', error);

@@ -3,7 +3,7 @@ import {
   getBillingRuns,
   getBillingMethodById,
   getBillingPreview,
-  getNextInvoiceNumber,
+  peekNextInvoiceNumber,
   createBillingRun,
 } from '@/lib/repositories/billing-repo';
 import type { BillingAuthConfig, BillingAuthType } from '@/lib/types';
@@ -56,10 +56,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // Get next invoice number (per billing method)
-    const invoiceNumber = await getNextInvoiceNumber(methodId);
+    // Get current invoice number for this billing method (do not increment counter yet)
+    const invoiceNumber = await peekNextInvoiceNumber(methodId);
     const invoiceDate = new Date(Date.UTC(year, month, 0, 0, 0, 0, 0));
-    const payloadInvoiceNumber = stripInvoicePrefix(invoiceNumber, method.invoicePrefix);
+    const payloadInvoiceNumber = invoiceNumber;
 
     // Build request payload from template + preview data
     let requestPayload: Record<string, unknown>;
@@ -268,12 +268,6 @@ function buildDefaultPayload(
 function formatDate(date: Date): string {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
-}
-
-function stripInvoicePrefix(invoiceNumber: string, prefix?: string): string {
-  if (!prefix) return invoiceNumber;
-  const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return invoiceNumber.replace(new RegExp(`^${escapedPrefix}`), '');
 }
 
 function replaceInObject(obj: Record<string, unknown>, replacements: Record<string, string>) {

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Save, Edit2, X, Link2, Shield, Key } from 'lucide-react';
+import { Plus, Trash2, Save, Edit2, Link2, Shield, Key } from 'lucide-react';
 import type { BillingMethod, BillingAuthType, BillingAuthConfig } from '@/lib/types';
 
 const AUTH_TYPES: { value: BillingAuthType; label: string }[] = [
