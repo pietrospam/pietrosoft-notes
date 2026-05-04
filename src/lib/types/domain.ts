@@ -375,6 +375,17 @@ export interface BillingPreview {
     projectName: string;
     hours: number;
   }>;
+  dailyEntries: Array<{
+    date: string; // YYYY-MM-DD
+    totalHours: number;
+    entries: Array<{
+      taskCode: string;
+      taskTitle: string;
+      projectName: string;
+      description: string;
+      hours: number;
+    }>;
+  }>;
 }
 
 export interface CreateBillingRunInput {

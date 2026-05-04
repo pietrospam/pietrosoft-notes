@@ -58,6 +58,8 @@ export async function POST(request: Request) {
 
     // Get next invoice number (per billing method)
     const invoiceNumber = await getNextInvoiceNumber(methodId);
+    const invoiceDate = new Date(Date.UTC(year, month, 0, 0, 0, 0, 0));
+    const payloadInvoiceNumber = stripInvoicePrefix(invoiceNumber, method.invoicePrefix);
 
     // Build request payload from template + preview data
     let requestPayload: Record<string, unknown>;
@@ -67,10 +69,10 @@ export async function POST(request: Request) {
       requestPayload = requestJsonOverride;
     } else if (method.payloadTemplate) {
       // Use template and fill in dynamic fields
-      requestPayload = buildPayloadFromTemplate(method.payloadTemplate, preview, invoiceNumber);
+      requestPayload = buildPayloadFromTemplate(method.payloadTemplate, preview, payloadInvoiceNumber, invoiceDate);
     } else {
       // Default: invoice-generator.com format
-      requestPayload = buildDefaultPayload(preview, invoiceNumber);
+      requestPayload = buildDefaultPayload(preview, payloadInvoiceNumber, invoiceDate);
     }
 
     // Build auth headers
@@ -196,7 +198,8 @@ function applyAuth(
 function buildPayloadFromTemplate(
   template: Record<string, unknown>,
   preview: Awaited<ReturnType<typeof getBillingPreview>>,
-  invoiceNumber: string
+  invoiceNumber: string,
+  invoiceDate: Date
 ): Record<string, unknown> {
   // Deep clone the template
   const payload = JSON.parse(JSON.stringify(template));
@@ -204,7 +207,7 @@ function buildPayloadFromTemplate(
   // Replace placeholders in string values
   const replacements: Record<string, string> = {
     '{{invoiceNumber}}': invoiceNumber,
-    '{{date}}': formatDate(new Date()),
+    '{{date}}': formatDate(invoiceDate),
     '{{month}}': String(preview.month),
     '{{year}}': String(preview.year),
     '{{clientName}}': preview.clientName,
@@ -238,12 +241,13 @@ function buildPayloadFromTemplate(
 
 function buildDefaultPayload(
   preview: Awaited<ReturnType<typeof getBillingPreview>>,
-  invoiceNumber: string
+  invoiceNumber: string,
+  invoiceDate: Date
 ): Record<string, unknown> {
   // Default invoice-generator.com format
   return {
     number: invoiceNumber,
-    date: formatDate(new Date()),
+    date: formatDate(invoiceDate),
     header: 'INVOICE',
     from: '', // To be filled from template/config
     to: preview.clientName,
@@ -264,6 +268,12 @@ function buildDefaultPayload(
 function formatDate(date: Date): string {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+}
+
+function stripInvoicePrefix(invoiceNumber: string, prefix?: string): string {
+  if (!prefix) return invoiceNumber;
+  const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return invoiceNumber.replace(new RegExp(`^${escapedPrefix}`), '');
 }
 
 function replaceInObject(obj: Record<string, unknown>, replacements: Record<string, string>) {

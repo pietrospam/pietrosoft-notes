@@ -29,16 +29,21 @@ const MONTHS = [
 export function BillingScreen() {
   const { clients } = useApp();
 
+  const now = new Date();
+  const defaultBillingDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
   // Selectors
   const [selectedClientId, setSelectedClientId] = useState('');
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(defaultBillingDate.getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(defaultBillingDate.getMonth() + 1);
   const [selectedMethodId, setSelectedMethodId] = useState('');
 
   // Data
   const [methods, setMethods] = useState<BillingMethod[]>([]);
   const [preview, setPreview] = useState<BillingPreview | null>(null);
   const [billingRuns, setBillingRuns] = useState<BillingRun[]>([]);
+  const [invoiceHours, setInvoiceHours] = useState('');
+  const [expandedPreviewDays, setExpandedPreviewDays] = useState<Set<string>>(new Set());
 
   // States
   const [loadingPreview, setLoadingPreview] = useState(false);
@@ -58,6 +63,13 @@ export function BillingScreen() {
 
   // Also include standalone clients (no parent, no children but have timesheets)
   const topLevelClients = clients.filter(c => !c.disabled && !c.parentClientId);
+
+  useEffect(() => {
+    if (!selectedClientId && topLevelClients.length > 0) {
+      const qualita = topLevelClients.find(c => c.name.toLowerCase() === 'qualita');
+      setSelectedClientId(qualita?.id ?? topLevelClients[0].id);
+    }
+  }, [selectedClientId, topLevelClients]);
 
   // Fetch billing methods
   const fetchMethods = useCallback(async () => {
@@ -125,6 +137,23 @@ export function BillingScreen() {
   useEffect(() => { fetchMethods(); }, [fetchMethods]);
   useEffect(() => { fetchPreview(); }, [fetchPreview]);
   useEffect(() => { fetchRuns(); }, [fetchRuns]);
+  useEffect(() => {
+    setExpandedPreviewDays(new Set());
+  }, [preview?.dailyEntries.length]);
+
+  const togglePreviewDay = (date: string) => {
+    setExpandedPreviewDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(date)) next.delete(date);
+      else next.add(date);
+      return next;
+    });
+  };
+
+  const formatPreviewDate = (date: string) => {
+    const [year, month, day] = date.split('-');
+    return `${day}/${month}/${year}`;
+  };
 
   // Handle invoice
   const handleInvoice = async () => {
@@ -371,26 +400,67 @@ export function BillingScreen() {
                   </div>
                 </div>
 
-                {preview.entries.length > 0 && (
-                  <div className="max-h-48 overflow-y-auto">
-                    <table className="w-full text-sm">
-                      <thead className="text-gray-500 text-xs">
+                {preview.dailyEntries.length > 0 && (
+                  <div className="overflow-x-auto mb-4 border border-gray-700 rounded-lg">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-gray-900 text-gray-400 text-xs uppercase tracking-wide">
                         <tr>
-                          <th className="text-left py-1 px-2">Código</th>
-                          <th className="text-left py-1 px-2">Tarea</th>
-                          <th className="text-left py-1 px-2">Proyecto</th>
-                          <th className="text-right py-1 px-2">Horas</th>
+                          <th className="text-left py-2 px-2">Fecha</th>
+                          <th className="text-left py-2 px-2">Imputaciones</th>
+                          <th className="text-left py-2 px-2">Horas</th>
+                          <th className="text-left py-2 px-2">Detalle</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {preview.entries.map((entry, i) => (
-                          <tr key={i} className="border-t border-gray-800 text-gray-300">
-                            <td className="py-1 px-2 font-mono text-xs">{entry.taskCode || '-'}</td>
-                            <td className="py-1 px-2 truncate max-w-xs">{entry.taskTitle}</td>
-                            <td className="py-1 px-2 text-gray-500">{entry.projectName}</td>
-                            <td className="py-1 px-2 text-right font-mono">{entry.hours.toFixed(1)}</td>
-                          </tr>
-                        ))}
+                        {preview.dailyEntries.map((day) => {
+                          const expanded = expandedPreviewDays.has(day.date);
+                          return (
+                            <React.Fragment key={day.date}>
+                              <tr className="border-t border-gray-700 bg-gray-900 text-white text-sm">
+                                <td className="py-2 px-2 font-mono">{formatPreviewDate(day.date)}</td>
+                                <td className="py-2 px-2">{day.entries.length}</td>
+                                <td className="py-2 px-2 font-mono">{day.totalHours.toFixed(1)}h</td>
+                                <td className="py-2 px-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => togglePreviewDay(day.date)}
+                                    className="text-xs text-blue-300 hover:text-blue-200"
+                                  >
+                                    {expanded ? 'Ocultar' : 'Ver'}
+                                  </button>
+                                </td>
+                              </tr>
+                              {expanded && (
+                                <tr className="bg-gray-950">
+                                  <td colSpan={4} className="p-0">
+                                    <div className="overflow-x-auto">
+                                      <table className="min-w-full text-[11px]">
+                                        <thead className="text-gray-500 uppercase tracking-wide">
+                                          <tr>
+                                            <th className="text-left py-2 px-2 min-w-[84px]">Fecha</th>
+                                            <th className="text-left py-2 px-2 min-w-[120px]">Proyecto</th>
+                                            <th className="text-left py-2 px-2 min-w-[110px]">Ticket/Fase</th>
+                                            <th className="text-right py-2 px-2 min-w-[60px]">Horas</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {day.entries.map((entry, idx) => (
+                                            <tr key={idx} className="border-t border-gray-800 text-gray-300 text-sm">
+                                              <td className="py-1 px-2 font-mono">{day.date.split('-').reverse().join('/')}</td>
+                                              <td className="py-1 px-2 truncate max-w-[12rem]">{entry.projectName}</td>
+                                              <td className="py-1 px-2 truncate max-w-[12rem]">{entry.taskCode || entry.taskTitle}</td>
+                                              <td className="py-1 px-2 text-right font-mono">{entry.hours.toFixed(1)}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

@@ -297,12 +297,15 @@ export async function getBillingPreview(
           project: { select: { name: true } },
         },
       },
+      project: {
+        select: { name: true },
+      },
     },
   });
 
   const totalHours = timesheets.reduce((sum, ts) => sum + ts.hoursWorked, 0);
 
-  // Group by task
+  // Group by task for the existing preview entries
   const taskMap = new Map<string, { taskCode: string; taskTitle: string; projectName: string; hours: number }>();
   for (const ts of timesheets) {
     const key = ts.taskId || 'no-task';
@@ -313,8 +316,36 @@ export async function getBillingPreview(
       taskMap.set(key, {
         taskCode: ts.task?.taskTicketPhaseCode || '',
         taskTitle: ts.task?.title || 'Sin tarea',
-        projectName: ts.task?.project?.name || 'Sin proyecto',
+        projectName: ts.project?.name || ts.task?.project?.name || 'Sin proyecto',
         hours: ts.hoursWorked,
+      });
+    }
+  }
+
+  // Group by day for the new daily preview
+  const dailyMap = new Map<string, {
+    date: string;
+    totalHours: number;
+    entries: Array<{ taskCode: string; taskTitle: string; projectName: string; description: string; hours: number }>;
+  }>();
+  for (const ts of timesheets) {
+    const date = ts.workDate.toISOString().slice(0, 10);
+    const existing = dailyMap.get(date);
+    const entry = {
+      taskCode: ts.task?.taskTicketPhaseCode || '',
+      taskTitle: ts.task?.title || 'Sin tarea',
+      projectName: ts.project?.name || ts.task?.project?.name || 'Sin proyecto',
+      description: ts.description || '',
+      hours: ts.hoursWorked,
+    };
+    if (existing) {
+      existing.totalHours += ts.hoursWorked;
+      existing.entries.push(entry);
+    } else {
+      dailyMap.set(date, {
+        date,
+        totalHours: ts.hoursWorked,
+        entries: [entry],
       });
     }
   }
@@ -327,6 +358,7 @@ export async function getBillingPreview(
     totalHours,
     entryCount: timesheets.length,
     entries: Array.from(taskMap.values()).sort((a, b) => b.hours - a.hours),
+    dailyEntries: Array.from(dailyMap.values()).sort((a, b) => a.date.localeCompare(b.date)),
   };
 }
 
