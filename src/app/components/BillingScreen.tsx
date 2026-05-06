@@ -19,6 +19,7 @@ import {
 import { useApp } from '../context/AppContext';
 import type { BillingMethod, BillingRun, BillingPreview } from '@/lib/types';
 import { Toast } from './Toast';
+import { NoteEditorModal } from './NoteEditorModal';
 
 const MONTHS = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -56,6 +57,11 @@ export function BillingScreen() {
   // PDF viewer
   const [viewingPdfId, setViewingPdfId] = useState<string | null>(null);
 
+  // Notes
+  const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
+  const [activeNoteClientId, setActiveNoteClientId] = useState<string | undefined>(undefined);
+  const [noteLoading, setNoteLoading] = useState(false);
+
   // Also include standalone clients (no parent, no children but have timesheets)
   const topLevelClients = clients.filter(c => !c.disabled && !c.parentClientId);
 
@@ -66,21 +72,30 @@ export function BillingScreen() {
     }
   }, [selectedClientId, topLevelClients]);
 
-  // Fetch billing methods
-  const fetchMethods = useCallback(async () => {
+  // Fetch billing methods for selected parent client
+  const fetchMethods = useCallback(async (clientParentId?: string) => {
     try {
-      const res = await fetch('/api/billing/methods');
+      const params = new URLSearchParams();
+      if (clientParentId) params.set('clientParentId', clientParentId);
+      const res = await fetch(`/api/billing/methods?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setMethods(data);
-        if (data.length > 0 && !selectedMethodId) {
-          setSelectedMethodId(data[0].id);
+        if (data.length > 0) {
+          setSelectedMethodId((current) => {
+            if (current && data.some((method: BillingMethod) => method.id === current)) {
+              return current;
+            }
+            return data[0].id;
+          });
+        } else {
+          setSelectedMethodId('');
         }
       }
     } catch (err) {
       console.error('Error loading billing methods:', err);
     }
-  }, [selectedMethodId]);
+  }, []);
 
   // Fetch preview
   const fetchPreview = useCallback(async () => {
@@ -129,7 +144,7 @@ export function BillingScreen() {
     }
   }, [selectedClientId, selectedYear, selectedMonth, clients]);
 
-  useEffect(() => { fetchMethods(); }, [fetchMethods]);
+  useEffect(() => { fetchMethods(selectedClientId); }, [fetchMethods, selectedClientId]);
   useEffect(() => { fetchPreview(); }, [fetchPreview]);
   useEffect(() => { fetchRuns(); }, [fetchRuns]);
   useEffect(() => {
@@ -289,6 +304,60 @@ export function BillingScreen() {
       fetchRuns();
     } catch {
       setToast({ message: 'Error al eliminar', type: 'error' });
+    }
+  };
+
+  const openBillingRunNote = async (run: BillingRun) => {
+    if (run.noteId) {
+      setActiveNoteId(run.noteId);
+      setActiveNoteClientId(run.clientParentId);
+      return;
+    }
+
+    setNoteLoading(true);
+    try {
+      const title = run.invoiceNumber
+        ? `Nota de factura ${run.invoiceNumber}`
+        : `Nota de facturación ${run.year}-${String(run.month).padStart(2, '0')}`;
+
+      const createRes = await fetch('/api/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'general',
+          title,
+          contentText: 'Nota asociada a la ejecución de facturación.',
+          clientId: run.clientParentId,
+        }),
+      });
+
+      if (!createRes.ok) {
+        const errorBody = await createRes.json().catch(() => ({}));
+        setToast({ message: errorBody.error || 'Error al crear la nota', type: 'error' });
+        return;
+      }
+
+      const note = await createRes.json();
+      const attachRes = await fetch(`/api/billing/runs/${run.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ noteId: note.id }),
+      });
+
+      if (!attachRes.ok) {
+        const errorBody = await attachRes.json().catch(() => ({}));
+        setToast({ message: errorBody.error || 'Error al asociar la nota', type: 'error' });
+        return;
+      }
+
+      setActiveNoteId(note.id);
+      setActiveNoteClientId(run.clientParentId);
+      fetchRuns();
+    } catch (err) {
+      console.error('Error creating billing note:', err);
+      setToast({ message: 'Error de conexión al crear nota', type: 'error' });
+    } finally {
+      setNoteLoading(false);
     }
   };
 
@@ -559,6 +628,9 @@ export function BillingScreen() {
                           <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-xs text-slate-300">{statusLabel(run.status)}</span>
                           <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-xs text-slate-300">{run.methodName}</span>
                           <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-xs text-slate-300">{new Date(run.createdAt).toLocaleString()}</span>
+                          {run.noteId && (
+                            <span className="px-2 py-0.5 rounded-full bg-orange-950 border border-orange-700 text-xs text-orange-300">Nota registrada</span>
+                          )}
                           {run.validated ? (
                             <span className="px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-600 text-xs text-emerald-300">Validada</span>
                           ) : (
@@ -588,6 +660,14 @@ export function BillingScreen() {
 
                     {/* Actions */}
                     <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+                      <button
+                        onClick={() => openBillingRunNote(run)}
+                        disabled={noteLoading}
+                        className="p-1.5 text-gray-400 hover:text-orange-400 rounded hover:bg-gray-700 disabled:opacity-50"
+                        title={run.noteId ? 'Abrir nota de facturación' : 'Crear nota de facturación'}
+                      >
+                        <FileText size={14} />
+                      </button>
                       {run.pdfFilename && (
                         <>
                           <button
@@ -684,6 +764,18 @@ export function BillingScreen() {
             </div>
           </div>
         </div>
+      )}
+
+      {activeNoteId && (
+        <NoteEditorModal
+          noteId={activeNoteId}
+          defaultClientId={activeNoteClientId}
+          onClose={() => setActiveNoteId(null)}
+          onSaved={() => {
+            setToast({ message: 'Nota guardada', type: 'success' });
+            fetchRuns();
+          }}
+        />
       )}
 
       {/* Toast */}

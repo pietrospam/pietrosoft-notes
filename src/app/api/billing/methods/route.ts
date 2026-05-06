@@ -4,10 +4,12 @@ import {
   createBillingMethod,
 } from '@/lib/repositories/billing-repo';
 
-// GET /api/billing/methods - List all active billing methods
-export async function GET() {
+// GET /api/billing/methods - List active billing methods
+export async function GET(request: Request) {
   try {
-    const methods = await getAllBillingMethods();
+    const url = new URL(request.url);
+    const clientParentId = url.searchParams.get('clientParentId') || undefined;
+    const methods = await getAllBillingMethods({ clientParentId });
     return NextResponse.json(methods);
   } catch (error) {
     console.error('Error listing billing methods:', error);
@@ -20,9 +22,9 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    if (!body.name || !body.endpointUrl) {
+    if (!body.name || !body.endpointUrl || !body.clientParentId) {
       return NextResponse.json(
-        { error: 'name and endpointUrl are required' },
+        { error: 'name, endpointUrl and clientParentId are required' },
         { status: 400 }
       );
     }
@@ -35,6 +37,7 @@ export async function POST(request: Request) {
       payloadTemplate: body.payloadTemplate,
       nextInvoiceNumber: body.nextInvoiceNumber ?? 1,
       invoicePrefix: body.invoicePrefix,
+      clientParentId: body.clientParentId,
       active: body.active ?? true,
     });
 

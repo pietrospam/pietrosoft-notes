@@ -21,6 +21,7 @@ model Client {
   projects        Project[]
   timesheetEntries Timesheet[] @relation("TimesheetClient")
   taskTodos        TaskTodo[] @relation("ClientTodos")
+  billingMethods   BillingMethod[]
   
   parentClient    Client?   @relation("ClientHierarchy", fields: [parentClientId], references: [id], onUpdate: NoAction)
   subClients      Client[]  @relation("ClientHierarchy")
@@ -84,6 +85,7 @@ model Note {
   // Self-relation for timesheet tasks
   linkedTimesheetTask   Note?           @relation("TimesheetTaskLink", fields: [timesheetTaskId], references: [id])
   linkedTimesheetNotes  Note[]          @relation("TimesheetTaskLink")
+  billingRun            BillingRun?     @relation("BillingRunNote")
 
   @@index([type])
   @@index([projectId])
@@ -227,12 +229,15 @@ model BillingMethod {
   payloadTemplate    Json?    @map("payload_template") // Template JSON for building the request
   nextInvoiceNumber  Int      @default(1) @map("next_invoice_number") // Per-method invoice counter
   invoicePrefix      String?  @map("invoice_prefix") @db.VarChar(20) // Optional prefix e.g. "FAC-"
+  clientParentId     String?  @map("client_parent_id")
   active             Boolean  @default(true)
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @default(now()) @map("updated_at")
 
+  client            Client?  @relation(fields: [clientParentId], references: [id], onUpdate: NoAction)
   billingRuns      BillingRun[]
 
+  @@index([clientParentId])
   @@map("billing_methods")
 }
 
@@ -256,13 +261,16 @@ model BillingRun {
   validated       Boolean  @default(false)
   sentToClient    Boolean  @default(false)
   errorText       String?  @map("error_text")
+  noteId          String?  @map("note_id") @unique
   createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @default(now()) @map("updated_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   method          BillingMethod @relation(fields: [methodId], references: [id], onUpdate: NoAction)
+  note            Note?          @relation("BillingRunNote", fields: [noteId], references: [id], onDelete: SetNull)
 
   @@index([clientParentId])
   @@index([methodId])
+  @@index([noteId])
   @@index([year, month])
   @@map("billing_runs")
 }

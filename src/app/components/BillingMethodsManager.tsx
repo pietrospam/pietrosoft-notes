@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, Save, Edit2, Link2, Shield, Key } from 'lucide-react';
+import { useApp } from '../context/AppContext';
 import type { BillingMethod, BillingAuthType, BillingAuthConfig } from '@/lib/types';
 
 const AUTH_TYPES: { value: BillingAuthType; label: string }[] = [
@@ -20,6 +21,7 @@ interface MethodFormState {
   payloadTemplate: string; // JSON string for editing
   nextInvoiceNumber: number;
   invoicePrefix: string;
+  clientParentId: string;
 }
 
 const emptyForm: MethodFormState = {
@@ -30,9 +32,12 @@ const emptyForm: MethodFormState = {
   payloadTemplate: '',
   nextInvoiceNumber: 1,
   invoicePrefix: '',
+  clientParentId: '',
 };
 
 export function BillingMethodsManager() {
+  const { clients } = useApp();
+  const parentClients = clients.filter(c => !c.disabled && !c.parentClientId);
   const [methods, setMethods] = useState<BillingMethod[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -68,6 +73,7 @@ export function BillingMethodsManager() {
       payloadTemplate: method.payloadTemplate ? JSON.stringify(method.payloadTemplate, null, 2) : '',
       nextInvoiceNumber: method.nextInvoiceNumber ?? 1,
       invoicePrefix: method.invoicePrefix || '',
+      clientParentId: method.clientParentId || '',
     });
   };
 
@@ -79,8 +85,8 @@ export function BillingMethodsManager() {
   };
 
   const handleSave = async () => {
-    if (!form.name.trim() || !form.endpointUrl.trim()) {
-      setError('Nombre y URL son requeridos');
+    if (!form.name.trim() || !form.endpointUrl.trim() || !form.clientParentId) {
+      setError('Nombre, URL y cliente padre son requeridos');
       return;
     }
 
@@ -105,6 +111,7 @@ export function BillingMethodsManager() {
         payloadTemplate,
         nextInvoiceNumber: form.nextInvoiceNumber,
         invoicePrefix: form.invoicePrefix.trim() || undefined,
+        clientParentId: form.clientParentId,
       };
 
       if (editingId) {
@@ -240,6 +247,20 @@ export function BillingMethodsManager() {
       </h4>
 
       {error && <div className="text-red-400 text-xs">{error}</div>}
+
+      <div>
+        <label className="block text-xs text-gray-400 mb-1">Cliente Padre</label>
+        <select
+          value={form.clientParentId}
+          onChange={(e) => setForm(f => ({ ...f, clientParentId: e.target.value }))}
+          className="w-full bg-gray-700 text-white px-3 py-2 rounded text-sm"
+        >
+          <option value="">Seleccionar cliente padre...</option>
+          {parentClients.map(client => (
+            <option key={client.id} value={client.id}>{client.name}</option>
+          ))}
+        </select>
+      </div>
 
       <div>
         <label className="block text-xs text-gray-400 mb-1">Nombre</label>
@@ -380,6 +401,9 @@ export function BillingMethodsManager() {
                     <span className="ml-2 text-gray-600">|
                       Nro: {method.invoicePrefix || ''}{String(method.nextInvoiceNumber).padStart(8, '0')}
                     </span>
+                  </div>
+                  <div className="text-xs text-gray-500 truncate mt-0.5 pl-5">
+                    Cliente Padre: {method.clientName || 'Sin asignar'}
                   </div>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0 ml-2">

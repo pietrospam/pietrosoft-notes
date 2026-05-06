@@ -329,9 +329,11 @@ export interface BillingMethod {
   payloadTemplate?: Record<string, unknown>; // Template JSON for invoice payload
   nextInvoiceNumber: number; // Per-method invoice counter
   invoicePrefix?: string; // Optional prefix e.g. "FAC-"
+  clientParentId: string;
   active: boolean;
   createdAt: string;
   updatedAt: string;
+  clientName?: string;
 }
 
 export type CreateBillingMethodInput = Omit<BillingMethod, 'id' | 'createdAt' | 'updatedAt'>;
@@ -357,6 +359,7 @@ export interface BillingRun {
   validated: boolean;
   sentToClient: boolean;
   errorText?: string;
+  noteId?: string;
   createdAt: string;
   updatedAt: string;
   // Enriched (optional, from joins)

@@ -38,12 +38,14 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       validated?: boolean;
       sentToClient?: boolean;
       invoiceNumber?: string;
+      noteId?: string | null;
     } = {};
 
     if (body.requestJson !== undefined) payload.requestJson = body.requestJson;
     if (body.validated !== undefined) payload.validated = body.validated;
     if (body.sentToClient !== undefined) payload.sentToClient = body.sentToClient;
     if (body.invoiceNumber !== undefined) payload.invoiceNumber = body.invoiceNumber;
+    if (body.noteId !== undefined) payload.noteId = body.noteId;
 
     const run = await updateBillingRun(params.id, payload);
     return NextResponse.json(run);

@@ -21,9 +21,11 @@ function toBillingMethod(row: {
   payloadTemplate: unknown;
   nextInvoiceNumber: number;
   invoicePrefix: string | null;
+  clientParentId: string | null;
   active: boolean;
   createdAt: Date;
   updatedAt: Date;
+  client?: { name: string } | null;
 }): BillingMethod {
   return {
     id: row.id,
@@ -34,15 +36,21 @@ function toBillingMethod(row: {
     payloadTemplate: (row.payloadTemplate as BillingMethod['payloadTemplate']) ?? undefined,
     nextInvoiceNumber: row.nextInvoiceNumber,
     invoicePrefix: row.invoicePrefix ?? undefined,
+    clientParentId: row.clientParentId ?? '',
     active: row.active,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    clientName: row.client?.name ?? undefined,
   };
 }
 
-export async function getAllBillingMethods(): Promise<BillingMethod[]> {
+export async function getAllBillingMethods(filters?: { clientParentId?: string }): Promise<BillingMethod[]> {
+  const where: Record<string, unknown> = { active: true };
+  if (filters?.clientParentId) where.clientParentId = filters.clientParentId;
+
   const rows = await prisma.billingMethod.findMany({
-    where: { active: true },
+    where,
+    include: { client: { select: { name: true } } },
     orderBy: { name: 'asc' },
   });
   return rows.map(toBillingMethod);
@@ -63,8 +71,10 @@ export async function createBillingMethod(input: CreateBillingMethodInput): Prom
       payloadTemplate: input.payloadTemplate ? (input.payloadTemplate as object) : undefined,
       nextInvoiceNumber: input.nextInvoiceNumber ?? 1,
       invoicePrefix: input.invoicePrefix ?? null,
+      clientParentId: input.clientParentId,
       active: input.active ?? true,
     },
+    include: { client: { select: { name: true } } },
   });
   return toBillingMethod(row);
 }
@@ -78,9 +88,10 @@ export async function updateBillingMethod(id: string, input: UpdateBillingMethod
   if (input.payloadTemplate !== undefined) data.payloadTemplate = input.payloadTemplate as object;
   if (input.nextInvoiceNumber !== undefined) data.nextInvoiceNumber = input.nextInvoiceNumber;
   if (input.invoicePrefix !== undefined) data.invoicePrefix = input.invoicePrefix;
+  if (input.clientParentId !== undefined) data.clientParentId = input.clientParentId;
   if (input.active !== undefined) data.active = input.active;
 
-  const row = await prisma.billingMethod.update({ where: { id }, data });
+  const row = await prisma.billingMethod.update({ where: { id }, data, include: { client: { select: { name: true } } } });
   return toBillingMethod(row);
 }
 
@@ -115,6 +126,7 @@ function toBillingRun(row: {
   validated: boolean;
   sentToClient: boolean;
   errorText: string | null;
+  noteId: string | null;
   createdAt: Date;
   updatedAt: Date;
   method?: { name: string } | null;
@@ -137,6 +149,7 @@ function toBillingRun(row: {
     validated: row.validated,
     sentToClient: row.sentToClient,
     errorText: row.errorText ?? undefined,
+    noteId: row.noteId ?? undefined,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     methodName: row.method?.name,
@@ -185,6 +198,7 @@ export async function createBillingRun(data: {
   pdfFilename?: string;
   status: string;
   errorText?: string;
+  noteId?: string;
 }): Promise<BillingRun> {
   const row = await prisma.billingRun.create({
     data: {
@@ -205,6 +219,7 @@ export async function createBillingRun(data: {
       validated: false,
       sentToClient: false,
       errorText: data.errorText ?? null,
+      noteId: data.noteId ?? null,
     },
     include: { method: { select: { name: true } } },
   });
@@ -221,6 +236,7 @@ export async function updateBillingRun(id: string, data: {
   validated?: boolean;
   sentToClient?: boolean;
   invoiceNumber?: string;
+  noteId?: string | null;
   errorText?: string;
 }): Promise<BillingRun> {
   const updateData: Record<string, unknown> = { updatedAt: new Date() };
@@ -233,6 +249,7 @@ export async function updateBillingRun(id: string, data: {
   if (data.validated !== undefined) updateData.validated = data.validated;
   if (data.sentToClient !== undefined) updateData.sentToClient = data.sentToClient;
   if (data.invoiceNumber !== undefined) updateData.invoiceNumber = data.invoiceNumber;
+  if (data.noteId !== undefined) updateData.noteId = data.noteId;
   if (data.errorText !== undefined) updateData.errorText = data.errorText;
 
   const row = await prisma.billingRun.update({
