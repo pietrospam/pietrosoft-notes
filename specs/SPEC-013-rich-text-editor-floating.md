@@ -14,6 +14,13 @@ Mejoras para el editor de notas y comentarios: mantener comportamientos estánda
 
 Asegurar que el editor rich text se comporte de forma natural para notas y comentarios, y que el área de edición muestre una interfaz flotante clara y centrada mientras el usuario escribe.
 
+## Historias de usuario
+
+- Como usuario quiero escribir notas con formato enriquecido de manera natural, para dejar mis ideas bien estructuradas.
+- Como usuario quiero que los comentarios mantengan el mismo comportamiento de teclado que las notas, para no tener que recordar dos formas distintas de escribir.
+- Como usuario quiero ver un panel flotante de edición cuando estoy escribiendo, para acceder rápidamente a los controles de formato sin salir del flujo.
+- Como usuario quiero que `Ctrl+Enter` no haga nada especial, para evitar acciones inesperadas mientras escribo.
+
 ## Comportamiento esperado
 
 1. `Enter` debe crear un nuevo párrafo.
@@ -79,6 +86,9 @@ Debe incluir al menos estas acciones:
 - La lógica de teclado debe implementarse en `TipTapEditor.tsx` para que se aplique a todos los usos de rich text.
 - El flotante puede implementarse dentro de `TipTapEditor.tsx`, o bien como un pequeño componente UI asociado a ese editor.
 - Debe respetar el modo `readOnly` y no mostrarse en vistas donde solo se lee contenido.
+- El panel flotante debe ser accesible desde notas, comentarios y cualquier área donde se use `TipTapEditor` en modo editable.
+- La implementación debe aislar la lógica de comportamiento de teclado de la UI del flotante para facilitar pruebas y futuros ajustes.
+- El diseño del flotante debe ser responsivo y funcionar bien en ventanas estrechas, manteniendo el contenido legible.
 
 ## No hacer
 

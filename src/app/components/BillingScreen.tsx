@@ -279,7 +279,7 @@ export function BillingScreen() {
     }
   }, [selectedClientId, clients]);
 
-  useEffect(() => { fetchMethods(selectedClientId); }, [fetchMethods, selectedClientId]);
+  useEffect(() => { fetchMethods(selectedClientId ?? undefined); }, [fetchMethods, selectedClientId]);
   useEffect(() => { fetchPreview(); }, [fetchPreview]);
   useEffect(() => { fetchRuns(); }, [fetchRuns]);
   useEffect(() => {
@@ -544,7 +544,7 @@ export function BillingScreen() {
             <div>
               <label className="block text-xs text-gray-400 mb-1">Cliente Padre</label>
               <select
-                value={selectedClientId}
+                value={selectedClientId ?? ''}
                 onChange={(e) => setSelectedClientId(e.target.value)}
                 className="w-full bg-gray-800 text-white px-3 py-2 rounded text-sm border border-gray-700"
               >
