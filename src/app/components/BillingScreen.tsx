@@ -27,13 +27,12 @@ const MONTHS = [
 ];
 
 export function BillingScreen() {
-  const { clients } = useApp();
+  const { clients, selectedClientId, setSelectedClientId } = useApp();
 
   const now = new Date();
   const defaultBillingDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 
   // Selectors
-  const [selectedClientId, setSelectedClientId] = useState('');
   const [selectedYear, setSelectedYear] = useState(defaultBillingDate.getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(defaultBillingDate.getMonth() + 1);
   const [selectedMethodId, setSelectedMethodId] = useState('');
@@ -116,11 +115,11 @@ export function BillingScreen() {
   const topLevelClients = clients.filter(c => !c.disabled && !c.parentClientId);
 
   useEffect(() => {
-    if (!selectedClientId && topLevelClients.length > 0) {
+    if (selectedClientId === null && topLevelClients.length > 0) {
       const qualita = topLevelClients.find(c => c.name.toLowerCase() === 'qualita');
       setSelectedClientId(qualita?.id ?? topLevelClients[0].id);
     }
-  }, [selectedClientId, topLevelClients]);
+  }, [selectedClientId, topLevelClients, setSelectedClientId]);
 
   useEffect(() => {
     const start = new Date(Date.UTC(selectedYear, selectedMonth - 1, 1));
@@ -262,8 +261,6 @@ export function BillingScreen() {
     try {
       const params = new URLSearchParams();
       if (selectedClientId) params.set('clientParentId', selectedClientId);
-      if (selectedYear) params.set('year', String(selectedYear));
-      if (selectedMonth) params.set('month', String(selectedMonth));
 
       const res = await fetch(`/api/billing/runs?${params.toString()}`);
       if (res.ok) {
@@ -280,7 +277,7 @@ export function BillingScreen() {
     } finally {
       setLoadingRuns(false);
     }
-  }, [selectedClientId, selectedYear, selectedMonth, clients]);
+  }, [selectedClientId, clients]);
 
   useEffect(() => { fetchMethods(selectedClientId); }, [fetchMethods, selectedClientId]);
   useEffect(() => { fetchPreview(); }, [fetchPreview]);

@@ -474,6 +474,53 @@ export function Sidebar() {
     );
   };
 
+  // REQ-026: Render for Billing tab (parent client filter)
+  const renderBillingNav = () => (
+    <>
+      <nav className="space-y-1 px-2">
+        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-2 py-1 opacity-0 group-hover:opacity-100 lg:opacity-100 transition-opacity">
+          Facturación
+        </div>
+        <button
+          onClick={() => handleNavigate(() => {
+            setSelectedClientId(null);
+            setCurrentView('billing');
+          })}
+          className={
+            `w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors whitespace-nowrap ${currentView === 'billing' && selectedClientId === null ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`
+          }
+        >
+          <Building2 size={18} className="flex-shrink-0" />
+          <span className="opacity-0 lg:opacity-100 transition-opacity">Todas</span>
+        </button>
+        <div className="my-2 mx-1 border-t border-gray-800" />
+        {parentClientsWithSubclients.map(client => (
+          <button
+            key={client.id}
+            onClick={() => handleNavigate(() => {
+              setSelectedClientId(client.id);
+              setCurrentView('billing');
+            })}
+            className={
+              `w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors whitespace-nowrap relative ${selectedClientId === client.id ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`
+            }
+          >
+            {client.color && (
+              <div
+                className="absolute left-0 top-1 bottom-1 w-1 rounded-r"
+                style={{ backgroundColor: client.color }}
+              />
+            )}
+            <Building2 size={18} className="flex-shrink-0" />
+            <span className="opacity-0 lg:opacity-100 transition-opacity truncate">
+              {client.name}
+            </span>
+          </button>
+        ))}
+      </nav>
+    </>
+  );
+
   // REQ-010: Render for TimeSheets tab (parent client filter)
   const renderTimesheetsNav = () => (
     <>
@@ -546,6 +593,7 @@ export function Sidebar() {
         {activeTab === 'bitacora' && renderBitacoraNav()}
         {activeTab === 'conexiones' && renderConexionesNav()}
         {activeTab === 'timesheets' && renderTimesheetsNav()}
+        {activeTab === 'billing' && renderBillingNav()}
       </div>
       {/* Bottom navigation - REQ-010: Removed TimeSheets button (moved to tabs) */}
       <div className="py-4 border-t border-gray-800">
