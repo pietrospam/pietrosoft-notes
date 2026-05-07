@@ -360,6 +360,8 @@ export interface BillingRun {
   sentToClient: boolean;
   errorText?: string;
   noteId?: string;
+  periodStart: string;
+  periodEnd: string;
   createdAt: string;
   updatedAt: string;
   // Enriched (optional, from joins)
@@ -372,6 +374,8 @@ export interface BillingPreview {
   clientName: string;
   year: number;
   month: number;
+  periodStart: string;
+  periodEnd: string;
   totalHours: number;
   entryCount: number;
   entries: Array<{
@@ -398,5 +402,7 @@ export interface CreateBillingRunInput {
   year: number;
   month: number;
   methodId: UUID;
+  periodStart: string;
+  periodEnd: string;
   requestJsonOverride?: Record<string, unknown>; // Optional override of generated payload
 }

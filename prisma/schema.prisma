@@ -262,6 +262,8 @@ model BillingRun {
   sentToClient    Boolean  @default(false)
   errorText       String?  @map("error_text")
   noteId          String?  @map("note_id") @unique
+  periodStart     DateTime @map("period_start") @db.Timestamp(6)
+  periodEnd       DateTime @map("period_end") @db.Timestamp(6)
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 

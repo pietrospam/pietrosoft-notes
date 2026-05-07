@@ -127,6 +127,8 @@ function toBillingRun(row: {
   sentToClient: boolean;
   errorText: string | null;
   noteId: string | null;
+  periodStart: Date;
+  periodEnd: Date;
   createdAt: Date;
   updatedAt: Date;
   method?: { name: string } | null;
@@ -150,6 +152,8 @@ function toBillingRun(row: {
     sentToClient: row.sentToClient,
     errorText: row.errorText ?? undefined,
     noteId: row.noteId ?? undefined,
+    periodStart: row.periodStart.toISOString(),
+    periodEnd: row.periodEnd.toISOString(),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     methodName: row.method?.name,
@@ -199,6 +203,8 @@ export async function createBillingRun(data: {
   status: string;
   errorText?: string;
   noteId?: string;
+  periodStart: Date;
+  periodEnd: Date;
 }): Promise<BillingRun> {
   const row = await prisma.billingRun.create({
     data: {
@@ -220,6 +226,8 @@ export async function createBillingRun(data: {
       sentToClient: false,
       errorText: data.errorText ?? null,
       noteId: data.noteId ?? null,
+      periodStart: data.periodStart,
+      periodEnd: data.periodEnd,
     },
     include: { method: { select: { name: true } } },
   });
@@ -237,6 +245,8 @@ export async function updateBillingRun(id: string, data: {
   sentToClient?: boolean;
   invoiceNumber?: string;
   noteId?: string | null;
+  periodStart?: Date;
+  periodEnd?: Date;
   errorText?: string;
 }): Promise<BillingRun> {
   const updateData: Record<string, unknown> = { updatedAt: new Date() };
@@ -250,6 +260,8 @@ export async function updateBillingRun(id: string, data: {
   if (data.sentToClient !== undefined) updateData.sentToClient = data.sentToClient;
   if (data.invoiceNumber !== undefined) updateData.invoiceNumber = data.invoiceNumber;
   if (data.noteId !== undefined) updateData.noteId = data.noteId;
+  if (data.periodStart !== undefined) updateData.periodStart = data.periodStart;
+  if (data.periodEnd !== undefined) updateData.periodEnd = data.periodEnd;
   if (data.errorText !== undefined) updateData.errorText = data.errorText;
 
   const row = await prisma.billingRun.update({
@@ -315,7 +327,9 @@ function buildBillingPdfFilename(clientName: string, year: number, month: number
 export async function getBillingPreview(
   clientParentId: string,
   year: number,
-  month: number
+  month: number,
+  periodStart?: Date,
+  periodEnd?: Date
 ): Promise<BillingPreview> {
   // Get parent client name
   const parentClient = await prisma.client.findUnique({
@@ -333,9 +347,13 @@ export async function getBillingPreview(
     ? directChildren.map(c => c.id)
     : [clientParentId];
 
-  // Date range for the month in UTC, to match the TimeSheet UI month filter
-  const startDate = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
-  const endDate = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+  // Date range for the month in UTC, to match the TimeSheet UI month filter or use custom period
+  const startDate = periodStart
+    ? new Date(Date.UTC(periodStart.getUTCFullYear(), periodStart.getUTCMonth(), periodStart.getUTCDate(), 0, 0, 0, 0))
+    : new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
+  const endDate = periodEnd
+    ? new Date(Date.UTC(periodEnd.getUTCFullYear(), periodEnd.getUTCMonth(), periodEnd.getUTCDate(), 23, 59, 59, 999))
+    : new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
 
   // Find all FINAL positive timesheets for these clients in this period
   const timesheets = await prisma.timesheet.findMany({
@@ -416,6 +434,8 @@ export async function getBillingPreview(
     clientName: parentClient?.name || 'Unknown',
     year,
     month,
+    periodStart: startDate.toISOString().slice(0, 10),
+    periodEnd: endDate.toISOString().slice(0, 10),
     totalHours,
     entryCount: timesheets.length,
     entries: Array.from(taskMap.values()).sort((a, b) => b.hours - a.hours),

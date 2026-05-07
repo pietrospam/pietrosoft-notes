@@ -37,6 +37,10 @@ export function BillingScreen() {
   const [selectedYear, setSelectedYear] = useState(defaultBillingDate.getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(defaultBillingDate.getMonth() + 1);
   const [selectedMethodId, setSelectedMethodId] = useState('');
+  const [periodStart, setPeriodStart] = useState('');
+  const [periodEnd, setPeriodEnd] = useState('');
+  const [periodStartInput, setPeriodStartInput] = useState('');
+  const [periodEndInput, setPeriodEndInput] = useState('');
 
   // Data
   const [methods, setMethods] = useState<BillingMethod[]>([]);
@@ -72,6 +76,34 @@ export function BillingScreen() {
     }
   }, [selectedClientId, topLevelClients]);
 
+  useEffect(() => {
+    const start = new Date(Date.UTC(selectedYear, selectedMonth - 1, 1));
+    const end = new Date(Date.UTC(selectedYear, selectedMonth, 0));
+    const startIso = start.toISOString().slice(0, 10);
+    const endIso = end.toISOString().slice(0, 10);
+    setPeriodStart(startIso);
+    setPeriodEnd(endIso);
+    setPeriodStartInput(formatTimelineDate(startIso));
+    setPeriodEndInput(formatTimelineDate(endIso));
+  }, [selectedYear, selectedMonth]);
+
+  const formatTimelineDate = (isoDate: string) => {
+    if (!isoDate) return '';
+    const [year, month, day] = isoDate.split('-');
+    return `${day}/${month}/${year}`;
+  };
+
+  const parseTimelineDate = (value: string): string | null => {
+    const match = value.match(/^([0-3]\d)\/([0-1]\d)\/(\d{4})$/);
+    if (!match) return null;
+    const [, day, month, year] = match;
+    const iso = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return null;
+    // preserve exactly dd/mm/yyyy semantics
+    return iso;
+  };
+
   // Fetch billing methods for selected parent client
   const fetchMethods = useCallback(async (clientParentId?: string) => {
     try {
@@ -105,9 +137,15 @@ export function BillingScreen() {
     }
     setLoadingPreview(true);
     try {
-      const res = await fetch(
-        `/api/billing/preview?clientParentId=${selectedClientId}&year=${selectedYear}&month=${selectedMonth}`
-      );
+      const params = new URLSearchParams({
+        clientParentId: selectedClientId,
+        year: String(selectedYear),
+        month: String(selectedMonth),
+      });
+      if (periodStart) params.set('periodStart', periodStart);
+      if (periodEnd) params.set('periodEnd', periodEnd);
+
+      const res = await fetch(`/api/billing/preview?${params.toString()}`);
       if (res.ok) {
         setPreview(await res.json());
       }
@@ -116,7 +154,7 @@ export function BillingScreen() {
     } finally {
       setLoadingPreview(false);
     }
-  }, [selectedClientId, selectedYear, selectedMonth]);
+  }, [selectedClientId, selectedYear, selectedMonth, periodStart, periodEnd]);
 
   // Fetch billing runs
   const fetchRuns = useCallback(async () => {
@@ -186,6 +224,8 @@ export function BillingScreen() {
           year: selectedYear,
           month: selectedMonth,
           methodId: selectedMethodId,
+          periodStart,
+          periodEnd,
         }),
       });
       const data = await res.json();
@@ -401,7 +441,7 @@ export function BillingScreen() {
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
         {/* Selectors */}
         <div className="bg-gray-900 rounded-lg p-4 border border-gray-800">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
             {/* Client */}
             <div>
               <label className="block text-xs text-gray-400 mb-1">Cliente Padre</label>
@@ -415,6 +455,46 @@ export function BillingScreen() {
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
+            </div>
+
+            {/* Period Start */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Periodo desde</label>
+              <input
+                type="text"
+                placeholder="dd/mm/YYYY"
+                value={periodStartInput}
+                onChange={(e) => setPeriodStartInput(e.target.value)}
+                onBlur={() => {
+                  const parsed = parseTimelineDate(periodStartInput);
+                  if (parsed) {
+                    setPeriodStart(parsed);
+                  } else {
+                    setPeriodStartInput(formatTimelineDate(periodStart));
+                  }
+                }}
+                className="w-full bg-gray-800 text-white px-3 py-2 rounded text-sm border border-gray-700"
+              />
+            </div>
+
+            {/* Period End */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Periodo hasta</label>
+              <input
+                type="text"
+                placeholder="dd/mm/YYYY"
+                value={periodEndInput}
+                onChange={(e) => setPeriodEndInput(e.target.value)}
+                onBlur={() => {
+                  const parsed = parseTimelineDate(periodEndInput);
+                  if (parsed) {
+                    setPeriodEnd(parsed);
+                  } else {
+                    setPeriodEndInput(formatTimelineDate(periodEnd));
+                  }
+                }}
+                className="w-full bg-gray-800 text-white px-3 py-2 rounded text-sm border border-gray-700"
+              />
             </div>
 
             {/* Month */}
@@ -465,11 +545,15 @@ export function BillingScreen() {
         {/* Preview */}
         {selectedClientId && (
           <div className="bg-gray-900 rounded-lg p-4 border border-gray-800">
-            <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-              <FileText size={16} />
-              Vista Previa — {preview?.clientName || '...'}
+            <h3 className="text-sm font-semibold text-white mb-3 flex flex-col sm:flex-row sm:items-center sm:gap-2">
+              <span className="flex items-center gap-2">
+                <FileText size={16} />
+                Vista Previa — {preview?.clientName || '...'}
+              </span>
               <span className="text-gray-500 font-normal">
-                {MONTHS[selectedMonth - 1]} {selectedYear}
+                Factura: {MONTHS[selectedMonth - 1]} {selectedYear}
+                {' • '}
+                Periodo: {formatTimelineDate(preview?.periodStart || periodStart)} → {formatTimelineDate(preview?.periodEnd || periodEnd)}
               </span>
             </h3>
 

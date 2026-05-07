@@ -8,12 +8,14 @@ Agregar funcionalidad de facturación por Cliente Padre para horas `inputado`, c
 
 ### AC-1: UI de Facturación
 - [ ] Nueva pantalla `Facturación` en el módulo de TimeSheets.
-- [ ] Select de `Cliente Padre`, `Mes/Año`, y `Método de Facturación`.
+- [ ] Select de `Cliente Padre`, `Período de Facturación` y `Mes/Año`.
+- [ ] `Período de Facturación` inicializa desde el primer día hasta el último día del mes de factura.
 - [ ] Vista previa de horas y total estimado antes de facturar.
 
 ### AC-2: Lógica de cálculo de horas
 - [ ] Filtrar TimeSheet a estado `inputado` y cliente padre seleccionado.
-- [ ] Sumar horas para mes/año especificado.
+- [ ] Sumar horas dentro del `Período de Facturación` seleccionado.
+- [ ] El `Mes/Año` de factura define la fecha de factura como el último día del mes seleccionado.
 - [ ] Incluir sub-clientes si la jerarquía aplica.
 
 ### AC-3: Billing Methods CRUD

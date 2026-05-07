@@ -32,13 +32,29 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { clientParentId, year, month, methodId, requestJsonOverride } = body;
+    const { clientParentId, year, month, methodId, requestJsonOverride, periodStart, periodEnd } = body;
 
     if (!clientParentId || !year || !month || !methodId) {
       return NextResponse.json(
         { error: 'clientParentId, year, month, and methodId are required' },
         { status: 400 }
       );
+    }
+
+    if (!periodStart || !periodEnd) {
+      return NextResponse.json(
+        { error: 'periodStart and periodEnd are required' },
+        { status: 400 }
+      );
+    }
+
+    const parsedPeriodStart = new Date(periodStart);
+    const parsedPeriodEnd = new Date(periodEnd);
+    if (Number.isNaN(parsedPeriodStart.getTime()) || Number.isNaN(parsedPeriodEnd.getTime())) {
+      return NextResponse.json({ error: 'Invalid periodStart or periodEnd' }, { status: 400 });
+    }
+    if (parsedPeriodStart > parsedPeriodEnd) {
+      return NextResponse.json({ error: 'periodStart must be before or equal to periodEnd' }, { status: 400 });
     }
 
     // Load the billing method
@@ -48,7 +64,7 @@ export async function POST(request: Request) {
     }
 
     // Get preview data (hours summary)
-    const preview = await getBillingPreview(clientParentId, year, month);
+    const preview = await getBillingPreview(clientParentId, year, month, parsedPeriodStart, parsedPeriodEnd);
     if (preview.totalHours === 0) {
       return NextResponse.json(
         { error: 'No hay horas en estado FINAL para el período seleccionado' },
@@ -153,6 +169,8 @@ export async function POST(request: Request) {
       pdfFilename,
       status,
       errorText,
+      periodStart: parsedPeriodStart,
+      periodEnd: parsedPeriodEnd,
     });
 
     return NextResponse.json(billingRun, { status: status === 'success' ? 201 : 200 });
@@ -212,6 +230,8 @@ function buildPayloadFromTemplate(
     '{{year}}': String(preview.year),
     '{{clientName}}': preview.clientName,
     '{{totalHours}}': String(preview.totalHours),
+    '{{periodStart}}': preview.periodStart,
+    '{{periodEnd}}': preview.periodEnd,
   };
 
   replaceInObject(payload, replacements);
