@@ -32,7 +32,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { clientParentId, year, month, methodId, requestJsonOverride, periodStart, periodEnd } = body;
+    const { clientParentId, year, month, methodId, requestJsonOverride, periodStart, periodEnd, items } = body;
 
     if (!clientParentId || !year || !month || !methodId) {
       return NextResponse.json(
@@ -40,6 +40,8 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    const billingItems = normalizeBillingItems(items);
 
     if (!periodStart || !periodEnd) {
       return NextResponse.json(
@@ -86,9 +88,15 @@ export async function POST(request: Request) {
     } else if (method.payloadTemplate) {
       // Use template and fill in dynamic fields
       requestPayload = buildPayloadFromTemplate(method.payloadTemplate, preview, payloadInvoiceNumber, invoiceDate);
+      if (billingItems.length > 0) {
+        requestPayload.items = billingItems;
+      }
     } else {
       // Default: invoice-generator.com format
       requestPayload = buildDefaultPayload(preview, payloadInvoiceNumber, invoiceDate);
+      if (billingItems.length > 0) {
+        requestPayload.items = billingItems;
+      }
     }
 
     // Build auth headers
@@ -288,6 +296,35 @@ function buildDefaultPayload(
 function formatDate(date: Date): string {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+}
+
+function normalizeBillingItems(items: unknown) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const record = item as Record<string, unknown>;
+      const name = typeof record.name === 'string' ? record.name.trim() : '';
+      const quantity = typeof record.quantity === 'number'
+        ? record.quantity
+        : typeof record.quantity === 'string'
+          ? Number(record.quantity)
+          : 0;
+      const unit_cost = typeof record.unit_cost === 'number'
+        ? record.unit_cost
+        : typeof record.unit_cost === 'string'
+          ? Number(record.unit_cost)
+          : 0;
+
+      return {
+        name,
+        quantity: Number.isNaN(quantity) ? 0 : quantity,
+        unit_cost: Number.isNaN(unit_cost) ? 0 : unit_cost,
+      };
+    })
+    .filter((item): item is { name: string; quantity: number; unit_cost: number } =>
+      item !== null && (item.name !== '' || item.quantity > 0 || item.unit_cost > 0)
+    );
 }
 
 function replaceInObject(obj: Record<string, unknown>, replacements: Record<string, string>) {

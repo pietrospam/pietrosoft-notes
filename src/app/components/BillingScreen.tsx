@@ -42,6 +42,52 @@ export function BillingScreen() {
   const [periodStartInput, setPeriodStartInput] = useState('');
   const [periodEndInput, setPeriodEndInput] = useState('');
 
+  type BillingItem = {
+    id: string;
+    name: string;
+    quantity: number;
+    unit_cost: number;
+  };
+
+  const [billingItems, setBillingItems] = useState<BillingItem[]>([]);
+
+  const getAutoBillingItem = (): BillingItem => {
+    const selectedMethod = methods.find((method) => method.id === selectedMethodId);
+    const defaultName = 'Desarrollo de Software ERP';
+    const defaultUnitCost = 35;
+    const templateItem = selectedMethod?.payloadTemplate && typeof selectedMethod.payloadTemplate === 'object' && Array.isArray((selectedMethod.payloadTemplate as Record<string, unknown>).items)
+      ? ((selectedMethod.payloadTemplate as Record<string, unknown>).items as Array<Record<string, unknown>>)[0]
+      : undefined;
+
+    let name = defaultName;
+    let quantity = preview?.totalHours || 0;
+    let unit_cost = defaultUnitCost;
+
+    if (templateItem) {
+      if (typeof templateItem.name === 'string' && templateItem.name.trim()) {
+        name = templateItem.name;
+      }
+      if (typeof templateItem.unit_cost === 'number') {
+        unit_cost = templateItem.unit_cost;
+      } else if (typeof templateItem.unit_cost === 'string') {
+        const parsed = Number(templateItem.unit_cost);
+        if (!Number.isNaN(parsed)) unit_cost = parsed;
+      }
+      if (typeof templateItem.quantity === 'number') {
+        quantity = templateItem.quantity;
+      } else if (typeof templateItem.quantity === 'string') {
+        if (templateItem.quantity.includes('{{hours}}')) {
+          quantity = preview?.totalHours || 0;
+        } else {
+          const parsed = Number(templateItem.quantity);
+          if (!Number.isNaN(parsed)) quantity = parsed;
+        }
+      }
+    }
+
+    return { id: 'auto-item', name, quantity, unit_cost };
+  };
+
   // Data
   const [methods, setMethods] = useState<BillingMethod[]>([]);
   const [preview, setPreview] = useState<BillingPreview | null>(null);
@@ -103,6 +149,60 @@ export function BillingScreen() {
     // preserve exactly dd/mm/yyyy semantics
     return iso;
   };
+
+  const addBillingItem = () => {
+    setBillingItems((current) => [
+      ...current,
+      {
+        id: `item-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        name: '',
+        quantity: 0,
+        unit_cost: 0,
+      },
+    ]);
+  };
+
+  const updateBillingItem = (id: string, field: keyof Omit<BillingItem, 'id'>, value: string) => {
+    setBillingItems((current) => current.map((item) => {
+      if (item.id !== id) return item;
+      if (field === 'name') {
+        return { ...item, name: value };
+      }
+      const numericValue = Number(value);
+      return { ...item, [field]: Number.isNaN(numericValue) ? 0 : numericValue };
+    }));
+  };
+
+  const removeBillingItem = (id: string) => {
+    setBillingItems((current) => current.filter((item) => item.id !== id));
+  };
+
+  const getBillingItemsPayload = () => {
+    const autoItem = getAutoBillingItem();
+    const manualItems = billingItems
+      .map((item) => ({
+        name: item.name.trim(),
+        quantity: Number(item.quantity) || 0,
+        unit_cost: Number(item.unit_cost) || 0,
+      }))
+      .filter((item) => item.name !== '' || item.quantity > 0 || item.unit_cost > 0);
+
+    return [autoItem, ...manualItems].filter(
+      (item) => item.name !== '' || item.quantity > 0 || item.unit_cost > 0
+    );
+  };
+
+  const getBillingItemsTotal = () => getBillingItemsPayload().reduce(
+    (sum, item) => sum + item.quantity * item.unit_cost,
+    0
+  );
+
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat('es-ES', {
+      style: 'currency',
+      currency: 'EUR',
+      minimumFractionDigits: 2,
+    }).format(amount);
 
   // Fetch billing methods for selected parent client
   const fetchMethods = useCallback(async (clientParentId?: string) => {
@@ -226,6 +326,7 @@ export function BillingScreen() {
           methodId: selectedMethodId,
           periodStart,
           periodEnd,
+          items: getBillingItemsPayload(),
         }),
       });
       const data = await res.json();
@@ -644,6 +745,120 @@ export function BillingScreen() {
                     </table>
                   </div>
                 )}
+
+                {/* Invoice items */}
+                <div className="mt-4 bg-gray-950 rounded-lg border border-gray-800 p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                    <div>
+                      <h4 className="text-sm font-semibold text-white">Items de factura</h4>
+                      <p className="text-xs text-gray-500">El primer item es generado automáticamente con horas totales y valor hora.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={addBillingItem}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-500"
+                    >
+                      <span>Agregar item</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-12 gap-2 text-xs text-gray-400 uppercase tracking-wide mb-2 px-1">
+                    <div className="col-span-5">Nombre</div>
+                    <div className="col-span-3">Cantidad</div>
+                    <div className="col-span-3">Costo Unitario</div>
+                    <div className="col-span-1 text-right">Acción</div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-12 gap-2 items-end bg-gray-900 rounded-lg p-3 border border-gray-800">
+                      <div className="col-span-5">
+                        <label className="block text-xs text-gray-400 mb-1">Item principal</label>
+                        <input
+                          type="text"
+                          value={getAutoBillingItem().name}
+                          readOnly
+                          className="w-full bg-gray-800 text-white px-3 py-2 rounded border border-gray-700 text-sm"
+                        />
+                      </div>
+                      <div className="col-span-3">
+                        <label className="block text-xs text-gray-400 mb-1">Cantidad</label>
+                        <input
+                          type="number"
+                          value={getAutoBillingItem().quantity}
+                          readOnly
+                          className="w-full bg-gray-800 text-white px-3 py-2 rounded border border-gray-700 text-sm"
+                        />
+                      </div>
+                      <div className="col-span-3">
+                        <label className="block text-xs text-gray-400 mb-1">Costo Unitario</label>
+                        <input
+                          type="number"
+                          value={getAutoBillingItem().unit_cost}
+                          readOnly
+                          className="w-full bg-gray-800 text-white px-3 py-2 rounded border border-gray-700 text-sm"
+                        />
+                      </div>
+                      <div className="col-span-1 flex items-center justify-end">
+                        <span className="text-[10px] text-gray-500">Auto</span>
+                      </div>
+                    </div>
+
+                    {billingItems.length === 0 ? (
+                      <div className="text-gray-500 text-sm">No hay items adicionales agregados.</div>
+                    ) : (
+                      billingItems.map((item) => (
+                        <div key={item.id} className="grid grid-cols-12 gap-2 items-end bg-gray-900 rounded-lg p-3 border border-gray-800">
+                          <div className="col-span-5">
+                            <input
+                              type="text"
+                              value={item.name}
+                              onChange={(e) => updateBillingItem(item.id, 'name', e.target.value)}
+                              className="w-full bg-gray-800 text-white px-3 py-2 rounded border border-gray-700 text-sm"
+                              placeholder="Descripción del item"
+                            />
+                          </div>
+                          <div className="col-span-3">
+                            <input
+                              type="number"
+                              min="0"
+                              step="1"
+                              value={item.quantity}
+                              onChange={(e) => updateBillingItem(item.id, 'quantity', e.target.value)}
+                              className="w-full bg-gray-800 text-white px-3 py-2 rounded border border-gray-700 text-sm"
+                            />
+                          </div>
+                          <div className="col-span-3">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.unit_cost}
+                              onChange={(e) => updateBillingItem(item.id, 'unit_cost', e.target.value)}
+                              className="w-full bg-gray-800 text-white px-3 py-2 rounded border border-gray-700 text-sm"
+                            />
+                          </div>
+                          <div className="col-span-1 flex items-center justify-end">
+                            <button
+                              type="button"
+                              onClick={() => removeBillingItem(item.id)}
+                              className="text-red-400 hover:text-red-300 rounded p-1"
+                              title="Eliminar item"
+                            >
+                              <X size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="mt-4 flex items-center justify-between border-t border-gray-800 pt-3">
+                    <div className="text-sm text-gray-400">Total factura</div>
+                    <div className="text-lg font-semibold text-white">
+                      {formatCurrency(getBillingItemsTotal())}
+                    </div>
+                  </div>
+                </div>
 
                 {/* Invoice button */}
                 <div className="mt-4 flex justify-end">
