@@ -198,6 +198,14 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
         return true;
       },
       handleKeyDown: (view, event) => {
+        // Standard rich text behavior:
+        // Enter -> new paragraph
+        // Shift+Enter -> soft line break
+        // Ctrl+Enter / Cmd+Enter -> no special action
+        if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+          return true;
+        }
+
         if (!effectiveCopyWithImagesOnCopy) return false;
         if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'c') return false;
 
