@@ -15,7 +15,6 @@ import {
   Check,
   Cable,
   Clock,
-  Receipt
 } from 'lucide-react';
 
 export function Sidebar() {
@@ -534,25 +533,6 @@ export function Sidebar() {
           </button>
         ))}
 
-        {/* Divider before Facturación */}
-        <div className="my-2 mx-1 border-t border-gray-800" />
-
-        {/* REQ-026: Facturación */}
-        <button
-          onClick={() => handleNavigate(() => {
-            setCurrentView('billing');
-          })}
-          className={`
-            w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm
-            transition-colors whitespace-nowrap
-            ${currentView === 'billing'
-              ? 'bg-green-600 text-white' 
-              : 'text-gray-400 hover:bg-gray-800 hover:text-white'}
-          `}
-        >
-          <Receipt size={18} className="flex-shrink-0" />
-          <span className="opacity-0 group-hover:opacity-100 lg:opacity-100 transition-opacity">Facturación</span>
-        </button>
       </nav>
     </>
   );

@@ -10,7 +10,7 @@ import type { ConfigTab } from '../components/ConfigPanel';
 
 export type ViewType = 'all' | 'general' | 'task' | 'connection' | 'timesheets' | 'archived' | 'config' | 'favorites' | 'todos' | 'recents' | 'billing'; // REQ-006: Added favorites, REQ-011: Added recents, REQ-021: Added todos, REQ-026: Added billing
 
-export type ActiveTab = 'bitacora' | 'conexiones' | 'timesheets'; // REQ-010: Main navigation tabs
+export type ActiveTab = 'bitacora' | 'conexiones' | 'timesheets' | 'billing'; // REQ-010: Main navigation tabs
 
 export interface TaskFilters {
   status: string;
@@ -1034,7 +1034,7 @@ export function AppProvider({ children }: AppProviderProps) {
       setState(s => ({ 
         ...s, 
         activeTab: tab,
-        currentView: tab === 'timesheets' ? 'timesheets' : (s.currentView === 'timesheets' ? 'all' : s.currentView),
+        currentView: tab === 'timesheets' ? 'timesheets' : tab === 'billing' ? 'billing' : (s.currentView === 'timesheets' ? 'all' : s.currentView),
         activeTypeFilters: tab === 'conexiones' ? ['connection'] : tab === 'bitacora' ? ['task', 'general'] : []
       }));
     },

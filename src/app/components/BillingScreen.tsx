@@ -404,7 +404,7 @@ export function BillingScreen() {
   // Download PDF
   const downloadPdf = (runId: string, filename?: string) => {
     const a = document.createElement('a');
-    a.href = `/api/billing/runs/${runId}/pdf`;
+    a.href = `/api/billing/runs/${runId}/pdf?download=true`;
     a.download = filename || 'invoice.pdf';
     a.click();
   };

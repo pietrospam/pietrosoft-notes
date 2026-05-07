@@ -2,7 +2,7 @@
 
 import { useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { Search, Save, X, Clock, BookOpen, Cable } from 'lucide-react';
+import { Search, Save, X, Clock, BookOpen, Cable, Receipt } from 'lucide-react';
 import type { ActiveTab } from '../context/AppContext';
 
 // top-right "new note" dropdown removed, FAB handles creation
@@ -13,6 +13,7 @@ const tabs: { id: ActiveTab; label: string; icon: React.ElementType }[] = [
   { id: 'bitacora', label: 'Bitácora', icon: BookOpen },
   { id: 'conexiones', label: 'Conexiones', icon: Cable },
   { id: 'timesheets', label: 'TimeSheets', icon: Clock },
+  { id: 'billing', label: 'Facturación', icon: Receipt },
 ];
 
 export function TopBar() {

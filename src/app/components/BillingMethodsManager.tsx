@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Save, Edit2, Link2, Shield, Key } from 'lucide-react';
+import { Plus, Trash2, Save, Edit2, Link2, Shield, Key, Copy } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { BillingMethod, BillingAuthType, BillingAuthConfig } from '@/lib/types';
 
@@ -146,6 +146,31 @@ export function BillingMethodsManager() {
       fetchMethods();
     } catch {
       setError('Error al eliminar el método');
+    }
+  };
+
+  const handleCopyMethod = async (method: BillingMethod) => {
+    setError('');
+    try {
+      const body = {
+        name: method.name.includes('(copia)') ? `${method.name}` : `${method.name} (copia)`,
+        endpointUrl: method.endpointUrl,
+        authType: method.authType,
+        authConfig: method.authConfig || {},
+        payloadTemplate: method.payloadTemplate ?? undefined,
+        nextInvoiceNumber: method.nextInvoiceNumber ?? 1,
+        invoicePrefix: method.invoicePrefix ?? undefined,
+        clientParentId: method.clientParentId || '',
+      };
+      const res = await fetch('/api/billing/methods', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error('Failed to copy');
+      fetchMethods();
+    } catch {
+      setError('Error al copiar el método');
     }
   };
 
@@ -413,6 +438,13 @@ export function BillingMethodsManager() {
                     title="Editar"
                   >
                     <Edit2 size={14} />
+                  </button>
+                  <button
+                    onClick={() => handleCopyMethod(method)}
+                    className="p-1.5 text-gray-400 hover:text-yellow-400 rounded hover:bg-gray-700"
+                    title="Copiar método"
+                  >
+                    <Copy size={14} />
                   </button>
                   <button
                     onClick={() => handleDelete(method.id)}
