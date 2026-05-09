@@ -445,16 +445,6 @@ export function BillingEditorModal({
             <h3 className="text-lg font-semibold text-white">
               {billingRun ? 'Editar factura' : 'Nueva factura'}
             </h3>
-            <input
-              type="text"
-              value={invoiceTitle}
-              onChange={(e) => {
-                setInvoiceTitle(e.target.value);
-                setInvoiceTitleDirty(true);
-              }}
-              placeholder={clientName ? `Título de factura para ${clientName}` : 'Título de la factura'}
-              className="mt-2 w-full min-w-0 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white"
-            />
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-white">
             <X size={20} />
@@ -462,7 +452,7 @@ export function BillingEditorModal({
         </div>
 
         <div className="p-4 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-xs text-gray-500 mb-1">Cliente Padre</label>
               <select
@@ -530,7 +520,10 @@ export function BillingEditorModal({
                 ))}
               </select>
             </div>
-            <div className="md:col-span-2">
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
               <label className="block text-xs text-gray-500 mb-1">Periodo desde</label>
               <input
                 type="text"
@@ -548,7 +541,7 @@ export function BillingEditorModal({
                 className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white"
               />
             </div>
-            <div className="md:col-span-2">
+            <div>
               <label className="block text-xs text-gray-500 mb-1">Periodo hasta</label>
               <input
                 type="text"
@@ -566,6 +559,9 @@ export function BillingEditorModal({
                 className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white"
               />
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs text-gray-500 mb-1">Número de factura</label>
               <input
@@ -578,7 +574,7 @@ export function BillingEditorModal({
                 className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white"
               />
             </div>
-            <div className="md:col-span-3">
+            <div>
               <label className="block text-xs text-gray-500 mb-1">Título de factura</label>
               <input
                 type="text"
@@ -591,6 +587,9 @@ export function BillingEditorModal({
                 className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white"
               />
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs text-gray-500 mb-1">Moneda</label>
               <select
@@ -611,19 +610,17 @@ export function BillingEditorModal({
                 <option value="ARS">ARS</option>
               </select>
             </div>
-            {currency === 'EUR' && (
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Relación tipo de cambio USD</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.0001"
-                  value={exchangeRateUsd ?? ''}
-                  onChange={(e) => setExchangeRateUsd(e.target.value ? Number(e.target.value) : undefined)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white"
-                />
-              </div>
-            )}
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Relación tipo de cambio USD</label>
+              <input
+                type="number"
+                min="0"
+                step="0.0001"
+                value={exchangeRateUsd ?? ''}
+                onChange={(e) => setExchangeRateUsd(e.target.value ? Number(e.target.value) : undefined)}
+                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white"
+              />
+            </div>
           </div>
 
           <div className="bg-gray-950 border border-gray-800 rounded-lg p-4">

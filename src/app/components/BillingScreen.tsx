@@ -27,7 +27,7 @@ const MONTHS = [
 ];
 
 export function BillingScreen() {
-  const { clients, selectedClientId, setSelectedClientId, openBillingEditor } = useApp();
+  const { clients, selectedClientId, setSelectedClientId, openBillingEditor, openConfig } = useApp();
 
   // Data
   const [billingRuns, setBillingRuns] = useState<BillingRun[]>([]);
@@ -48,13 +48,6 @@ export function BillingScreen() {
 
   // Also include standalone clients (no parent, no children but have timesheets)
   const topLevelClients = clients.filter(c => !c.disabled && !c.parentClientId);
-
-  useEffect(() => {
-    if (selectedClientId === null && topLevelClients.length > 0) {
-      const qualita = topLevelClients.find(c => c.name.toLowerCase() === 'qualita');
-      setSelectedClientId(qualita?.id ?? topLevelClients[0].id);
-    }
-  }, [selectedClientId, topLevelClients, setSelectedClientId]);
 
   const openNewBillingEditor = () => {
     openBillingEditor(null);
@@ -92,6 +85,16 @@ export function BillingScreen() {
       currency,
       minimumFractionDigits: 2,
     }).format(amount);
+
+  const getInvoiceJsonDate = (run: BillingRun): string | null => {
+    const jsonDate = run.requestJson?.invoiceDate ?? run.requestJson?.date ?? run.requestJson?.fecha;
+    if (!jsonDate || typeof jsonDate !== 'string') return null;
+    const parsed = new Date(jsonDate);
+    if (!isNaN(parsed.getTime())) {
+      return parsed.toLocaleDateString('es-ES');
+    }
+    return jsonDate;
+  };
 
   // Handle resend
   const handleResend = async (run: BillingRun) => {
@@ -271,17 +274,20 @@ export function BillingScreen() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        <div className="bg-gray-900 rounded-lg p-4 border border-gray-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-semibold text-white">Acciones de facturación</h3>
-            <p className="text-xs text-gray-500">Crea una nueva factura o revisa el historial de envíos.</p>
-          </div>
+        <div className="bg-gray-900 rounded-lg p-4 border border-gray-800 flex flex-wrap gap-3 justify-start">
           <button
             type="button"
             onClick={openNewBillingEditor}
             className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-500"
           >
             <span>Nueva factura</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => openConfig('billing', true)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-700 text-white rounded hover:bg-slate-600"
+          >
+            <span>Métodos de facturación</span>
           </button>
         </div>
 
@@ -315,43 +321,26 @@ export function BillingScreen() {
                     <div className="flex items-center gap-3 flex-1 min-w-0">
                       {statusIcon(run.status)}
                       <div className="min-w-0">
-                        <div className="text-sm text-white flex items-center gap-2">
-                          <span className="font-mono text-xs text-blue-400">#{run.invoiceNumber}</span>
+                        <div className="text-sm text-white flex flex-wrap items-center gap-2">
                           <span className="truncate">{run.clientName}</span>
                           <span className="text-gray-500 text-xs">
                             {MONTHS[(run.month || 1) - 1]} {run.year}
                           </span>
-                        </div>
-                        <div className="text-xs text-gray-500 flex flex-wrap items-center gap-2 mt-0.5">
-                          <span>{run.totalHours.toFixed(1)}h</span>
-                          {run.totalAmount && <span>{formatCurrency(run.totalAmount, run.currency || 'EUR')}</span>}
-                          <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-xs text-slate-300">{statusLabel(run.status)}</span>
-                          <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-xs text-slate-300">{run.methodName}</span>
-                          <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-xs text-slate-300">{new Date(run.createdAt).toLocaleString()}</span>
-                          {run.noteId && (
-                            <span className="px-2 py-0.5 rounded-full bg-orange-950 border border-orange-700 text-xs text-orange-300">Nota registrada</span>
+                          {getInvoiceJsonDate(run) && (
+                            <span className="text-gray-300 text-xs">· {getInvoiceJsonDate(run)}</span>
                           )}
-                              {run.locked ? (
-                            <span className="px-2 py-0.5 rounded-full bg-red-950 border border-red-600 text-xs text-red-300">Bloqueada</span>
-                          ) : run.validated ? (
+                          {run.validated ? (
                             <span className="px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-600 text-xs text-emerald-300">Validada</span>
                           ) : (
-                            <button
-                              onClick={() => handleMarkValidated(run)}
-                              className="px-2 py-0.5 rounded-full bg-yellow-950 border border-yellow-600 text-xs text-yellow-300 hover:bg-yellow-900"
-                            >
-                              Marcar validada
-                            </button>
+                            <span className="px-2 py-0.5 rounded-full bg-yellow-950 border border-yellow-600 text-xs text-yellow-300">Borrador</span>
                           )}
-                          {run.locked ? null : run.sentToClient ? (
-                            <span className="px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-600 text-xs text-emerald-300">Enviada</span>
-                          ) : (
-                            <button
-                              onClick={() => handleMarkSent(run)}
-                              className="px-2 py-0.5 rounded-full bg-blue-950 border border-blue-600 text-xs text-blue-300 hover:bg-blue-900"
-                            >
-                              Marcar enviada
-                            </button>
+                          <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-xs text-slate-300">{run.methodName}</span>
+                        </div>
+                        <div className="text-xs text-slate-300 mt-1 leading-snug flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-xs text-blue-400">#{run.invoiceNumber}</span>
+                          {run.invoiceTitle && <span>{run.invoiceTitle}</span>}
+                          {run.totalAmount !== undefined && (
+                            <span className="ml-auto text-gray-300 text-xs">{formatCurrency(run.totalAmount, run.currency || 'EUR')}</span>
                           )}
                         </div>
                         {run.errorText && (
@@ -390,8 +379,9 @@ export function BillingScreen() {
                       )}
                       <button
                         onClick={() => openBillingEditor(run)}
-                        className="p-1.5 text-gray-400 hover:text-yellow-400 rounded hover:bg-gray-700"
-                        title="Editar factura"
+                        disabled={run.locked}
+                        className="p-1.5 text-gray-400 hover:text-yellow-400 rounded hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title={run.locked ? 'Registro bloqueado' : 'Editar factura'}
                       >
                         <Edit2 size={14} />
                       </button>
@@ -413,7 +403,9 @@ export function BillingScreen() {
                       </button>
                       <button
                         onClick={() => handleToggleLock(run)}
-                        className="p-1.5 text-gray-400 hover:text-indigo-400 rounded hover:bg-gray-700"
+                        className={
+                          `p-1.5 rounded hover:bg-gray-700 ${run.locked ? 'text-red-400 hover:text-red-400' : 'text-gray-400 hover:text-indigo-400'}`
+                        }
                         title={run.locked ? 'Desbloquear registro' : 'Bloquear registro'}
                       >
                         {run.locked ? <Unlock size={14} /> : <Lock size={14} />}

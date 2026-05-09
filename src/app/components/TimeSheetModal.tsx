@@ -36,9 +36,19 @@ interface TimeSheetModalProps {
   onSaved: () => void;
 }
 
+function getLocalIsoDate(): string {
+  const now = new Date();
+  return [
+    now.getFullYear().toString().padStart(4, '0'),
+    (now.getMonth() + 1).toString().padStart(2, '0'),
+    now.getDate().toString().padStart(2, '0'),
+  ].join('-');
+}
+
 export function TimeSheetModal({ task, initialDate, onClose, onSaved }: TimeSheetModalProps) {
-  const [date, setDate] = useState(() => initialDate || new Date().toISOString().split('T')[0]);
-  const [displayDate, setDisplayDate] = useState(() => toDisplayDate(initialDate || new Date().toISOString().split('T')[0]));
+  const initialIsoDate = initialDate || getLocalIsoDate();
+  const [date, setDate] = useState(() => initialIsoDate);
+  const [displayDate, setDisplayDate] = useState(() => toDisplayDate(initialIsoDate));
   const [hours, setHours] = useState<string>('');
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);

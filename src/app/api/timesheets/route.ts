@@ -131,7 +131,7 @@ export async function POST(request: Request) {
     const created = await prisma.timesheet.create({
       data: {
         id: randomUUID(),
-        workDate: new Date(body.workDate),
+        workDate: new Date(`${body.workDate}T00:00:00`),
         hoursWorked: body.hoursWorked,
         description: body.description || null,
         taskId: body.taskId || null,
