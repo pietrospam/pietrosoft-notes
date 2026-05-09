@@ -37,6 +37,7 @@ interface BackupManifest {
     todoNotificationsSent?: number;
     billingMethods?: number;
     billingRuns?: number;
+    billingRunItems?: number;
   };
   taskTodosError?: string;
   appVersion: string;
@@ -247,7 +248,7 @@ export async function POST(request: NextRequest) {
     // Export database tables
     const { prisma } = await import('@/lib/db');
 
-    const [clients, projects, notes, attachments, activityLogs, timesheets, taskComments, billingMethods, billingRuns, todoNotificationsSent] = await Promise.all([
+    const [clients, projects, notes, attachments, activityLogs, timesheets, taskComments, billingMethods, billingRuns, billingRunItems, todoNotificationsSent] = await Promise.all([
       prisma.client.findMany(),
       prisma.project.findMany(),
       prisma.note.findMany(),
@@ -257,6 +258,7 @@ export async function POST(request: NextRequest) {
       prisma.taskComment.findMany(),
       prisma.billingMethod.findMany(),
       prisma.billingRun.findMany(),
+      prisma.billingRunItem.findMany(),
       prisma.todoNotificationSent.findMany(),
     ]);
 
@@ -297,6 +299,7 @@ export async function POST(request: NextRequest) {
         todoNotificationsSent: todoNotificationsSent.length,
         billingMethods: billingMethods.length,
         billingRuns: billingRuns.length,
+        billingRunItems: billingRunItems.length,
       },
       taskTodosError,
       appVersion: '1.0.0',
@@ -331,6 +334,7 @@ export async function POST(request: NextRequest) {
       pdfData: r.pdfData ? r.pdfData.toString('base64') : null,
     }));
     archive.append(JSON.stringify(billingRunsWithData, null, 2), { name: 'db/billingRuns.json' });
+    archive.append(JSON.stringify(billingRunItems, null, 2), { name: 'db/billingRunItems.json' });
     
     // Add data directory if exists
     const dataDir = process.env.DATA_DIR || './data';

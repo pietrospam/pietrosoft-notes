@@ -61,6 +61,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       taskComments: 0,
       billingMethods: 0,
       billingRuns: 0,
+      billingRunItems: 0,
       todoNotificationsSent: 0,
     };
     
@@ -160,6 +161,13 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await prisma.billingRun.createMany({ data: withBinary as any });
       counts.billingRuns = billingRuns.length;
+    }
+
+    const billingRunItems = await readJson('db/billingRunItems.json');
+    if (billingRunItems && Array.isArray(billingRunItems)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await prisma.billingRunItem.createMany({ data: billingRunItems as any });
+      counts.billingRunItems = billingRunItems.length;
     }
     
     // Optionally restore data directory files

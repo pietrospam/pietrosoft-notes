@@ -3,21 +3,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Receipt,
-  Send,
   FileText,
   Download,
   Trash2,
   Edit2,
   RotateCcw,
   Eye,
-  X,
   AlertCircle,
   CheckCircle,
   Clock,
   Loader2,
+  Lock,
+  Unlock,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import type { BillingMethod, BillingRun, BillingPreview } from '@/lib/types';
+import type { BillingRun } from '@/lib/types';
 import { Toast } from './Toast';
 import { NoteEditorModal } from './NoteEditorModal';
 
@@ -27,81 +27,15 @@ const MONTHS = [
 ];
 
 export function BillingScreen() {
-  const { clients, selectedClientId, setSelectedClientId } = useApp();
-
-  const now = new Date();
-  const defaultBillingDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-
-  // Selectors
-  const [selectedYear, setSelectedYear] = useState(defaultBillingDate.getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState(defaultBillingDate.getMonth() + 1);
-  const [selectedMethodId, setSelectedMethodId] = useState('');
-  const [periodStart, setPeriodStart] = useState('');
-  const [periodEnd, setPeriodEnd] = useState('');
-  const [periodStartInput, setPeriodStartInput] = useState('');
-  const [periodEndInput, setPeriodEndInput] = useState('');
-
-  type BillingItem = {
-    id: string;
-    name: string;
-    quantity: number;
-    unit_cost: number;
-  };
-
-  const [billingItems, setBillingItems] = useState<BillingItem[]>([]);
-
-  const getAutoBillingItem = (): BillingItem => {
-    const selectedMethod = methods.find((method) => method.id === selectedMethodId);
-    const defaultName = 'Desarrollo de Software ERP';
-    const defaultUnitCost = 35;
-    const templateItem = selectedMethod?.payloadTemplate && typeof selectedMethod.payloadTemplate === 'object' && Array.isArray((selectedMethod.payloadTemplate as Record<string, unknown>).items)
-      ? ((selectedMethod.payloadTemplate as Record<string, unknown>).items as Array<Record<string, unknown>>)[0]
-      : undefined;
-
-    let name = defaultName;
-    let quantity = preview?.totalHours || 0;
-    let unit_cost = defaultUnitCost;
-
-    if (templateItem) {
-      if (typeof templateItem.name === 'string' && templateItem.name.trim()) {
-        name = templateItem.name;
-      }
-      if (typeof templateItem.unit_cost === 'number') {
-        unit_cost = templateItem.unit_cost;
-      } else if (typeof templateItem.unit_cost === 'string') {
-        const parsed = Number(templateItem.unit_cost);
-        if (!Number.isNaN(parsed)) unit_cost = parsed;
-      }
-      if (typeof templateItem.quantity === 'number') {
-        quantity = templateItem.quantity;
-      } else if (typeof templateItem.quantity === 'string') {
-        if (templateItem.quantity.includes('{{hours}}')) {
-          quantity = preview?.totalHours || 0;
-        } else {
-          const parsed = Number(templateItem.quantity);
-          if (!Number.isNaN(parsed)) quantity = parsed;
-        }
-      }
-    }
-
-    return { id: 'auto-item', name, quantity, unit_cost };
-  };
+  const { clients, selectedClientId, setSelectedClientId, openBillingEditor } = useApp();
 
   // Data
-  const [methods, setMethods] = useState<BillingMethod[]>([]);
-  const [preview, setPreview] = useState<BillingPreview | null>(null);
   const [billingRuns, setBillingRuns] = useState<BillingRun[]>([]);
-  const [expandedPreviewDays, setExpandedPreviewDays] = useState<Set<string>>(new Set());
 
   // States
-  const [loadingPreview, setLoadingPreview] = useState(false);
   const [loadingRuns, setLoadingRuns] = useState(false);
   const [invoicing, setInvoicing] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-
-  // Edit request modal
-  const [editingRun, setEditingRun] = useState<BillingRun | null>(null);
-  const [editJson, setEditJson] = useState('');
 
   // PDF viewer
   const [viewingPdfId, setViewingPdfId] = useState<string | null>(null);
@@ -110,6 +44,7 @@ export function BillingScreen() {
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [activeNoteClientId, setActiveNoteClientId] = useState<string | undefined>(undefined);
   const [noteLoading, setNoteLoading] = useState(false);
+  const [openBillingNoteAttachments, setOpenBillingNoteAttachments] = useState(false);
 
   // Also include standalone clients (no parent, no children but have timesheets)
   const topLevelClients = clients.filter(c => !c.disabled && !c.parentClientId);
@@ -121,139 +56,9 @@ export function BillingScreen() {
     }
   }, [selectedClientId, topLevelClients, setSelectedClientId]);
 
-  useEffect(() => {
-    const start = new Date(Date.UTC(selectedYear, selectedMonth - 1, 1));
-    const end = new Date(Date.UTC(selectedYear, selectedMonth, 0));
-    const startIso = start.toISOString().slice(0, 10);
-    const endIso = end.toISOString().slice(0, 10);
-    setPeriodStart(startIso);
-    setPeriodEnd(endIso);
-    setPeriodStartInput(formatTimelineDate(startIso));
-    setPeriodEndInput(formatTimelineDate(endIso));
-  }, [selectedYear, selectedMonth]);
-
-  const formatTimelineDate = (isoDate: string) => {
-    if (!isoDate) return '';
-    const [year, month, day] = isoDate.split('-');
-    return `${day}/${month}/${year}`;
+  const openNewBillingEditor = () => {
+    openBillingEditor(null);
   };
-
-  const parseTimelineDate = (value: string): string | null => {
-    const match = value.match(/^([0-3]\d)\/([0-1]\d)\/(\d{4})$/);
-    if (!match) return null;
-    const [, day, month, year] = match;
-    const iso = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-    const date = new Date(iso);
-    if (Number.isNaN(date.getTime())) return null;
-    // preserve exactly dd/mm/yyyy semantics
-    return iso;
-  };
-
-  const addBillingItem = () => {
-    setBillingItems((current) => [
-      ...current,
-      {
-        id: `item-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        name: '',
-        quantity: 0,
-        unit_cost: 0,
-      },
-    ]);
-  };
-
-  const updateBillingItem = (id: string, field: keyof Omit<BillingItem, 'id'>, value: string) => {
-    setBillingItems((current) => current.map((item) => {
-      if (item.id !== id) return item;
-      if (field === 'name') {
-        return { ...item, name: value };
-      }
-      const numericValue = Number(value);
-      return { ...item, [field]: Number.isNaN(numericValue) ? 0 : numericValue };
-    }));
-  };
-
-  const removeBillingItem = (id: string) => {
-    setBillingItems((current) => current.filter((item) => item.id !== id));
-  };
-
-  const getBillingItemsPayload = () => {
-    const autoItem = getAutoBillingItem();
-    const manualItems = billingItems
-      .map((item) => ({
-        name: item.name.trim(),
-        quantity: Number(item.quantity) || 0,
-        unit_cost: Number(item.unit_cost) || 0,
-      }))
-      .filter((item) => item.name !== '' || item.quantity > 0 || item.unit_cost > 0);
-
-    return [autoItem, ...manualItems].filter(
-      (item) => item.name !== '' || item.quantity > 0 || item.unit_cost > 0
-    );
-  };
-
-  const getBillingItemsTotal = () => getBillingItemsPayload().reduce(
-    (sum, item) => sum + item.quantity * item.unit_cost,
-    0
-  );
-
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('es-ES', {
-      style: 'currency',
-      currency: 'EUR',
-      minimumFractionDigits: 2,
-    }).format(amount);
-
-  // Fetch billing methods for selected parent client
-  const fetchMethods = useCallback(async (clientParentId?: string) => {
-    try {
-      const params = new URLSearchParams();
-      if (clientParentId) params.set('clientParentId', clientParentId);
-      const res = await fetch(`/api/billing/methods?${params.toString()}`);
-      if (res.ok) {
-        const data = await res.json();
-        setMethods(data);
-        if (data.length > 0) {
-          setSelectedMethodId((current) => {
-            if (current && data.some((method: BillingMethod) => method.id === current)) {
-              return current;
-            }
-            return data[0].id;
-          });
-        } else {
-          setSelectedMethodId('');
-        }
-      }
-    } catch (err) {
-      console.error('Error loading billing methods:', err);
-    }
-  }, []);
-
-  // Fetch preview
-  const fetchPreview = useCallback(async () => {
-    if (!selectedClientId) {
-      setPreview(null);
-      return;
-    }
-    setLoadingPreview(true);
-    try {
-      const params = new URLSearchParams({
-        clientParentId: selectedClientId,
-        year: String(selectedYear),
-        month: String(selectedMonth),
-      });
-      if (periodStart) params.set('periodStart', periodStart);
-      if (periodEnd) params.set('periodEnd', periodEnd);
-
-      const res = await fetch(`/api/billing/preview?${params.toString()}`);
-      if (res.ok) {
-        setPreview(await res.json());
-      }
-    } catch (err) {
-      console.error('Error loading preview:', err);
-    } finally {
-      setLoadingPreview(false);
-    }
-  }, [selectedClientId, selectedYear, selectedMonth, periodStart, periodEnd]);
 
   // Fetch billing runs
   const fetchRuns = useCallback(async () => {
@@ -279,72 +84,14 @@ export function BillingScreen() {
     }
   }, [selectedClientId, clients]);
 
-  useEffect(() => { fetchMethods(selectedClientId ?? undefined); }, [fetchMethods, selectedClientId]);
-  useEffect(() => { fetchPreview(); }, [fetchPreview]);
   useEffect(() => { fetchRuns(); }, [fetchRuns]);
-  useEffect(() => {
-    setExpandedPreviewDays(new Set());
-  }, [preview?.dailyEntries.length]);
 
-  const togglePreviewDay = (date: string) => {
-    setExpandedPreviewDays((prev) => {
-      const next = new Set(prev);
-      if (next.has(date)) next.delete(date);
-      else next.add(date);
-      return next;
-    });
-  };
-
-  const formatPreviewDate = (date: string) => {
-    const [year, month, day] = date.split('-');
-    return `${day}/${month}/${year}`;
-  };
-
-  // Handle invoice
-  const handleInvoice = async () => {
-    if (!selectedClientId || !selectedMethodId) {
-      setToast({ message: 'Selecciona cliente y método de facturación', type: 'error' });
-      return;
-    }
-    if (!preview || preview.totalHours === 0) {
-      setToast({ message: 'No hay horas FINAL para facturar en este período', type: 'error' });
-      return;
-    }
-
-    setInvoicing(true);
-    try {
-      const res = await fetch('/api/billing/runs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clientParentId: selectedClientId,
-          year: selectedYear,
-          month: selectedMonth,
-          methodId: selectedMethodId,
-          periodStart,
-          periodEnd,
-          items: getBillingItemsPayload(),
-        }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setToast({
-          message: data.status === 'success'
-            ? `Factura generada correctamente (${data.invoiceNumber})`
-            : `Facturación completada con errores: ${data.errorText || 'Error desconocido'}`,
-          type: data.status === 'success' ? 'success' : 'error',
-        });
-        fetchRuns();
-      } else {
-        setToast({ message: data.error || 'Error al facturar', type: 'error' });
-      }
-    } catch (error) {
-      console.error('Error during billing:', error);
-      setToast({ message: 'Error de conexión al facturar', type: 'error' });
-    } finally {
-      setInvoicing(false);
-    }
-  };
+  const formatCurrency = (amount: number, currency: string = 'EUR') =>
+    new Intl.NumberFormat('es-ES', {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 2,
+    }).format(amount);
 
   // Handle resend
   const handleResend = async (run: BillingRun) => {
@@ -378,37 +125,17 @@ export function BillingScreen() {
     }
   };
 
-  // Handle edit request JSON
-  const startEditRequest = (run: BillingRun) => {
-    setEditingRun(run);
-    setEditJson(JSON.stringify(run.requestJson, null, 2));
-  };
-
-  const saveEditRequest = async () => {
-    if (!editingRun) return;
+  const updateBillingRunFlags = async (run: BillingRun, validated?: boolean, sentToClient?: boolean, locked?: boolean) => {
     try {
-      const parsed = JSON.parse(editJson);
-      const res = await fetch(`/api/billing/runs/${editingRun.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ requestJson: parsed }),
-      });
-      if (res.ok) {
-        setToast({ message: 'Request actualizado', type: 'success' });
-        setEditingRun(null);
-        fetchRuns();
-      }
-    } catch {
-      setToast({ message: 'JSON inválido', type: 'error' });
-    }
-  };
+      const payload: Record<string, unknown> = {};
+      if (validated !== undefined) payload.validated = validated;
+      if (sentToClient !== undefined) payload.sentToClient = sentToClient;
+      if (locked !== undefined) payload.locked = locked;
 
-  const updateBillingRunFlags = async (run: BillingRun, validated?: boolean, sentToClient?: boolean) => {
-    try {
       const res = await fetch(`/api/billing/runs/${run.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ validated, sentToClient }),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
         await res.json();
@@ -421,6 +148,10 @@ export function BillingScreen() {
     } catch {
       setToast({ message: 'Error de conexión', type: 'error' });
     }
+  };
+
+  const handleToggleLock = async (run: BillingRun) => {
+    await updateBillingRunFlags(run, undefined, undefined, !run.locked);
   };
 
   const handleMarkValidated = async (run: BillingRun) => {
@@ -454,7 +185,9 @@ export function BillingScreen() {
 
     setNoteLoading(true);
     try {
-      const title = run.invoiceNumber
+      const title = run.invoiceTitle
+      ? `Nota de factura: ${run.invoiceTitle}`
+      : run.invoiceNumber
         ? `Nota de factura ${run.invoiceNumber}`
         : `Nota de facturación ${run.year}-${String(run.month).padStart(2, '0')}`;
 
@@ -490,6 +223,7 @@ export function BillingScreen() {
 
       setActiveNoteId(note.id);
       setActiveNoteClientId(run.clientParentId);
+      setOpenBillingNoteAttachments(true);
       fetchRuns();
     } catch (err) {
       console.error('Error creating billing note:', err);
@@ -537,349 +271,19 @@ export function BillingScreen() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {/* Selectors */}
-        <div className="bg-gray-900 rounded-lg p-4 border border-gray-800">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
-            {/* Client */}
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Cliente Padre</label>
-              <select
-                value={selectedClientId ?? ''}
-                onChange={(e) => setSelectedClientId(e.target.value)}
-                className="w-full bg-gray-800 text-white px-3 py-2 rounded text-sm border border-gray-700"
-              >
-                <option value="">Seleccionar cliente...</option>
-                {topLevelClients.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Period Start */}
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Periodo desde</label>
-              <input
-                type="text"
-                placeholder="dd/mm/YYYY"
-                value={periodStartInput}
-                onChange={(e) => setPeriodStartInput(e.target.value)}
-                onBlur={() => {
-                  const parsed = parseTimelineDate(periodStartInput);
-                  if (parsed) {
-                    setPeriodStart(parsed);
-                  } else {
-                    setPeriodStartInput(formatTimelineDate(periodStart));
-                  }
-                }}
-                className="w-full bg-gray-800 text-white px-3 py-2 rounded text-sm border border-gray-700"
-              />
-            </div>
-
-            {/* Period End */}
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Periodo hasta</label>
-              <input
-                type="text"
-                placeholder="dd/mm/YYYY"
-                value={periodEndInput}
-                onChange={(e) => setPeriodEndInput(e.target.value)}
-                onBlur={() => {
-                  const parsed = parseTimelineDate(periodEndInput);
-                  if (parsed) {
-                    setPeriodEnd(parsed);
-                  } else {
-                    setPeriodEndInput(formatTimelineDate(periodEnd));
-                  }
-                }}
-                className="w-full bg-gray-800 text-white px-3 py-2 rounded text-sm border border-gray-700"
-              />
-            </div>
-
-            {/* Month */}
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Mes</label>
-              <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-                className="w-full bg-gray-800 text-white px-3 py-2 rounded text-sm border border-gray-700"
-              >
-                {MONTHS.map((m, i) => (
-                  <option key={i} value={i + 1}>{m}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Year */}
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Año</label>
-              <select
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                className="w-full bg-gray-800 text-white px-3 py-2 rounded text-sm border border-gray-700"
-              >
-                {[2024, 2025, 2026, 2027].map(y => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Method */}
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Método de Facturación</label>
-              <select
-                value={selectedMethodId}
-                onChange={(e) => setSelectedMethodId(e.target.value)}
-                className="w-full bg-gray-800 text-white px-3 py-2 rounded text-sm border border-gray-700"
-              >
-                <option value="">Seleccionar método...</option>
-                {methods.map(m => (
-                  <option key={m.id} value={m.id}>{m.name}</option>
-                ))}
-              </select>
-            </div>
+        <div className="bg-gray-900 rounded-lg p-4 border border-gray-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-white">Acciones de facturación</h3>
+            <p className="text-xs text-gray-500">Crea una nueva factura o revisa el historial de envíos.</p>
           </div>
+          <button
+            type="button"
+            onClick={openNewBillingEditor}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-500"
+          >
+            <span>Nueva factura</span>
+          </button>
         </div>
-
-        {/* Preview */}
-        {selectedClientId && (
-          <div className="bg-gray-900 rounded-lg p-4 border border-gray-800">
-            <h3 className="text-sm font-semibold text-white mb-3 flex flex-col sm:flex-row sm:items-center sm:gap-2">
-              <span className="flex items-center gap-2">
-                <FileText size={16} />
-                Vista Previa — {preview?.clientName || '...'}
-              </span>
-              <span className="text-gray-500 font-normal">
-                Factura: {MONTHS[selectedMonth - 1]} {selectedYear}
-                {' • '}
-                Periodo: {formatTimelineDate(preview?.periodStart || periodStart)} → {formatTimelineDate(preview?.periodEnd || periodEnd)}
-              </span>
-            </h3>
-
-            {loadingPreview ? (
-              <div className="flex items-center gap-2 text-gray-500 text-sm py-4">
-                <Loader2 size={16} className="animate-spin" />
-                Calculando horas...
-              </div>
-            ) : preview ? (
-              <>
-                <div className="grid grid-cols-3 gap-4 mb-4">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-400">{preview.totalHours.toFixed(1)}h</div>
-                    <div className="text-xs text-gray-500">Total Horas</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-green-400">{preview.entryCount}</div>
-                    <div className="text-xs text-gray-500">Entries</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-purple-400">{preview.entries.length}</div>
-                    <div className="text-xs text-gray-500">Tareas</div>
-                  </div>
-                </div>
-
-                {preview.dailyEntries.length > 0 && (
-                  <div className="overflow-x-auto mb-4 border border-gray-700 rounded-lg">
-                    <table className="min-w-full text-sm">
-                      <thead className="bg-gray-900 text-gray-400 text-xs uppercase tracking-wide">
-                        <tr>
-                          <th className="text-left py-2 px-2">Fecha</th>
-                          <th className="text-left py-2 px-2">Imputaciones</th>
-                          <th className="text-left py-2 px-2">Horas</th>
-                          <th className="text-left py-2 px-2">Detalle</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {preview.dailyEntries.map((day) => {
-                          const expanded = expandedPreviewDays.has(day.date);
-                          return (
-                            <React.Fragment key={day.date}>
-                              <tr className="border-t border-gray-700 bg-gray-900 text-white text-sm">
-                                <td className="py-2 px-2 font-mono">{formatPreviewDate(day.date)}</td>
-                                <td className="py-2 px-2">{day.entries.length}</td>
-                                <td className="py-2 px-2 font-mono">{day.totalHours.toFixed(1)}h</td>
-                                <td className="py-2 px-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => togglePreviewDay(day.date)}
-                                    className="text-xs text-blue-300 hover:text-blue-200"
-                                  >
-                                    {expanded ? 'Ocultar' : 'Ver'}
-                                  </button>
-                                </td>
-                              </tr>
-                              {expanded && (
-                                <tr className="bg-gray-950">
-                                  <td colSpan={4} className="p-0">
-                                    <div className="overflow-x-auto">
-                                      <table className="min-w-full text-[11px]">
-                                        <thead className="text-gray-500 uppercase tracking-wide">
-                                          <tr>
-                                            <th className="text-left py-2 px-2 min-w-[84px]">Fecha</th>
-                                            <th className="text-left py-2 px-2 min-w-[120px]">Proyecto</th>
-                                            <th className="text-left py-2 px-2 min-w-[110px]">Ticket/Fase</th>
-                                            <th className="text-right py-2 px-2 min-w-[60px]">Horas</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          {day.entries.map((entry, idx) => (
-                                            <tr key={idx} className="border-t border-gray-800 text-gray-300 text-sm">
-                                              <td className="py-1 px-2 font-mono">{day.date.split('-').reverse().join('/')}</td>
-                                              <td className="py-1 px-2 truncate max-w-[12rem]">{entry.projectName}</td>
-                                              <td className="py-1 px-2 truncate max-w-[12rem]">{entry.taskCode || entry.taskTitle}</td>
-                                              <td className="py-1 px-2 text-right font-mono">{entry.hours.toFixed(1)}</td>
-                                            </tr>
-                                          ))}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                  </td>
-                                </tr>
-                              )}
-                            </React.Fragment>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {/* Invoice items */}
-                <div className="mt-4 bg-gray-950 rounded-lg border border-gray-800 p-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-                    <div>
-                      <h4 className="text-sm font-semibold text-white">Items de factura</h4>
-                      <p className="text-xs text-gray-500">El primer item es generado automáticamente con horas totales y valor hora.</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={addBillingItem}
-                      className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-500"
-                    >
-                      <span>Agregar item</span>
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-12 gap-2 text-xs text-gray-400 uppercase tracking-wide mb-2 px-1">
-                    <div className="col-span-5">Nombre</div>
-                    <div className="col-span-3">Cantidad</div>
-                    <div className="col-span-3">Costo Unitario</div>
-                    <div className="col-span-1 text-right">Acción</div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-12 gap-2 items-end bg-gray-900 rounded-lg p-3 border border-gray-800">
-                      <div className="col-span-5">
-                        <label className="block text-xs text-gray-400 mb-1">Item principal</label>
-                        <input
-                          type="text"
-                          value={getAutoBillingItem().name}
-                          readOnly
-                          className="w-full bg-gray-800 text-white px-3 py-2 rounded border border-gray-700 text-sm"
-                        />
-                      </div>
-                      <div className="col-span-3">
-                        <label className="block text-xs text-gray-400 mb-1">Cantidad</label>
-                        <input
-                          type="number"
-                          value={getAutoBillingItem().quantity}
-                          readOnly
-                          className="w-full bg-gray-800 text-white px-3 py-2 rounded border border-gray-700 text-sm"
-                        />
-                      </div>
-                      <div className="col-span-3">
-                        <label className="block text-xs text-gray-400 mb-1">Costo Unitario</label>
-                        <input
-                          type="number"
-                          value={getAutoBillingItem().unit_cost}
-                          readOnly
-                          className="w-full bg-gray-800 text-white px-3 py-2 rounded border border-gray-700 text-sm"
-                        />
-                      </div>
-                      <div className="col-span-1 flex items-center justify-end">
-                        <span className="text-[10px] text-gray-500">Auto</span>
-                      </div>
-                    </div>
-
-                    {billingItems.length === 0 ? (
-                      <div className="text-gray-500 text-sm">No hay items adicionales agregados.</div>
-                    ) : (
-                      billingItems.map((item) => (
-                        <div key={item.id} className="grid grid-cols-12 gap-2 items-end bg-gray-900 rounded-lg p-3 border border-gray-800">
-                          <div className="col-span-5">
-                            <input
-                              type="text"
-                              value={item.name}
-                              onChange={(e) => updateBillingItem(item.id, 'name', e.target.value)}
-                              className="w-full bg-gray-800 text-white px-3 py-2 rounded border border-gray-700 text-sm"
-                              placeholder="Descripción del item"
-                            />
-                          </div>
-                          <div className="col-span-3">
-                            <input
-                              type="number"
-                              min="0"
-                              step="1"
-                              value={item.quantity}
-                              onChange={(e) => updateBillingItem(item.id, 'quantity', e.target.value)}
-                              className="w-full bg-gray-800 text-white px-3 py-2 rounded border border-gray-700 text-sm"
-                            />
-                          </div>
-                          <div className="col-span-3">
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={item.unit_cost}
-                              onChange={(e) => updateBillingItem(item.id, 'unit_cost', e.target.value)}
-                              className="w-full bg-gray-800 text-white px-3 py-2 rounded border border-gray-700 text-sm"
-                            />
-                          </div>
-                          <div className="col-span-1 flex items-center justify-end">
-                            <button
-                              type="button"
-                              onClick={() => removeBillingItem(item.id)}
-                              className="text-red-400 hover:text-red-300 rounded p-1"
-                              title="Eliminar item"
-                            >
-                              <X size={16} />
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-                  <div className="mt-4 flex items-center justify-between border-t border-gray-800 pt-3">
-                    <div className="text-sm text-gray-400">Total factura</div>
-                    <div className="text-lg font-semibold text-white">
-                      {formatCurrency(getBillingItemsTotal())}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Invoice button */}
-                <div className="mt-4 flex justify-end">
-                  <button
-                    onClick={handleInvoice}
-                    disabled={invoicing || !selectedMethodId || preview.totalHours === 0}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
-                  >
-                    {invoicing ? (
-                      <Loader2 size={16} className="animate-spin" />
-                    ) : (
-                      <Send size={16} />
-                    )}
-                    {invoicing ? 'Facturando...' : 'Facturar'}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div className="text-gray-500 text-sm py-4 text-center">
-                No hay horas en estado FINAL para este período.
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Billing Runs History */}
         <div className="bg-gray-900 rounded-lg p-4 border border-gray-800">
@@ -920,14 +324,16 @@ export function BillingScreen() {
                         </div>
                         <div className="text-xs text-gray-500 flex flex-wrap items-center gap-2 mt-0.5">
                           <span>{run.totalHours.toFixed(1)}h</span>
-                          {run.totalAmount && <span>{run.currency || 'EUR'} {run.totalAmount.toFixed(2)}</span>}
+                          {run.totalAmount && <span>{formatCurrency(run.totalAmount, run.currency || 'EUR')}</span>}
                           <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-xs text-slate-300">{statusLabel(run.status)}</span>
                           <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-xs text-slate-300">{run.methodName}</span>
                           <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-xs text-slate-300">{new Date(run.createdAt).toLocaleString()}</span>
                           {run.noteId && (
                             <span className="px-2 py-0.5 rounded-full bg-orange-950 border border-orange-700 text-xs text-orange-300">Nota registrada</span>
                           )}
-                          {run.validated ? (
+                              {run.locked ? (
+                            <span className="px-2 py-0.5 rounded-full bg-red-950 border border-red-600 text-xs text-red-300">Bloqueada</span>
+                          ) : run.validated ? (
                             <span className="px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-600 text-xs text-emerald-300">Validada</span>
                           ) : (
                             <button
@@ -937,7 +343,7 @@ export function BillingScreen() {
                               Marcar validada
                             </button>
                           )}
-                          {run.sentToClient ? (
+                          {run.locked ? null : run.sentToClient ? (
                             <span className="px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-600 text-xs text-emerald-300">Enviada</span>
                           ) : (
                             <button
@@ -983,15 +389,15 @@ export function BillingScreen() {
                         </>
                       )}
                       <button
-                        onClick={() => startEditRequest(run)}
+                        onClick={() => openBillingEditor(run)}
                         className="p-1.5 text-gray-400 hover:text-yellow-400 rounded hover:bg-gray-700"
-                        title="Editar Request"
+                        title="Editar factura"
                       >
                         <Edit2 size={14} />
                       </button>
                       <button
                         onClick={() => handleResend(run)}
-                        disabled={invoicing}
+                        disabled={invoicing || run.locked}
                         className="p-1.5 text-gray-400 hover:text-blue-400 rounded hover:bg-gray-700 disabled:opacity-50"
                         title="Reenviar"
                       >
@@ -999,10 +405,18 @@ export function BillingScreen() {
                       </button>
                       <button
                         onClick={() => handleDelete(run.id)}
-                        className="p-1.5 text-gray-400 hover:text-red-400 rounded hover:bg-gray-700"
+                        disabled={run.locked}
+                        className="p-1.5 text-gray-400 hover:text-red-400 rounded hover:bg-gray-700 disabled:opacity-50"
                         title="Eliminar"
                       >
                         <Trash2 size={14} />
+                      </button>
+                      <button
+                        onClick={() => handleToggleLock(run)}
+                        className="p-1.5 text-gray-400 hover:text-indigo-400 rounded hover:bg-gray-700"
+                        title={run.locked ? 'Desbloquear registro' : 'Bloquear registro'}
+                      >
+                        {run.locked ? <Unlock size={14} /> : <Lock size={14} />}
                       </button>
                     </div>
                   </div>
@@ -1024,49 +438,15 @@ export function BillingScreen() {
         </div>
       </div>
 
-      {/* Edit Request Modal */}
-      {editingRun && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-gray-900 rounded-lg border border-gray-700 w-full max-w-2xl max-h-[80vh] flex flex-col">
-            <div className="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-white">
-                Editar Request JSON — #{editingRun.invoiceNumber}
-              </h3>
-              <button onClick={() => setEditingRun(null)} className="text-gray-400 hover:text-white">
-                <X size={16} />
-              </button>
-            </div>
-            <div className="flex-1 overflow-hidden p-4">
-              <textarea
-                value={editJson}
-                onChange={(e) => setEditJson(e.target.value)}
-                className="w-full h-full min-h-[300px] bg-gray-800 text-white px-3 py-2 rounded text-sm font-mono resize-none border border-gray-700"
-              />
-            </div>
-            <div className="px-4 py-3 border-t border-gray-700 flex justify-end gap-2">
-              <button
-                onClick={() => setEditingRun(null)}
-                className="px-3 py-1.5 text-sm bg-gray-700 text-gray-300 rounded hover:bg-gray-600"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={saveEditRequest}
-                className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-500 flex items-center gap-1"
-              >
-                <Send size={14} />
-                Guardar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {activeNoteId && (
         <NoteEditorModal
           noteId={activeNoteId}
           defaultClientId={activeNoteClientId}
-          onClose={() => setActiveNoteId(null)}
+          openAttachmentsOnOpen={openBillingNoteAttachments}
+          onClose={() => {
+            setActiveNoteId(null);
+            setOpenBillingNoteAttachments(false);
+          }}
           onSaved={() => {
             setToast({ message: 'Nota guardada', type: 'success' });
             fetchRuns();

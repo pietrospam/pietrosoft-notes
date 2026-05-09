@@ -113,18 +113,22 @@ function toBillingRun(row: {
   year: number;
   month: number;
   methodId: string;
-  invoiceNumber: string | null;
+  invoiceTitle?: string | null;
+  invoiceNumber?: string | null;
   totalHours: number;
-  totalAmount: number | null;
-  currency: string | null;
+  totalAmount?: number | null;
+  currency?: string | null;
+  exchangeRateUsd?: number | null;
   requestJson: unknown;
   responseStatus: number | null;
   responseBody: string | null;
   pdfData?: Buffer | null;
   pdfFilename: string | null;
   status: string;
+  invoiceState: string;
   validated: boolean;
   sentToClient: boolean;
+  locked: boolean;
   errorText: string | null;
   noteId: string | null;
   periodStart: Date;
@@ -132,6 +136,17 @@ function toBillingRun(row: {
   createdAt: Date;
   updatedAt: Date;
   method?: { name: string } | null;
+  items?: Array<{
+    id: string;
+    billingRunId: string;
+    name: string;
+    quantity: number;
+    unitCost: number;
+    total: number;
+    description?: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }>;
 }): BillingRun {
   return {
     id: row.id,
@@ -139,17 +154,21 @@ function toBillingRun(row: {
     year: row.year,
     month: row.month,
     methodId: row.methodId,
+    invoiceTitle: row.invoiceTitle ?? undefined,
     invoiceNumber: row.invoiceNumber ?? undefined,
     totalHours: row.totalHours,
     totalAmount: row.totalAmount ?? undefined,
     currency: row.currency ?? undefined,
+    exchangeRateUsd: row.exchangeRateUsd ?? undefined,
     requestJson: row.requestJson as Record<string, unknown>,
     responseStatus: row.responseStatus ?? undefined,
     responseBody: row.responseBody ?? undefined,
     pdfFilename: row.pdfFilename ?? undefined,
     status: row.status as BillingRun['status'],
+    invoiceState: row.invoiceState as BillingRun['invoiceState'],
     validated: row.validated,
     sentToClient: row.sentToClient,
+    locked: row.locked,
     errorText: row.errorText ?? undefined,
     noteId: row.noteId ?? undefined,
     periodStart: row.periodStart.toISOString(),
@@ -157,6 +176,17 @@ function toBillingRun(row: {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     methodName: row.method?.name,
+    items: row.items?.map((item) => ({
+      id: item.id,
+      billingRunId: item.billingRunId,
+      name: item.name,
+      quantity: item.quantity,
+      unitCost: item.unitCost,
+      total: item.total,
+      description: item.description ?? undefined,
+      createdAt: item.createdAt.toISOString(),
+      updatedAt: item.updatedAt.toISOString(),
+    })),
   };
 }
 
@@ -172,7 +202,7 @@ export async function getBillingRuns(filters?: {
 
   const rows = await prisma.billingRun.findMany({
     where,
-    include: { method: { select: { name: true } } },
+    include: { method: { select: { name: true } }, items: true },
     orderBy: { createdAt: 'desc' },
   });
   return rows.map(toBillingRun);
@@ -181,7 +211,7 @@ export async function getBillingRuns(filters?: {
 export async function getBillingRunById(id: string): Promise<BillingRun | null> {
   const row = await prisma.billingRun.findUnique({
     where: { id },
-    include: { method: { select: { name: true } } },
+    include: { method: { select: { name: true } }, items: true },
   });
   return row ? toBillingRun(row) : null;
 }
@@ -191,18 +221,23 @@ export async function createBillingRun(data: {
   year: number;
   month: number;
   methodId: string;
+  invoiceTitle?: string;
   invoiceNumber?: string;
   totalHours: number;
   totalAmount?: number;
   currency?: string;
+  exchangeRateUsd?: number;
   requestJson: object;
   responseStatus?: number;
   responseBody?: string;
   pdfData?: Buffer;
   pdfFilename?: string;
   status: string;
+  invoiceState?: string;
   errorText?: string;
   noteId?: string;
+  locked?: boolean;
+  items?: Array<{ name: string; quantity: number; unitCost: number; total: number; description?: string }>;
   periodStart: Date;
   periodEnd: Date;
 }): Promise<BillingRun> {
@@ -212,24 +247,37 @@ export async function createBillingRun(data: {
       year: data.year,
       month: data.month,
       methodId: data.methodId,
+      invoiceTitle: data.invoiceTitle ?? null,
       invoiceNumber: data.invoiceNumber ?? null,
       totalHours: data.totalHours,
       totalAmount: data.totalAmount ?? null,
       currency: data.currency ?? null,
+      exchangeRateUsd: data.exchangeRateUsd ?? null,
       requestJson: data.requestJson,
       responseStatus: data.responseStatus ?? null,
       responseBody: data.responseBody ?? null,
       pdfData: data.pdfData ?? null,
       pdfFilename: data.pdfFilename ?? null,
       status: data.status,
+      invoiceState: data.invoiceState ?? 'borrador',
       validated: false,
       sentToClient: false,
+      locked: data.locked ?? false,
       errorText: data.errorText ?? null,
       noteId: data.noteId ?? null,
       periodStart: data.periodStart,
       periodEnd: data.periodEnd,
+      items: data.items ? {
+        create: data.items.map((item) => ({
+          name: item.name,
+          quantity: item.quantity,
+          unitCost: item.unitCost,
+          total: item.total,
+          description: item.description ?? null,
+        })),
+      } : undefined,
     },
-    include: { method: { select: { name: true } } },
+    include: { method: { select: { name: true } }, items: true },
   });
   return toBillingRun(row);
 }
@@ -241,10 +289,17 @@ export async function updateBillingRun(id: string, data: {
   pdfData?: Buffer;
   pdfFilename?: string;
   status?: string;
+  invoiceState?: string;
   validated?: boolean;
   sentToClient?: boolean;
+  invoiceTitle?: string;
   invoiceNumber?: string;
+  currency?: string | null;
+  totalAmount?: number | null;
+  exchangeRateUsd?: number | null;
+  items?: Array<{ name: string; quantity: number; unitCost: number; total: number; description?: string }>;
   noteId?: string | null;
+  locked?: boolean;
   periodStart?: Date;
   periodEnd?: Date;
   errorText?: string;
@@ -258,16 +313,36 @@ export async function updateBillingRun(id: string, data: {
   if (data.status !== undefined) updateData.status = data.status;
   if (data.validated !== undefined) updateData.validated = data.validated;
   if (data.sentToClient !== undefined) updateData.sentToClient = data.sentToClient;
+  if (data.invoiceTitle !== undefined) updateData.invoiceTitle = data.invoiceTitle;
   if (data.invoiceNumber !== undefined) updateData.invoiceNumber = data.invoiceNumber;
+  if (data.totalAmount !== undefined) updateData.totalAmount = data.totalAmount;
+  if (data.currency !== undefined) updateData.currency = data.currency;
+  if (data.exchangeRateUsd !== undefined) updateData.exchangeRateUsd = data.exchangeRateUsd;
   if (data.noteId !== undefined) updateData.noteId = data.noteId;
+  if (data.invoiceState !== undefined) updateData.invoiceState = data.invoiceState;
+  if (data.locked !== undefined) updateData.locked = data.locked;
   if (data.periodStart !== undefined) updateData.periodStart = data.periodStart;
   if (data.periodEnd !== undefined) updateData.periodEnd = data.periodEnd;
   if (data.errorText !== undefined) updateData.errorText = data.errorText;
 
   const row = await prisma.billingRun.update({
     where: { id },
-    data: updateData,
-    include: { method: { select: { name: true } } },
+    data: {
+      ...updateData,
+      items: data.items
+        ? {
+            deleteMany: {},
+            create: data.items.map((item) => ({
+              name: item.name,
+              quantity: item.quantity,
+              unitCost: item.unitCost,
+              total: item.total,
+              description: item.description ?? null,
+            })),
+          }
+        : undefined,
+    },
+    include: { method: { select: { name: true } }, items: true },
   });
   return toBillingRun(row);
 }

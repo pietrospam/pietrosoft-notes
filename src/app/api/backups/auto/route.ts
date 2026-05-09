@@ -142,7 +142,7 @@ export async function POST() {
     });
 
     // Export database tables
-    const [clients, projects, notes, attachments, activityLogs, timesheets, taskComments] = await Promise.all([
+    const [clients, projects, notes, attachments, activityLogs, timesheets, taskComments, billingMethods, billingRuns, billingRunItems, todoNotificationsSent] = await Promise.all([
       prisma.client.findMany(),
       prisma.project.findMany(),
       prisma.note.findMany(),
@@ -150,6 +150,10 @@ export async function POST() {
       prisma.taskActivityLog.findMany(),
       prisma.timesheet.findMany(),
       prisma.taskComment.findMany(),
+      prisma.billingMethod.findMany(),
+      prisma.billingRun.findMany(),
+      prisma.billingRunItem.findMany(),
+      prisma.todoNotificationSent.findMany(),
     ]);
 
     // Task todos may not exist in older DB schemas (missing client_id column), so fall back safely
@@ -186,6 +190,10 @@ export async function POST() {
         activityLogs: activityLogs.length,
         taskComments: taskComments.length,
         taskTodos: taskTodos.length,
+        todoNotificationsSent: todoNotificationsSent.length,
+        billingMethods: billingMethods.length,
+        billingRuns: billingRuns.length,
+        billingRunItems: billingRunItems.length,
       },
       taskTodosError,
       appVersion: '1.0.0',
@@ -202,6 +210,15 @@ export async function POST() {
     archive.append(JSON.stringify(activityLogs, null, 2), { name: 'db/activityLogs.json' });
     archive.append(JSON.stringify(taskComments, null, 2), { name: 'db/taskComments.json' });
     archive.append(JSON.stringify(taskTodos, null, 2), { name: 'db/taskTodos.json' });
+    archive.append(JSON.stringify(todoNotificationsSent, null, 2), { name: 'db/todoNotificationsSent.json' });
+    archive.append(JSON.stringify(billingMethods, null, 2), { name: 'db/billingMethods.json' });
+
+    const billingRunsWithData = billingRuns.map(r => ({
+      ...r,
+      pdfData: r.pdfData ? r.pdfData.toString('base64') : null,
+    }));
+    archive.append(JSON.stringify(billingRunsWithData, null, 2), { name: 'db/billingRuns.json' });
+    archive.append(JSON.stringify(billingRunItems, null, 2), { name: 'db/billingRunItems.json' });
 
     // Encode attachment data to base64
     const attachmentsWithData = attachments.map(a => ({

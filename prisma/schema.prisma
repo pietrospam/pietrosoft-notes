@@ -248,18 +248,22 @@ model BillingRun {
   year            Int
   month           Int
   methodId        String   @map("method_id")
+  invoiceTitle    String?  @map("invoice_title") @db.VarChar(255)
   invoiceNumber   String?  @map("invoice_number") @db.VarChar(50)
   totalHours      Float    @map("total_hours")
   totalAmount     Float?   @map("total_amount")
   currency        String?  @db.VarChar(10)
+  exchangeRateUsd Float?   @map("exchange_rate_usd")
   requestJson     Json     @map("request_json")
   responseStatus  Int?     @map("response_status")
   responseBody    String?  @map("response_body")
   pdfData         Bytes?   @map("pdf_data")
   pdfFilename     String?  @map("pdf_filename") @db.VarChar(255)
   status          String   @default("pending") @db.VarChar(20) // pending, success, failed
+  invoiceState    String   @default("borrador") @db.VarChar(20)
   validated       Boolean  @default(false)
   sentToClient    Boolean  @default(false)
+  locked          Boolean  @default(false)
   errorText       String?  @map("error_text")
   noteId          String?  @map("note_id") @unique
   periodStart     DateTime @map("period_start") @db.Timestamp(6)
@@ -269,12 +273,30 @@ model BillingRun {
 
   method          BillingMethod @relation(fields: [methodId], references: [id], onUpdate: NoAction)
   note            Note?          @relation("BillingRunNote", fields: [noteId], references: [id], onDelete: SetNull)
+  items           BillingRunItem[]
 
   @@index([clientParentId])
   @@index([methodId])
   @@index([noteId])
   @@index([year, month])
   @@map("billing_runs")
+}
+
+model BillingRunItem {
+  id            String    @id @default(uuid())
+  billingRunId  String    @map("billing_run_id")
+  name          String
+  quantity      Float
+  unitCost      Float     @map("unit_cost")
+  total         Float
+  description   String?   @db.VarChar(255)
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  billingRun    BillingRun @relation(fields: [billingRunId], references: [id], onDelete: Cascade)
+
+  @@index([billingRunId])
+  @@map("billing_run_items")
 }
 
 // Tracking sent notifications to avoid duplicates (REQ-021)

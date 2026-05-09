@@ -24,6 +24,28 @@ interface MethodFormState {
   clientParentId: string;
 }
 
+const DEFAULT_METHOD_TEMPLATE = `{
+  "number": "{{invoiceNumber}}",
+  "date": "{{date}}",
+  "header": "INVOICE",
+  "from": "PABLO DANIEL PIETROPAOLO\\n20-32010630-4\\n\\n Ing. Informática\\n\\nAristóbulo del valle 1092 \\nCastelar (1712), Buenos Aires \\nArgentina",
+  "to": "Qualita Solutions & Consulting \\n CIF: B-63.870.729 \\n Av. de les Corts Catalanes, 9-11 Oficina 11 C - Edif. SC Trade III 08173 Sant Cugat del Vallès",
+  "currency": "EUR",
+  "balance_title": "Amount to Pay",
+  "items": [
+    {
+      "name": "Desarrollo de Software ERP",
+      "quantity": "{{hours}}",
+      "unit_cost": 35
+    }
+  ],
+  "notes_title": "Bank Information",
+  "notes": "BANK: Banking Circle de la Foire L-1528 LUXEMBOURG .\\n Account holder: Pablo Daniel Pietropaolo "
+}`;
+
+const DEFAULT_METHOD_NAME = 'Invoice Generator';
+const DEFAULT_METHOD_URL = 'https://invoice-generator.com';
+
 const emptyForm: MethodFormState = {
   name: '',
   endpointUrl: '',
@@ -36,7 +58,7 @@ const emptyForm: MethodFormState = {
 };
 
 export function BillingMethodsManager() {
-  const { clients } = useApp();
+  const { clients, configRequest, clearConfigRequest } = useApp();
   const parentClients = clients.filter(c => !c.disabled && !c.parentClientId);
   const [methods, setMethods] = useState<BillingMethod[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,6 +97,18 @@ export function BillingMethodsManager() {
       invoicePrefix: method.invoicePrefix || '',
       clientParentId: method.clientParentId || '',
     });
+  };
+
+  const handleCreate = () => {
+    setEditingId(null);
+    setShowCreate(true);
+    setForm({
+      ...emptyForm,
+      name: DEFAULT_METHOD_NAME,
+      endpointUrl: DEFAULT_METHOD_URL,
+      payloadTemplate: DEFAULT_METHOD_TEMPLATE,
+    });
+    setError('');
   };
 
   const cancelEdit = () => {
@@ -148,6 +182,13 @@ export function BillingMethodsManager() {
       setError('Error al eliminar el método');
     }
   };
+
+  useEffect(() => {
+    if (configRequest?.tab === 'billing' && configRequest.create) {
+      handleCreate();
+      clearConfigRequest();
+    }
+  }, [configRequest, clearConfigRequest]);
 
   const handleCopyMethod = async (method: BillingMethod) => {
     setError('');
@@ -324,18 +365,7 @@ export function BillingMethodsManager() {
 
       {form.authType !== 'none' && renderAuthFields()}
 
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="block text-xs text-gray-400 mb-1">Prefijo Nro. Factura</label>
-          <input
-            type="text"
-            value={form.invoicePrefix}
-            onChange={(e) => setForm(f => ({ ...f, invoicePrefix: e.target.value }))}
-            className="w-full bg-gray-700 text-white px-3 py-2 rounded text-sm"
-            placeholder="FAC-"
-          />
-        </div>
-        <div>
+<div>
           <label className="block text-xs text-gray-400 mb-1">Próximo Nro. Factura</label>
           <input
             type="number"
@@ -343,8 +373,8 @@ export function BillingMethodsManager() {
             value={form.nextInvoiceNumber}
             onChange={(e) => setForm(f => ({ ...f, nextInvoiceNumber: Math.max(1, parseInt(e.target.value) || 1) }))}
             className="w-full bg-gray-700 text-white px-3 py-2 rounded text-sm"
+            placeholder="1"
           />
-        </div>
       </div>
 
       <div>
@@ -355,7 +385,7 @@ export function BillingMethodsManager() {
           value={form.payloadTemplate}
           onChange={(e) => setForm(f => ({ ...f, payloadTemplate: e.target.value }))}
           className="w-full bg-gray-700 text-white px-3 py-2 rounded text-sm font-mono h-48 resize-y"
-          placeholder='{"number":"{{invoiceNumber}}","date":"{{date}}","items":[{"name":"Desarrollo","quantity":"{{hours}}","unit_cost":35}]}'
+          placeholder={DEFAULT_METHOD_TEMPLATE}
         />
       </div>
 
@@ -387,7 +417,7 @@ export function BillingMethodsManager() {
         </h3>
         {!showCreate && !editingId && (
           <button
-            onClick={() => { setShowCreate(true); setEditingId(null); setForm({ ...emptyForm }); }}
+            onClick={() => { setShowCreate(true); setEditingId(null); setForm({ ...emptyForm, name: DEFAULT_METHOD_NAME, endpointUrl: DEFAULT_METHOD_URL, payloadTemplate: DEFAULT_METHOD_TEMPLATE }); }}
             className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-500 flex items-center gap-1"
           >
             <Plus size={14} />

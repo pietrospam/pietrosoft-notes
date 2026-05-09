@@ -5,8 +5,11 @@ import {
   getBillingPreview,
   peekNextInvoiceNumber,
   createBillingRun,
+  getBillingRunById,
+  updateBillingRun,
 } from '@/lib/repositories/billing-repo';
 import type { BillingAuthConfig, BillingAuthType } from '@/lib/types';
+import { buildExternalPayload, normalizeBillingItems } from '@/lib/billing-utils';
 
 // GET /api/billing/runs - List billing runs (optionally filtered)
 export async function GET(request: Request) {
@@ -32,7 +35,35 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { clientParentId, year, month, methodId, requestJsonOverride, periodStart, periodEnd, items } = body;
+    const {
+      runId,
+      clientParentId: clientParentIdOverride,
+      year: yearOverride,
+      month: monthOverride,
+      methodId: methodIdOverride,
+      requestJsonOverride,
+      periodStart: periodStartOverride,
+      periodEnd: periodEndOverride,
+      items,
+      saveAsDraft,
+      invoiceTitle: invoiceTitleOverride,
+      invoiceNumber: invoiceNumberOverride,
+      currency: currencyOverride,
+      exchangeRateUsd,
+    } = body;
+
+    const existingRun = runId ? await getBillingRunById(runId) : null;
+    if (runId && !existingRun) {
+      return NextResponse.json({ error: 'Billing run not found' }, { status: 404 });
+    }
+
+    const clientParentId = clientParentIdOverride ?? existingRun?.clientParentId;
+    const year = yearOverride ?? existingRun?.year;
+    const month = monthOverride ?? existingRun?.month;
+    const methodId = methodIdOverride ?? existingRun?.methodId;
+    const invoiceTitle = invoiceTitleOverride ?? existingRun?.invoiceTitle;
+    const periodStart = periodStartOverride ?? existingRun?.periodStart;
+    const periodEnd = periodEndOverride ?? existingRun?.periodEnd;
 
     if (!clientParentId || !year || !month || !methodId) {
       return NextResponse.json(
@@ -41,7 +72,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const billingItems = normalizeBillingItems(items);
+    const billingItems = normalizeBillingItems(items || existingRun?.items?.map((item) => ({
+      name: item.name,
+      quantity: item.quantity,
+      unit_cost: item.unitCost,
+      total: item.total,
+    })));
 
     if (!periodStart || !periodEnd) {
       return NextResponse.json(
@@ -75,28 +111,24 @@ export async function POST(request: Request) {
     }
 
     // Get current invoice number for this billing method (do not increment counter yet)
-    const invoiceNumber = await peekNextInvoiceNumber(methodId);
+    const invoiceNumber = invoiceNumberOverride?.trim() || await peekNextInvoiceNumber(methodId);
     const invoiceDate = new Date(Date.UTC(year, month, 0, 0, 0, 0, 0));
     const payloadInvoiceNumber = invoiceNumber;
 
-    // Build request payload from template + preview data
+    // Build request payload from method configuration + preview data
     let requestPayload: Record<string, unknown>;
 
     if (requestJsonOverride) {
-      // Use override payload (for re-sends with edits)
       requestPayload = requestJsonOverride;
-    } else if (method.payloadTemplate) {
-      // Use template and fill in dynamic fields
-      requestPayload = buildPayloadFromTemplate(method.payloadTemplate, preview, payloadInvoiceNumber, invoiceDate);
-      if (billingItems.length > 0) {
-        requestPayload.items = billingItems;
-      }
     } else {
-      // Default: invoice-generator.com format
-      requestPayload = buildDefaultPayload(preview, payloadInvoiceNumber, invoiceDate);
-      if (billingItems.length > 0) {
-        requestPayload.items = billingItems;
-      }
+      requestPayload = buildExternalPayload(method.payloadTemplate ?? undefined, preview, payloadInvoiceNumber, invoiceDate, billingItems);
+    }
+
+    if (currencyOverride) {
+      requestPayload.currency = currencyOverride;
+    }
+    if (exchangeRateUsd !== undefined) {
+      requestPayload.exchangeRateUsd = exchangeRateUsd;
     }
 
     // Build auth headers
@@ -115,73 +147,114 @@ export async function POST(request: Request) {
       }
     }
 
-    // Execute the external API call
+    // Execute the external API call unless this is a draft save
     let responseStatus: number | undefined;
     let responseBody: string | undefined;
     let pdfData: Buffer | undefined;
     let pdfFilename: string | undefined;
-    let status: 'success' | 'failed' = 'failed';
+    let status: 'success' | 'failed' | 'pending' = 'pending';
     let errorText: string | undefined;
 
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
+    if (!saveAsDraft) {
+      status = 'failed';
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
-      const res = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(requestPayload),
-        signal: controller.signal,
-      });
+        const res = await fetch(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(requestPayload),
+          signal: controller.signal,
+        });
 
-      clearTimeout(timeout);
-      responseStatus = res.status;
+        clearTimeout(timeout);
+        responseStatus = res.status;
 
-      if (res.ok) {
-        const contentType = res.headers.get('content-type') || '';
-        if (contentType.includes('application/pdf')) {
-          const arrayBuffer = await res.arrayBuffer();
-          pdfData = Buffer.from(arrayBuffer);
-          pdfFilename = `invoice-${invoiceNumber}.pdf`;
-          status = 'success';
+        if (res.ok) {
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('application/pdf')) {
+            const arrayBuffer = await res.arrayBuffer();
+            pdfData = Buffer.from(arrayBuffer);
+            pdfFilename = `invoice-${invoiceNumber}.pdf`;
+            status = 'success';
+          } else {
+            // Some APIs return JSON with a PDF URL or other formats
+            responseBody = await res.text();
+            status = 'success';
+          }
         } else {
-          // Some APIs return JSON with a PDF URL or other formats
           responseBody = await res.text();
-          status = 'success';
+          errorText = `HTTP ${res.status}: ${responseBody.substring(0, 500)}`;
         }
-      } else {
-        responseBody = await res.text();
-        errorText = `HTTP ${res.status}: ${responseBody.substring(0, 500)}`;
+      } catch (fetchError) {
+        errorText = fetchError instanceof Error ? fetchError.message : 'Unknown fetch error';
       }
-    } catch (fetchError) {
-      errorText = fetchError instanceof Error ? fetchError.message : 'Unknown fetch error';
+    } else {
+      status = 'pending';
     }
 
     // Calculate total amount if rate info is available in template
     const totalAmount = calculateTotalAmount(requestPayload);
+    const invoiceState = saveAsDraft
+      ? (body.invoiceState as string) ?? 'borrador'
+      : (status === 'success' ? 'enviada' : 'validada');
 
-    // Save the billing run
-    const billingRun = await createBillingRun({
+    const billingData = {
       clientParentId,
       year,
       month,
       methodId,
+      invoiceTitle,
       invoiceNumber,
       totalHours: preview.totalHours,
       totalAmount,
       currency: (requestPayload.currency as string) || undefined,
+      exchangeRateUsd: exchangeRateUsd !== undefined ? Number(exchangeRateUsd) : undefined,
       requestJson: requestPayload,
       responseStatus,
       responseBody,
       pdfData,
       pdfFilename,
       status,
+      invoiceState,
       errorText,
+      items: billingItems.map((item) => ({
+        name: item.name,
+        quantity: item.quantity,
+        unitCost: item.unit_cost,
+        total: item.quantity * item.unit_cost,
+      })),
       periodStart: parsedPeriodStart,
       periodEnd: parsedPeriodEnd,
-    });
+    };
+
+    if (runId) {
+      const billingRun = await updateBillingRun(runId, {
+        invoiceTitle: billingData.invoiceTitle,
+        invoiceNumber: billingData.invoiceNumber,
+        totalAmount: billingData.totalAmount,
+        currency: billingData.currency,
+        exchangeRateUsd: billingData.exchangeRateUsd,
+        requestJson: billingData.requestJson,
+        responseStatus: billingData.responseStatus,
+        responseBody: billingData.responseBody,
+        pdfData: billingData.pdfData,
+        pdfFilename: billingData.pdfFilename,
+        status: billingData.status,
+        invoiceState: billingData.invoiceState,
+        errorText: billingData.errorText,
+        items: billingData.items,
+        periodStart: billingData.periodStart,
+        periodEnd: billingData.periodEnd,
+      });
+      return NextResponse.json(billingRun, { status: 200 });
+    }
+
+    const billingRun = await createBillingRun(billingData);
 
     return NextResponse.json(billingRun, { status: status === 'success' ? 201 : 200 });
+
   } catch (error) {
     console.error('Error executing billing run:', error);
     const msg = error instanceof Error ? error.message : 'Failed to execute billing run';
@@ -219,137 +292,6 @@ function applyAuth(
       break;
     // apiKeyQuery is handled in URL construction
   }
-}
-
-function buildPayloadFromTemplate(
-  template: Record<string, unknown>,
-  preview: Awaited<ReturnType<typeof getBillingPreview>>,
-  invoiceNumber: string,
-  invoiceDate: Date
-): Record<string, unknown> {
-  // Deep clone the template
-  const payload = JSON.parse(JSON.stringify(template));
-
-  // Replace placeholders in string values
-  const replacements: Record<string, string> = {
-    '{{invoiceNumber}}': invoiceNumber,
-    '{{date}}': formatDate(invoiceDate),
-    '{{month}}': String(preview.month),
-    '{{year}}': String(preview.year),
-    '{{clientName}}': preview.clientName,
-    '{{totalHours}}': String(preview.totalHours),
-    '{{periodStart}}': preview.periodStart,
-    '{{periodEnd}}': preview.periodEnd,
-  };
-
-  replaceInObject(payload, replacements);
-
-  // Single line item with total hours (not per-task breakdown)
-  if (Array.isArray(payload.items) && payload.items.length > 0) {
-    const itemTemplate = payload.items[0];
-    const item = JSON.parse(JSON.stringify(itemTemplate));
-    const itemReplacements: Record<string, string> = {
-      '{{taskCode}}': '',
-      '{{taskTitle}}': '',
-      '{{projectName}}': '',
-      '{{hours}}': String(preview.totalHours),
-    };
-    replaceInObject(item, itemReplacements);
-    // Set quantity to totalHours
-    if (typeof item.quantity === 'string') {
-      item.quantity = preview.totalHours;
-    } else if (item.quantity === 0 || item.quantity === '{{hours}}') {
-      item.quantity = preview.totalHours;
-    }
-    payload.items = [item];
-  }
-
-  return payload;
-}
-
-function buildDefaultPayload(
-  preview: Awaited<ReturnType<typeof getBillingPreview>>,
-  invoiceNumber: string,
-  invoiceDate: Date
-): Record<string, unknown> {
-  // Default invoice-generator.com format
-  return {
-    number: invoiceNumber,
-    date: formatDate(invoiceDate),
-    header: 'INVOICE',
-    from: '', // To be filled from template/config
-    to: preview.clientName,
-    currency: 'EUR',
-    balance_title: 'Amount to Pay',
-    items: [
-      {
-        name: 'Desarrollo de Software',
-        quantity: preview.totalHours,
-        unit_cost: 0, // Rate from template
-      },
-    ],
-    notes_title: 'Notes',
-    notes: '',
-  };
-}
-
-function formatDate(date: Date): string {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
-}
-
-function normalizeBillingItems(items: unknown) {
-  if (!Array.isArray(items)) return [];
-  return items
-    .map((item) => {
-      if (!item || typeof item !== 'object') return null;
-      const record = item as Record<string, unknown>;
-      const name = typeof record.name === 'string' ? record.name.trim() : '';
-      const quantity = typeof record.quantity === 'number'
-        ? record.quantity
-        : typeof record.quantity === 'string'
-          ? Number(record.quantity)
-          : 0;
-      const unit_cost = typeof record.unit_cost === 'number'
-        ? record.unit_cost
-        : typeof record.unit_cost === 'string'
-          ? Number(record.unit_cost)
-          : 0;
-
-      return {
-        name,
-        quantity: Number.isNaN(quantity) ? 0 : quantity,
-        unit_cost: Number.isNaN(unit_cost) ? 0 : unit_cost,
-      };
-    })
-    .filter((item): item is { name: string; quantity: number; unit_cost: number } =>
-      item !== null && (item.name !== '' || item.quantity > 0 || item.unit_cost > 0)
-    );
-}
-
-function replaceInObject(obj: Record<string, unknown>, replacements: Record<string, string>) {
-  for (const key of Object.keys(obj)) {
-    const val = obj[key];
-    if (typeof val === 'string') {
-      let result = val;
-      for (const [placeholder, value] of Object.entries(replacements)) {
-        result = result.replace(new RegExp(escapeRegExp(placeholder), 'g'), value);
-      }
-      obj[key] = result;
-    } else if (val && typeof val === 'object' && !Array.isArray(val)) {
-      replaceInObject(val as Record<string, unknown>, replacements);
-    } else if (Array.isArray(val)) {
-      for (const item of val) {
-        if (item && typeof item === 'object') {
-          replaceInObject(item as Record<string, unknown>, replacements);
-        }
-      }
-    }
-  }
-}
-
-function escapeRegExp(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function calculateTotalAmount(payload: Record<string, unknown>): number | undefined {

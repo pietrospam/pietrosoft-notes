@@ -341,23 +341,41 @@ export type UpdateBillingMethodInput = Partial<CreateBillingMethodInput>;
 
 export type BillingRunStatus = 'pending' | 'success' | 'failed';
 
+export type BillingInvoiceState = 'borrador' | 'validada' | 'enviada';
+
+export interface BillingRunItem {
+  id: UUID;
+  billingRunId: UUID;
+  name: string;
+  quantity: number;
+  unitCost: number;
+  total: number;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface BillingRun {
   id: UUID;
   clientParentId: UUID;
   year: number;
   month: number;
   methodId: UUID;
+  invoiceTitle?: string;
   invoiceNumber?: string;
   totalHours: number;
   totalAmount?: number;
   currency?: string;
+  exchangeRateUsd?: number;
   requestJson: Record<string, unknown>;
   responseStatus?: number;
   responseBody?: string;
   pdfFilename?: string;
   status: BillingRunStatus;
+  invoiceState: BillingInvoiceState;
   validated: boolean;
   sentToClient: boolean;
+  locked: boolean;
   errorText?: string;
   noteId?: string;
   periodStart: string;
@@ -367,6 +385,7 @@ export interface BillingRun {
   // Enriched (optional, from joins)
   clientName?: string;
   methodName?: string;
+  items?: BillingRunItem[];
 }
 
 export interface BillingPreview {

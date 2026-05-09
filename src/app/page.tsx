@@ -3,6 +3,7 @@
 import { useEffect, useCallback, useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { TopBar, Sidebar, NotesList, ConfigPanel, TimeSheetView, UnsavedChangesModal, FloatingActionButton, Toast, GlobalDropZone, TodosCardsView, BillingScreen } from './components';
+import { BillingEditorModal } from './components/BillingEditorModal';
 import { TaskEditorModal } from './components/TaskEditorModal';
 import { NoteEditorModal } from './components/NoteEditorModal';
 import { ConnectionEditorModal } from './components/ConnectionEditorModal';
@@ -100,6 +101,10 @@ function MainContent() {
     todosFilterTaskId,
     setCurrentView,
     setSelectedNoteId,
+    selectedClientId,
+    clients,
+    billingEditorRun,
+    closeBillingEditor,
   } = useApp();
 
   if (currentView === 'config') {
@@ -142,6 +147,36 @@ function MainContent() {
           onSave={saveAndExecute}
         />
       </>
+    );
+  }
+
+  if (currentView === 'billingEditor') {
+    const defaultClient = clients.find((client) => client.id === selectedClientId);
+
+    return (
+      <div className="flex-1 flex flex-col bg-gray-950 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-800 flex items-center justify-end">
+          <button
+            type="button"
+            onClick={() => setCurrentView('billing')}
+            className="px-3 py-2 bg-gray-800 text-gray-200 rounded hover:bg-gray-700"
+          >
+            Volver al historial
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6">
+          <BillingEditorModal
+            open
+            billingRun={billingEditorRun ?? undefined}
+            clientId={defaultClient?.id || ''}
+            clientName={billingEditorRun?.clientName || defaultClient?.name || 'Seleccionar cliente'}
+            onClose={closeBillingEditor}
+            onSaved={() => {
+              closeBillingEditor();
+            }}
+          />
+        </div>
+      </div>
     );
   }
 

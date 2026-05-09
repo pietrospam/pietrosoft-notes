@@ -209,11 +209,12 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
           <div 
             key={c.id} 
             className={`py-0.5 ${editing?.id === c.id ? 'border border-gray-600 rounded-lg p-2 bg-gray-800/50 my-1' : ''}`}
-            onDoubleClick={() => {
-              // Only allow editing own comments
-              if (c.author === currentUser) {
-                startEditing(c.id, c.content as object);
-              }
+            onDoubleClick={(event) => {
+              event.stopPropagation();
+              // Only allow editing own comments and avoid resetting the current edit session
+              if (c.author !== currentUser) return;
+              if (editing?.id === c.id) return;
+              startEditing(c.id, c.content as object);
             }}
           >
             <div className="flex justify-end items-center gap-2 text-[10px] text-gray-400 mb-1">

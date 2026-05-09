@@ -31,21 +31,34 @@ export async function PUT(request: Request, { params }: { params: { id: string }
 
     if (body.sentToClient === true && !existingRun.sentToClient) {
       await bumpBillingMethodInvoiceNumber(existingRun.methodId);
+      body.locked = true;
     }
 
     const payload: {
       requestJson?: object;
       validated?: boolean;
       sentToClient?: boolean;
+      invoiceTitle?: string;
       invoiceNumber?: string;
+      currency?: string | null;
+      exchangeRateUsd?: number | null;
+      invoiceState?: string;
       noteId?: string | null;
+      locked?: boolean;
+      items?: Array<{ name: string; quantity: number; unitCost: number; total: number; description?: string }>;
     } = {};
 
     if (body.requestJson !== undefined) payload.requestJson = body.requestJson;
     if (body.validated !== undefined) payload.validated = body.validated;
     if (body.sentToClient !== undefined) payload.sentToClient = body.sentToClient;
+    if (body.invoiceTitle !== undefined) payload.invoiceTitle = body.invoiceTitle;
     if (body.invoiceNumber !== undefined) payload.invoiceNumber = body.invoiceNumber;
+    if (body.currency !== undefined) payload.currency = body.currency;
+    if (body.exchangeRateUsd !== undefined) payload.exchangeRateUsd = body.exchangeRateUsd;
+    if (body.invoiceState !== undefined) payload.invoiceState = body.invoiceState;
     if (body.noteId !== undefined) payload.noteId = body.noteId;
+    if (body.items !== undefined) payload.items = body.items;
+    if (body.locked !== undefined) payload.locked = body.locked;
 
     const run = await updateBillingRun(params.id, payload);
     return NextResponse.json(run);

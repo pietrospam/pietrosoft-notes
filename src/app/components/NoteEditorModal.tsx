@@ -15,9 +15,10 @@ interface NoteEditorModalProps {
   onExpandToPopup?: () => void;
   defaultClientId?: string;
   defaultProjectId?: string;
+  openAttachmentsOnOpen?: boolean;
 }
 
-export function NoteEditorModal({ noteId, onClose, onSaved, inline = false, onExpandToPopup, defaultClientId, defaultProjectId }: NoteEditorModalProps) {
+export function NoteEditorModal({ noteId, onClose, onSaved, inline = false, onExpandToPopup, defaultClientId, defaultProjectId, openAttachmentsOnOpen }: NoteEditorModalProps) {
   const { refreshClients } = useApp();
   const [clients, setClients] = useState<Client[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -191,6 +192,7 @@ export function NoteEditorModal({ noteId, onClose, onSaved, inline = false, onEx
       onFieldsChange={handleFieldsChange}
       inline={inline}
       onExpandToPopup={onExpandToPopup}
+      openAttachmentsOnOpen={openAttachmentsOnOpen}
     />
   );
 }

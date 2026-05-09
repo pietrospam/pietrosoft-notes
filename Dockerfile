@@ -27,6 +27,7 @@ RUN npx prisma generate
 # Set environment variable for workspace path
 ENV WORKSPACE_PATH=/data
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_OUTPUT_STANDALONE=true
 
 RUN npm run build
 

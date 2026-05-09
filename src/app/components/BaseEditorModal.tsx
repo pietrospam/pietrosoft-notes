@@ -20,6 +20,7 @@ interface BaseEditorModalProps {
   onFieldsChange?: (data: Partial<Note>) => void;
   headerActions?: ReactNode;    // Additional header actions (e.g., clock icon for tasks)
   inline?: boolean;             // Render as inline panel (not modal)
+  openAttachmentsOnOpen?: boolean;
 }
 
 export function BaseEditorModal({ 
@@ -32,6 +33,7 @@ export function BaseEditorModal({
   onFieldsChange,
   headerActions,
   inline = false,
+  openAttachmentsOnOpen = false,
 }: BaseEditorModalProps) {
   const { updateNote, refreshNotes, toggleFavorite, autoSaveEnabled, copyWithImagesOnCopy, setIsDirty: setGlobalIsDirty, setPendingChanges: setGlobalPendingChanges, deleteNote, setSelectedNoteId, filteredNotes } = useApp();
   const [showAttachmentsModal, setShowAttachmentsModal] = useState(false);
@@ -176,6 +178,10 @@ export function BaseEditorModal({
             setTimeout(() => {
               contentInitializedRef.current = true;
             }, 150);
+
+            if (openAttachmentsOnOpen) {
+              setShowAttachmentsModal(true);
+            }
           }
         } catch (err) {
           console.error('Error loading note:', err);

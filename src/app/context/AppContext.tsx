@@ -1,14 +1,14 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
-import type { Note, NoteType, TaskNote, Client, Project } from '@/lib/types';
+import type { Note, NoteType, TaskNote, Client, Project, BillingRun } from '@/lib/types';
 import type { ConfigTab } from '../components/ConfigPanel';
 
 // ============================================================================
 // Types
 // ============================================================================
 
-export type ViewType = 'all' | 'general' | 'task' | 'connection' | 'timesheets' | 'archived' | 'config' | 'favorites' | 'todos' | 'recents' | 'billing'; // REQ-006: Added favorites, REQ-011: Added recents, REQ-021: Added todos, REQ-026: Added billing
+export type ViewType = 'all' | 'general' | 'task' | 'connection' | 'timesheets' | 'archived' | 'config' | 'favorites' | 'todos' | 'recents' | 'billing' | 'billingEditor'; // REQ-006: Added favorites, REQ-011: Added recents, REQ-021: Added todos, REQ-026: Added billing
 
 export type ActiveTab = 'bitacora' | 'conexiones' | 'timesheets' | 'billing'; // REQ-010: Main navigation tabs
 
@@ -57,6 +57,8 @@ interface AppState {
   globalTimeSheetRequest: boolean;
   // Cargar Horas modal
   showCargarHorasModal: boolean;
+  // Billing editor state
+  billingEditorRun: BillingRun | null;
   // REQ-021: TODOs view filter
   todosFilterTaskId: string | null; // null = show all TODOs, string = show TODOs for specific task
   // Editor modal state
@@ -127,6 +129,8 @@ interface AppContextValue extends AppState {
   configRequest: { tab: ConfigTab; create: boolean } | null;
   openConfig: (tab: ConfigTab, create?: boolean) => void;
   clearConfigRequest: () => void;
+  openBillingEditor: (billingRun?: BillingRun | null) => void;
+  closeBillingEditor: () => void;
   globalTimeSheetRequest: boolean;
   requestTimeSheet: () => void;
   clearTimeSheetRequest: () => void;
@@ -188,6 +192,7 @@ export function AppProvider({ children }: AppProviderProps) {
     configRequest: null,
     globalTimeSheetRequest: false,
     showCargarHorasModal: false,
+    billingEditorRun: null,
     todosFilterTaskId: null, // REQ-021: TODOs view filter
     selectedTimesheetClientId: null,
     expandedClientIds: [],
@@ -928,7 +933,13 @@ export function AppProvider({ children }: AppProviderProps) {
 
   const value: AppContextValue = {
     ...state,
-    setCurrentView: (view) => setState(s => ({ ...s, currentView: view, selectedNoteId: null, isNewNote: false })),
+    setCurrentView: (view) => setState(s => ({
+      ...s,
+      currentView: view,
+      selectedNoteId: null,
+      isNewNote: false,
+      billingEditorRun: view === 'billingEditor' ? s.billingEditorRun : null,
+    })),
     setTodosFilterTaskId: (taskId) => setState(s => ({ ...s, todosFilterTaskId: taskId })), // REQ-021
     setSelectedNoteId: (id) => setState(s => ({ ...s, selectedNoteId: id, isNewNote: id?.startsWith('temp-') ?? false })),
     setSelectedClientId: (id) => setState(s => ({ ...s, selectedClientId: id, selectedNoteId: null, isNewNote: false })),
@@ -992,6 +1003,18 @@ export function AppProvider({ children }: AppProviderProps) {
         noteType: null,
         noteId: null,
       },
+    })),
+    openBillingEditor: (billingRun) => setState(s => ({
+      ...s,
+      currentView: 'billingEditor',
+      selectedNoteId: null,
+      isNewNote: false,
+      billingEditorRun: billingRun ?? null,
+    })),
+    closeBillingEditor: () => setState(s => ({
+      ...s,
+      currentView: 'billing',
+      billingEditorRun: null,
     })),
     // REQ-001.13.2: NotesList collapse control
     setNotesListCollapsed: (collapsed) => {
