@@ -20,6 +20,7 @@ interface TimeSheetGridEntry {
   taskShortDescription: string;
   projectId: string;
   projectName: string;
+  projectCode: string; // Optional project code (e.g. PRJ-001)
   clientId: string;
   clientName: string;
   parentClientId?: string; // REQ-010: Added for parent client grouping
@@ -113,8 +114,8 @@ export function TimeSheetView() {
   const [filterDateTo, setFilterDateTo] = useState<string>('');
   const [filterClient, setFilterClient] = useState<string>('');
   const [filterProject, setFilterProject] = useState<string>('');
-  const [filterState, setFilterState] = useState<'all' | 'DRAFT' | 'FINAL'>('DRAFT'); // Estado: borrador por defecto
-  const [filterPositiveHours, setFilterPositiveHours] = useState(true); // Solo horas > 0
+  const [filterState, setFilterState] = useState<'all' | 'DRAFT' | 'FINAL'>('all'); // Estado: todos por defecto
+  const [filterPositiveHours, setFilterPositiveHours] = useState(false); // Solo horas > 0 (inactivo por defecto en la grilla principal)
 
   // Column widths (resizable, persisted in localStorage)
   const COLUMN_WIDTHS_KEY = 'timesheet-column-widths';
@@ -181,7 +182,7 @@ export function TimeSheetView() {
   }, [timesheets, filterClient]);
 
   // Check if any filter is active
-  const hasActiveFilters = filterDateFrom || filterDateTo || filterClient || filterProject || filterState !== 'DRAFT' || !filterPositiveHours;
+  const hasActiveFilters = filterDateFrom || filterDateTo || filterClient || filterProject || filterState !== 'all' || filterPositiveHours;
 
   // Clear all filters
   const clearFilters = () => {
@@ -189,8 +190,8 @@ export function TimeSheetView() {
     setFilterDateTo('');
     setFilterClient('');
     setFilterProject('');
-    setFilterState('DRAFT');
-    setFilterPositiveHours(true);
+    setFilterState('all');
+    setFilterPositiveHours(false);
   };
 
   // Fetch timesheets from API
@@ -247,8 +248,8 @@ export function TimeSheetView() {
     return timesheets.filter(ts => {
       // State filter
       if (filterState !== 'all' && ts.state !== filterState) return false;
-      // Positive hours filter
-      if (filterPositiveHours && ts.hoursWorked <= 0) return false;
+      // Positive hours filter, but keep rows that are being edited
+      if (filterPositiveHours && ts.hoursWorked <= 0 && !editingRows.has(ts.id)) return false;
       // Month filter (always active)
       if (selectedMonthStr) {
         const tsMonth = ts.workDate.slice(0, 7); // YYYY-MM
@@ -738,20 +739,25 @@ export function TimeSheetView() {
 
   // Create timesheet directly and add to grid in edit mode
   const handleQuickCreateTimesheet = async (task: TaskNote & { clientName: string; projectName: string }) => {
-    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const today = [
+      now.getFullYear().toString().padStart(4, '0'),
+      (now.getMonth() + 1).toString().padStart(2, '0'),
+      now.getDate().toString().padStart(2, '0'),
+    ].join('-');
     
     try {
-      const res = await fetch('/api/notes', {
+      const res = await fetch('/api/timesheets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          type: 'timesheet',
-          title: `TimeSheet - ${task.title}`,
           taskId: task.id,
           workDate: today,
           hoursWorked: 0,
           description: task.title,
           state: 'DRAFT',
+          projectId: task.projectId || null,
+          clientId: null,
         }),
       });
       
@@ -1895,6 +1901,7 @@ export function TimeSheetView() {
           hoursWorked: ts.hoursWorked,
           description: ts.description,
           projectName: ts.projectName,
+          projectCode: ts.projectCode || '',
           taskCode: ts.taskCode,
           taskShortDescription: ts.taskShortDescription,
           state: ts.state,

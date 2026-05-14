@@ -2,16 +2,22 @@ FROM node:18-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
+# Force Prisma to use the OpenSSL 3.x engine (Alpine ships OpenSSL 3)
+ENV PRISMA_CLI_BINARY_TARGETS=linux-musl-openssl-3.0.x
 
 # Copy package files
 COPY package.json package-lock.json ./
-RUN npm ci
+# Increase timeouts to reduce build failures on flaky networks
+RUN npm ci --network-timeout=100000 --fetch-timeout=600000 --no-audit
 
 # Rebuild the source code only when needed
 FROM base AS builder
+RUN apk add --no-cache openssl
 WORKDIR /app
+# Force Prisma to use the OpenSSL 3.x engine during next build
+ENV PRISMA_CLI_BINARY_TARGETS=linux-musl-openssl-3.0.x
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
@@ -21,6 +27,7 @@ RUN npx prisma generate
 # Set environment variable for workspace path
 ENV WORKSPACE_PATH=/data
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_OUTPUT_STANDALONE=true
 
 RUN npm run build
 
@@ -28,7 +35,7 @@ RUN npm run build
 FROM base AS runner
 WORKDIR /app
 
-# Install OpenSSL for Prisma
+# Install OpenSSL 3.x for Prisma (matches linux-musl-openssl-3.0.x binary target)
 RUN apk add --no-cache libc6-compat openssl
 
 ENV NODE_ENV=production

@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Building2, FolderKanban, Database, Download, Upload, Loader2, Settings, Save, Clock, Trash2, Server, Shield, ShieldOff, RotateCcw, RefreshCw, Plus, FolderOpen, Timer, Calendar } from 'lucide-react';
+import { Building2, FolderKanban, Database, Download, Upload, Loader2, Settings, Save, Clock, Trash2, Server, Shield, ShieldOff, RotateCcw, RefreshCw, Plus, FolderOpen, Timer, Calendar, Clipboard } from 'lucide-react';
 import { ClientsManager } from './ClientsManager';
 import { ProjectsManager } from './ProjectsManager';
+import { BillingMethodsManager } from './BillingMethodsManager';
 import { useApp } from '../context/AppContext';
 import { InfoModal } from './InfoModal';
 
-export type ConfigTab = 'clients' | 'projects' | 'backup' | 'preferences';
+export type ConfigTab = 'clients' | 'projects' | 'backup' | 'preferences' | 'billing';
 
 interface BackupMetadata {
   filename: string;
@@ -40,6 +41,7 @@ function ServerBackupsSection() {
   const { refreshNotes } = useApp();
   const [backups, setBackups] = useState<BackupMetadata[]>([]);
   const [settings, setSettings] = useState<BackupSettings | null>(null);
+  const [originalSettings, setOriginalSettings] = useState<BackupSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
@@ -47,6 +49,15 @@ function ServerBackupsSection() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+
+  // Check if settings have changed
+  const hasSettingsChanges = useCallback(() => {
+    if (!settings || !originalSettings) return false;
+    return settings.retentionCount !== originalSettings.retentionCount ||
+      settings.autoBackupEnabled !== originalSettings.autoBackupEnabled ||
+      settings.autoBackupFrequency !== originalSettings.autoBackupFrequency ||
+      settings.autoBackupTime !== originalSettings.autoBackupTime;
+  }, [settings, originalSettings]);
 
   const fetchBackups = useCallback(async () => {
     setIsLoading(true);
@@ -70,6 +81,7 @@ function ServerBackupsSection() {
       if (!res.ok) throw new Error('Failed to fetch settings');
       const data = await res.json();
       setSettings(data);
+      setOriginalSettings(data);
     } catch (err) {
       console.error('Failed to fetch backup settings:', err);
     }
@@ -163,7 +175,7 @@ function ServerBackupsSection() {
     window.open(`/api/backups/${encodeURIComponent(filename)}`, '_blank');
   };
 
-  const handleSaveSettings = async (newSettings: Partial<BackupSettings>) => {
+  const handleSaveSettings = async () => {
     if (!settings) return;
     setIsSavingSettings(true);
     setError(null);
@@ -171,11 +183,12 @@ function ServerBackupsSection() {
       const res = await fetch('/api/backups/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...settings, ...newSettings }),
+        body: JSON.stringify(settings),
       });
       if (!res.ok) throw new Error('Failed to save settings');
       const data = await res.json();
       setSettings(data.settings);
+      setOriginalSettings(data.settings);
       setSuccessMessage('Configuración guardada');
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
@@ -186,6 +199,12 @@ function ServerBackupsSection() {
     }
   };
 
+  // Update local settings
+  const updateSettings = (newSettings: Partial<BackupSettings>) => {
+    if (!settings) return;
+    setSettings({ ...settings, ...newSettings });
+  };
+
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
     return d.toLocaleString('es-AR', {
@@ -194,6 +213,7 @@ function ServerBackupsSection() {
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
+      hour12: false,
     });
   };
 
@@ -281,8 +301,7 @@ function ServerBackupsSection() {
             <div className="flex items-center gap-3">
               <select
                 value={settings.retentionCount}
-                onChange={(e) => handleSaveSettings({ retentionCount: parseInt(e.target.value) })}
-                disabled={isSavingSettings}
+                onChange={(e) => updateSettings({ retentionCount: parseInt(e.target.value) })}
                 className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
               >
                 <option value={0}>Ilimitado</option>
@@ -307,8 +326,7 @@ function ServerBackupsSection() {
             <div className="space-y-3">
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => handleSaveSettings({ autoBackupEnabled: !settings.autoBackupEnabled })}
-                  disabled={isSavingSettings}
+                  onClick={() => updateSettings({ autoBackupEnabled: !settings.autoBackupEnabled })}
                   className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                     settings.autoBackupEnabled ? 'bg-purple-600' : 'bg-gray-600'
                   }`}
@@ -328,8 +346,7 @@ function ServerBackupsSection() {
                 <div className="flex items-center gap-3 ml-14">
                   <select
                     value={settings.autoBackupFrequency}
-                    onChange={(e) => handleSaveSettings({ autoBackupFrequency: e.target.value as BackupSettings['autoBackupFrequency'] })}
-                    disabled={isSavingSettings}
+                    onChange={(e) => updateSettings({ autoBackupFrequency: e.target.value as BackupSettings['autoBackupFrequency'] })}
                     className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
                   >
                     <option value="daily">Diario</option>
@@ -337,13 +354,33 @@ function ServerBackupsSection() {
                     <option value="monthly">Mensual</option>
                   </select>
                   <span className="text-xs text-gray-500">a las</span>
-                  <input
-                    type="time"
-                    value={settings.autoBackupTime}
-                    onChange={(e) => handleSaveSettings({ autoBackupTime: e.target.value })}
-                    disabled={isSavingSettings}
-                    className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
-                  />
+                  <div className="flex items-center gap-1">
+                    <select
+                      value={settings.autoBackupTime.split(':')[0] || '03'}
+                      onChange={(e) => {
+                        const minute = settings.autoBackupTime.split(':')[1] || '00';
+                        updateSettings({ autoBackupTime: `${e.target.value}:${minute}` });
+                      }}
+                      className="bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                    >
+                      {Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0')).map(h => (
+                        <option key={h} value={h}>{h}</option>
+                      ))}
+                    </select>
+                    <span className="text-gray-500">:</span>
+                    <select
+                      value={settings.autoBackupTime.split(':')[1] || '00'}
+                      onChange={(e) => {
+                        const hour = settings.autoBackupTime.split(':')[0] || '03';
+                        updateSettings({ autoBackupTime: `${hour}:${e.target.value}` });
+                      }}
+                      className="bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                    >
+                      {Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0')).map(m => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               )}
               
@@ -355,12 +392,35 @@ function ServerBackupsSection() {
             </div>
           </div>
           
-          {isSavingSettings && (
-            <div className="flex items-center gap-2 text-xs text-purple-400">
-              <Loader2 size={12} className="animate-spin" />
-              Guardando...
-            </div>
-          )}
+          {/* Save Button */}
+          <div className="pt-3 border-t border-gray-700">
+            <button
+              onClick={handleSaveSettings}
+              disabled={isSavingSettings || !hasSettingsChanges()}
+              className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all ${
+                hasSettingsChanges()
+                  ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                  : 'bg-gray-700 text-gray-400 cursor-not-allowed'
+              }`}
+            >
+              {isSavingSettings ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                <>
+                  <Save size={16} />
+                  {hasSettingsChanges() ? 'Guardar cambios' : 'Sin cambios pendientes'}
+                </>
+              )}
+            </button>
+            {hasSettingsChanges() && (
+              <p className="text-xs text-yellow-400 text-center mt-2">
+                Tienes cambios sin guardar
+              </p>
+            )}
+          </div>
         </div>
       )}
 
@@ -635,28 +695,71 @@ function BackupManager() {
 }
 
 function PreferencesManager() {
-  const { autoSaveEnabled, toggleAutoSave } = useApp();
+  const { autoSaveEnabled, toggleAutoSave, copyWithImagesOnCopy, setCopyWithImagesOnCopy, recentHours, setRecentHours } = useApp();
   
-  // TimeSheet preferences
+  // TimeSheet preferences with original tracking
   const [dailyHoursTarget, setDailyHoursTarget] = useState<number>(8);
   const [exportDateFormat, setExportDateFormat] = useState<string>('DD/MM/YYYY');
+  const [originalDailyHours, setOriginalDailyHours] = useState<number>(8);
+  const [originalExportFormat, setOriginalExportFormat] = useState<string>('DD/MM/YYYY');
+  const [timesheetSaved, setTimesheetSaved] = useState(false);
+
+  // Recents preferences
+  const [recentsHours, setRecentsHours] = useState<number>(8);
+  const [originalRecentsHours, setOriginalRecentsHours] = useState<number>(8);
+  const [recentsSaved, setRecentsSaved] = useState(false);
+  
+  // Lazy import TelegramConfig to avoid SSR issues
+  const [TelegramConfigComponent, setTelegramConfigComponent] = useState<React.ComponentType | null>(null);
+  
+  useEffect(() => {
+    import('./TelegramConfig').then(mod => {
+      setTelegramConfigComponent(() => mod.TelegramConfig);
+    });
+  }, []);
   
   // Load from localStorage on mount
   useEffect(() => {
     const savedHours = localStorage.getItem('timesheet-daily-hours');
     const savedFormat = localStorage.getItem('timesheet-export-date-format');
-    if (savedHours) setDailyHoursTarget(parseFloat(savedHours));
-    if (savedFormat) setExportDateFormat(savedFormat);
-  }, []);
-  
-  const handleDailyHoursChange = (hours: number) => {
+    const hours = savedHours ? parseFloat(savedHours) : 8;
+    const format = savedFormat || 'DD/MM/YYYY';
     setDailyHoursTarget(hours);
-    localStorage.setItem('timesheet-daily-hours', hours.toString());
+    setOriginalDailyHours(hours);
+    setExportDateFormat(format);
+    setOriginalExportFormat(format);
+
+    // Recents view interval
+    const savedRecent = localStorage.getItem('bitacora-recents-hours');
+    const recent = savedRecent ? parseInt(savedRecent, 10) : recentHours;
+    setRecentsHours(!Number.isNaN(recent) ? recent : recentHours);
+    setOriginalRecentsHours(!Number.isNaN(recent) ? recent : recentHours);
+  }, [recentHours]);
+  
+  // Check if timesheet settings have changed
+  const hasTimesheetChanges = () => {
+    return dailyHoursTarget !== originalDailyHours || exportDateFormat !== originalExportFormat;
+  };
+
+  const hasRecentsChanges = () => {
+    return recentsHours !== originalRecentsHours;
   };
   
-  const handleExportFormatChange = (format: string) => {
-    setExportDateFormat(format);
-    localStorage.setItem('timesheet-export-date-format', format);
+  const handleSaveTimesheetSettings = () => {
+    localStorage.setItem('timesheet-daily-hours', dailyHoursTarget.toString());
+    localStorage.setItem('timesheet-export-date-format', exportDateFormat);
+    setOriginalDailyHours(dailyHoursTarget);
+    setOriginalExportFormat(exportDateFormat);
+    setTimesheetSaved(true);
+    setTimeout(() => setTimesheetSaved(false), 3000);
+  };
+
+  const handleSaveRecentsSettings = () => {
+    const validHours = Math.min(168, Math.max(1, Math.round(recentsHours)));
+    setRecentHours(validHours);
+    setOriginalRecentsHours(validHours);
+    setRecentsSaved(true);
+    setTimeout(() => setRecentsSaved(false), 3000);
   };
 
   return (
@@ -699,6 +802,42 @@ function PreferencesManager() {
             )}
           </div>
         </div>
+
+        {/* Copy with images on Ctrl+C */}
+        <div className="bg-gray-900 rounded-lg p-4 border border-gray-800">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-indigo-500/20 rounded-lg">
+                <Clipboard size={20} className="text-indigo-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-medium text-white">Copiar con imágenes (Ctrl+C)</h3>
+                <p className="text-gray-400 text-sm">
+                  Al usar Ctrl+C dentro del editor, convierte imágenes en datos embebidos para pegar en Outlook u otros editores.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setCopyWithImagesOnCopy(!copyWithImagesOnCopy)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                copyWithImagesOnCopy ? 'bg-indigo-600' : 'bg-gray-600'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  copyWithImagesOnCopy ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+          <div className="mt-3 text-sm text-gray-500">
+            {copyWithImagesOnCopy ? (
+              <span className="text-green-400">✓ Activado</span>
+            ) : (
+              <span className="text-yellow-400">⚠ El portapapeles funcionará normalmente sin embebidos</span>
+            )}
+          </div>
+        </div>
         
         {/* TimeSheet Settings */}
         <div className="bg-gray-900 rounded-lg p-4 border border-gray-800">
@@ -725,7 +864,7 @@ function PreferencesManager() {
                 max={24}
                 step={0.5}
                 value={dailyHoursTarget}
-                onChange={(e) => handleDailyHoursChange(parseFloat(e.target.value) || 8)}
+                onChange={(e) => setDailyHoursTarget(parseFloat(e.target.value) || 8)}
                 className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-white w-20 focus:outline-none focus:ring-1 focus:ring-orange-500"
               />
             </div>
@@ -738,13 +877,102 @@ function PreferencesManager() {
               </div>
               <select
                 value={exportDateFormat}
-                onChange={(e) => handleExportFormatChange(e.target.value)}
+                onChange={(e) => setExportDateFormat(e.target.value)}
                 className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
               >
                 <option value="DD/MM/YYYY">DD/MM/YYYY (20/02/2026)</option>
                 <option value="YYYY-MM-DD">YYYY-MM-DD (2026-02-20)</option>
                 <option value="DD-MM-YYYY">DD-MM-YYYY (20-02-2026)</option>
               </select>
+            </div>
+            
+            {/* Save Button for TimeSheet settings */}
+            <div className="pt-3 border-t border-gray-700">
+              <button
+                onClick={handleSaveTimesheetSettings}
+                disabled={!hasTimesheetChanges()}
+                className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all ${
+                  hasTimesheetChanges()
+                    ? 'bg-orange-600 hover:bg-orange-700 text-white'
+                    : 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                {timesheetSaved ? (
+                  <>
+                    <span className="text-green-400">✓</span>
+                    ¡Guardado!
+                  </>
+                ) : (
+                  <>
+                    <Save size={16} />
+                    {hasTimesheetChanges() ? 'Guardar cambios' : 'Sin cambios pendientes'}
+                  </>
+                )}
+              </button>
+              {hasTimesheetChanges() && (
+                <p className="text-xs text-yellow-400 text-center mt-2">
+                  Tienes cambios sin guardar
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Recents settings */}
+        <div className="bg-gray-900 rounded-lg p-4 border border-gray-800">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-blue-500/20 rounded-lg">
+              <Clock size={20} className="text-blue-400" />
+            </div>
+            <div>
+              <h3 className="text-lg font-medium text-white">Recientes</h3>
+              <p className="text-gray-400 text-sm">Notas modificadas en las últimas horas</p>
+            </div>
+          </div>
+
+          <div className="space-y-4 ml-11">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-sm text-white">Intervalo (horas)</label>
+                <p className="text-xs text-gray-500">Muestra notas actualizadas en las últimas N horas</p>
+              </div>
+              <input
+                type="number"
+                min={1}
+                max={168}
+                value={recentsHours}
+                onChange={(e) => setRecentsHours(parseInt(e.target.value, 10) || 1)}
+                className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-white w-20 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+
+            <div className="pt-3 border-t border-gray-700">
+              <button
+                onClick={handleSaveRecentsSettings}
+                disabled={!hasRecentsChanges()}
+                className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all ${
+                  hasRecentsChanges()
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                    : 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                {recentsSaved ? (
+                  <>
+                    <span className="text-green-400">✓</span>
+                    ¡Guardado!
+                  </>
+                ) : (
+                  <>
+                    <Save size={16} />
+                    {hasRecentsChanges() ? 'Guardar cambios' : 'Sin cambios pendientes'}
+                  </>
+                )}
+              </button>
+              {hasRecentsChanges() && (
+                <p className="text-xs text-yellow-400 text-center mt-2">
+                  Tienes cambios sin guardar
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -757,6 +985,9 @@ function PreferencesManager() {
             Un punto amarillo indicará cuando hay cambios sin guardar.
           </p>
         </div>
+
+        {/* Telegram Notifications */}
+        {TelegramConfigComponent && <TelegramConfigComponent />}
       </div>
     </div>
   );
@@ -835,16 +1066,30 @@ export function ConfigPanel() {
               <Settings size={18} />
               Preferencias
             </button>
+            <button
+              onClick={() => setActiveTab('billing')}
+              className={`
+                w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors
+                ${activeTab === 'billing'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                }
+              `}
+            >
+              <Clipboard size={18} />
+              Facturación
+            </button>
           </nav>
         </div>
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-y-auto">
         {activeTab === 'clients' && <ClientsManager />}
         {activeTab === 'projects' && <ProjectsManager />}
         {activeTab === 'backup' && <BackupManager />}
         {activeTab === 'preferences' && <PreferencesManager />}
+        {activeTab === 'billing' && <BillingMethodsManager />}
       </div>
     </div>
   );

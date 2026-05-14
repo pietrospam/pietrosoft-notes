@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ChevronDown, Plus } from 'lucide-react';
 import { BaseEditorModal } from './BaseEditorModal';
 import { QuickCreateModal } from './QuickCreateModal';
@@ -15,9 +15,10 @@ interface NoteEditorModalProps {
   onExpandToPopup?: () => void;
   defaultClientId?: string;
   defaultProjectId?: string;
+  openAttachmentsOnOpen?: boolean;
 }
 
-export function NoteEditorModal({ noteId, onClose, onSaved, inline = false, onExpandToPopup, defaultClientId, defaultProjectId }: NoteEditorModalProps) {
+export function NoteEditorModal({ noteId, onClose, onSaved, inline = false, onExpandToPopup, defaultClientId, defaultProjectId, openAttachmentsOnOpen }: NoteEditorModalProps) {
   const { refreshClients } = useApp();
   const [clients, setClients] = useState<Client[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -75,7 +76,8 @@ export function NoteEditorModal({ noteId, onClose, onSaved, inline = false, onEx
     trackChange?.({ clientId: clientId || undefined, projectId: newProjectId || undefined });
   };
 
-  const handleFieldsChange = (data: Partial<Note>) => {
+  // Stabilize handleFieldsChange with useCallback to prevent unnecessary re-runs
+  const handleFieldsChange = useCallback((data: Partial<Note>) => {
     if ('clientId' in data) {
       setSelectedClientId(data.clientId || '');
       setSelectedProjectId('');
@@ -83,7 +85,7 @@ export function NoteEditorModal({ noteId, onClose, onSaved, inline = false, onEx
     if ('projectId' in data) {
       setSelectedProjectId(data.projectId || '');
     }
-  };
+  }, []);
 
   const renderFields = (trackChange: (data: Partial<Note>) => void) => (
     <div className="grid grid-cols-2 gap-4">
@@ -190,6 +192,7 @@ export function NoteEditorModal({ noteId, onClose, onSaved, inline = false, onEx
       onFieldsChange={handleFieldsChange}
       inline={inline}
       onExpandToPopup={onExpandToPopup}
+      openAttachmentsOnOpen={openAttachmentsOnOpen}
     />
   );
 }

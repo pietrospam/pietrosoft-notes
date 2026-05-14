@@ -12,25 +12,28 @@ model Client {
   id              String    @id
   name            String
   description     String?
-  color           String?   // REQ-008.3: Client color (hex code)
+  color           String?   @db.VarChar(7)
   active          Boolean   @default(true)
-  parentClientId  String?   @map("parent_client_id")  // REQ-010: Reference to parent client
+  parentClientId  String?   @map("parent_client_id") @db.VarChar(255)
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
   notes           Note[]    @relation("ClientNotes")
   projects        Project[]
   timesheetEntries Timesheet[] @relation("TimesheetClient")
+  taskTodos        TaskTodo[] @relation("ClientTodos")
+  billingMethods   BillingMethod[]
   
-  // REQ-010: Hierarchical relations
-  parentClient    Client?   @relation("ClientHierarchy", fields: [parentClientId], references: [id])
+  parentClient    Client?   @relation("ClientHierarchy", fields: [parentClientId], references: [id], onUpdate: NoAction)
   subClients      Client[]  @relation("ClientHierarchy")
 
+  @@index([parentClientId], map: "idx_clients_parent")
   @@map("clients")
 }
 
 model Project {
   id          String   @id
   name        String
+  code        String?  @map("code")
   description String?
   clientId    String   @map("client_id")
   createdAt   DateTime @default(now()) @map("created_at")
@@ -52,7 +55,7 @@ model Note {
   clientId              String?         @map("client_id")
   archived              Boolean         @default(false)
   isFavorite            Boolean         @default(false) @map("is_favorite")
-  favoriteOrder         Int?            @map("favorite_order") // REQ-008.2: Position in favorites
+  favoriteOrder         Int?            @map("favorite_order")
   attachments           Json?
   taskStatus            TaskStatus?     @map("task_status")
   taskPriority          TaskPriority?   @map("task_priority")
@@ -60,6 +63,12 @@ model Note {
   connectionUrl         String?         @map("connection_url")
   connectionUsername    String?         @map("connection_username")
   connectionCredentials String?         @map("connection_credentials")
+  // Legacy timesheet fields (kept for backward compatibility)
+  timesheetDate         DateTime?       @map("timesheet_date")
+  timesheetHours        Float?          @map("timesheet_hours")
+  timesheetRate         Float?          @map("timesheet_rate")
+  timesheetState        TimesheetState? @default(DRAFT) @map("timesheet_state")
+  timesheetTaskId       String?         @map("timesheet_task_id")
   createdAt             DateTime        @default(now()) @map("created_at")
   updatedAt             DateTime        @updatedAt @map("updated_at")
   contentJson           Json?           @map("content_json")
@@ -68,16 +77,22 @@ model Note {
   taskBudgetHours       Float?          @map("task_budget_hours")
   client                Client?         @relation("ClientNotes", fields: [clientId], references: [id])
   project               Project?        @relation("ProjectNotes", fields: [projectId], references: [id])
-  attachmentFiles       Attachment[]    // REQ-007: Relation to attachment files
-  activityLogs          TaskActivityLog[] // REQ-010: Activity history
+  attachmentFiles       Attachment[]
+  activityLogs          TaskActivityLog[]
   timesheetEntries      Timesheet[]     @relation("TimesheetTask")
-  comments             TaskComment[]   @relation("TaskComments")
+  comments              TaskComment[]   @relation("TaskComments")
+  todos                 TaskTodo[]      @relation("TaskTodos")
+  // Self-relation for timesheet tasks
+  linkedTimesheetTask   Note?           @relation("TimesheetTaskLink", fields: [timesheetTaskId], references: [id])
+  linkedTimesheetNotes  Note[]          @relation("TimesheetTaskLink")
+  billingRun            BillingRun?     @relation("BillingRunNote")
 
   @@index([type])
   @@index([projectId])
   @@index([clientId])
   @@index([archived])
   @@index([isFavorite])
+  @@index([timesheetTaskId])
   @@map("notes")
 }
 
@@ -107,9 +122,8 @@ enum TimesheetState {
   FINAL
 }
 
-// REQ-007: Attachments stored in database as BLOB
 model Attachment {
-  id           String   @id @default(uuid())
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   noteId       String   @map("note_id")
   filename     String   @db.VarChar(255)
   originalName String   @map("original_name") @db.VarChar(255)
@@ -124,45 +138,46 @@ model Attachment {
   @@map("attachments")
 }
 
-// REQ-010: Task Activity Log for tracking changes
 model TaskActivityLog {
-  id          String   @id @default(uuid())
-  taskId      String   @map("task_id")
-  eventType   String   @map("event_type")
+  id          String    @id @db.VarChar(36)
+  taskId      String    @map("task_id") @db.VarChar(255)
+  eventType   String    @map("event_type") @db.VarChar(50)
   description String?
-  createdAt   DateTime @default(now()) @map("created_at")
+  createdAt   DateTime? @default(now()) @map("created_at") @db.Timestamp(6)
 
-  task        Note     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task        Note      @relation(fields: [taskId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
-  @@index([taskId])
-  @@index([createdAt])
+  @@index([taskId], map: "idx_task_activity_task_id")
+  @@index([createdAt], map: "idx_task_activity_created")
   @@map("task_activity_logs")
 }
 
-// new separate Timesheet table per REQ-012
 model Timesheet {
-  id          String   @id @default(uuid())
-  workDate    DateTime @map("work_date")
-  hoursWorked Float    @map("hours_worked")
+  id          String          @id
+  workDate    DateTime        @map("work_date") @db.Timestamp(6)
+  hoursWorked Float           @map("hours_worked")
   description String?
-  taskId      String?  @map("task_id")
-  projectId   String?  @map("project_id")
-  clientId    String?  @map("client_id")
-  rate        Float?   @map("timesheet_rate")
-  state       TimesheetState @default(DRAFT) @map("timesheet_state")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  taskId      String?         @map("task_id")
+  projectId   String?         @map("project_id")
+  clientId    String?         @map("client_id")
+  rate        Float?          @map("timesheet_rate")
+  state       TimesheetState? @default(DRAFT) @map("timesheet_state")
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt   DateTime        @default(now()) @map("updated_at") @db.Timestamp(6)
 
-  task        Note?    @relation("TimesheetTask", fields: [taskId], references: [id])
-  project     Project? @relation("TimesheetProject", fields: [projectId], references: [id])
-  client      Client?  @relation("TimesheetClient", fields: [clientId], references: [id])
+  task        Note?           @relation("TimesheetTask", fields: [taskId], references: [id], onUpdate: NoAction)
+  project     Project?        @relation("TimesheetProject", fields: [projectId], references: [id], onUpdate: NoAction)
+  client      Client?         @relation("TimesheetClient", fields: [clientId], references: [id], onUpdate: NoAction)
 
+  @@index([taskId], map: "Timesheet_task_id_idx")
+  @@index([projectId], map: "Timesheet_project_id_idx")
+  @@index([clientId], map: "Timesheet_client_id_idx")
+  @@index([workDate], map: "Timesheet_work_date_idx")
   @@map("timesheets")
 }
 
-// Comments attached to tasks (REQ-016)
 model TaskComment {
-  id        String   @id @default(uuid())
+  id        String   @id
   taskId    String   @map("task_id")
   author    String
   content   Json
@@ -175,3 +190,125 @@ model TaskComment {
   @@map("task_comments")
 }
 
+// TODOs attached to tasks (REQ-021)
+model TaskTodo {
+  id                  String    @id @default(uuid())
+  taskId              String?   @map("task_id")
+  clientId            String?   @map("client_id")
+  author              String
+  content             Json
+  deadline            DateTime?
+  status              String    @default("pending") // pending, completed, deleted
+  completedAt         DateTime? @map("completed_at")
+  deletedAt           DateTime? @map("deleted_at")
+  snoozedUntil        DateTime? @map("snoozed_until")
+  recurrenceRule      String?   @map("recurrence_rule")
+  recurrenceParentId  String?   @map("recurrence_parent_id")
+  createdAt           DateTime  @default(now()) @map("created_at")
+
+  task                Note?     @relation("TaskTodos", fields: [taskId], references: [id], onDelete: Cascade)
+  client              Client?   @relation("ClientTodos", fields: [clientId], references: [id], onDelete: Cascade)
+  recurrenceParent    TaskTodo? @relation("RecurrenceTodos", fields: [recurrenceParentId], references: [id])
+  recurrenceChildren  TaskTodo[] @relation("RecurrenceTodos")
+  notificationsSent   TodoNotificationSent[]
+
+  @@index([taskId, status])
+  @@index([clientId, status])
+  @@index([deadline, status])
+  @@index([snoozedUntil])
+  @@map("task_todos")
+}
+
+// REQ-026: Billing Method configuration
+model BillingMethod {
+  id               String   @id @default(uuid())
+  name             String   @db.VarChar(255)
+  endpointUrl      String   @map("endpoint_url")
+  authType         String   @default("none") @map("auth_type") @db.VarChar(50) // none, bearer, basic, apiKeyHeader, apiKeyQuery
+  authConfig       Json?    @map("auth_config") // { token, username, password, headerName, queryParam, etc. }
+  payloadTemplate    Json?    @map("payload_template") // Template JSON for building the request
+  nextInvoiceNumber  Int      @default(1) @map("next_invoice_number") // Per-method invoice counter
+  invoicePrefix      String?  @map("invoice_prefix") @db.VarChar(20) // Optional prefix e.g. "FAC-"
+  clientParentId     String?  @map("client_parent_id")
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @default(now()) @map("updated_at")
+
+  client            Client?  @relation(fields: [clientParentId], references: [id], onUpdate: NoAction)
+  billingRuns      BillingRun[]
+
+  @@index([clientParentId])
+  @@map("billing_methods")
+}
+
+// REQ-026: Billing Run (each invoice execution)
+model BillingRun {
+  id              String   @id @default(uuid())
+  clientParentId  String   @map("client_parent_id")
+  year            Int
+  month           Int
+  methodId        String   @map("method_id")
+  invoiceTitle    String?  @map("invoice_title") @db.VarChar(255)
+  invoiceNumber   String?  @map("invoice_number") @db.VarChar(50)
+  totalHours      Float    @map("total_hours")
+  totalAmount     Float?   @map("total_amount")
+  currency        String?  @db.VarChar(10)
+  exchangeRateUsd Float?   @map("exchange_rate_usd")
+  requestJson     Json     @map("request_json")
+  responseStatus  Int?     @map("response_status")
+  responseBody    String?  @map("response_body")
+  pdfData         Bytes?   @map("pdf_data")
+  pdfFilename     String?  @map("pdf_filename") @db.VarChar(255)
+  status          String   @default("pending") @db.VarChar(20) // pending, success, failed
+  invoiceState    String   @default("borrador") @db.VarChar(20)
+  validated       Boolean  @default(false)
+  sentToClient    Boolean  @default(false)
+  locked          Boolean  @default(false)
+  errorText       String?  @map("error_text")
+  noteId          String?  @map("note_id") @unique
+  periodStart     DateTime @map("period_start") @db.Timestamp(6)
+  periodEnd       DateTime @map("period_end") @db.Timestamp(6)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  method          BillingMethod @relation(fields: [methodId], references: [id], onUpdate: NoAction)
+  note            Note?          @relation("BillingRunNote", fields: [noteId], references: [id], onDelete: SetNull)
+  items           BillingRunItem[]
+
+  @@index([clientParentId])
+  @@index([methodId])
+  @@index([noteId])
+  @@index([year, month])
+  @@map("billing_runs")
+}
+
+model BillingRunItem {
+  id            String    @id @default(uuid())
+  billingRunId  String    @map("billing_run_id")
+  name          String
+  quantity      Float
+  unitCost      Float     @map("unit_cost")
+  total         Float
+  description   String?   @db.VarChar(255)
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  billingRun    BillingRun @relation(fields: [billingRunId], references: [id], onDelete: Cascade)
+
+  @@index([billingRunId])
+  @@map("billing_run_items")
+}
+
+// Tracking sent notifications to avoid duplicates (REQ-021)
+model TodoNotificationSent {
+  id               String   @id @default(uuid())
+  todoId           String   @map("todo_id")
+  notificationType String   @map("notification_type") // daily_summary, reminder, overdue
+  reminderMinutes  Int?     @map("reminder_minutes")
+  sentAt           DateTime @default(now()) @map("sent_at")
+
+  todo             TaskTodo @relation(fields: [todoId], references: [id], onDelete: Cascade)
+
+  @@index([todoId, notificationType])
+  @@map("todo_notifications_sent")
+}

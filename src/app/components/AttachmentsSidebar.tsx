@@ -1,16 +1,15 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Paperclip } from 'lucide-react';
 import { AttachmentsPanel } from './AttachmentsPanel';
 import { useApp } from '../context/AppContext';
-import type { AttachmentMeta } from '@/lib/types';
 
 export function AttachmentsSidebar() {
   const {
     selectedNoteId,
     filteredNotes,
-    updateNote,
+    refreshNotes,
     isAttachmentsSidebarOpen,
     setAttachmentsSidebarOpen,
     toggleAttachmentsSidebar,
@@ -47,17 +46,10 @@ export function AttachmentsSidebar() {
     setAttachmentsSidebarOpen(false);
   }, [selectedNoteId, setAttachmentsSidebarOpen]);
 
-  const handleChange = (newAttachments: AttachmentMeta[]) => {
-    if (!selectedNote) return;
-    updateNote(selectedNote.id, { attachments: newAttachments });
-  };
-
-  const onAdded = (a: AttachmentMeta) => handleChange([...attachments, a]);
-  const onDeleted = (id: string) => handleChange(attachments.filter(a => a.id !== id));
-  const onRenamed = (id: string, newName: string) =>
-    handleChange(
-      attachments.map(a => (a.id === id ? { ...a, originalName: newName } : a))
-    );
+  // After any attachment change, refresh from server to get updated list
+  const onAttachmentChanged = useCallback(() => {
+    refreshNotes();
+  }, [refreshNotes]);
 
   // don't show panel at all if no note selected
   if (!selectedNote) return null;
@@ -98,9 +90,9 @@ export function AttachmentsSidebar() {
           <AttachmentsPanel
             noteId={selectedNote.id}
             attachments={attachments}
-            onAttachmentAdded={onAdded}
-            onAttachmentDeleted={onDeleted}
-            onAttachmentRenamed={onRenamed}
+            onAttachmentAdded={onAttachmentChanged}
+            onAttachmentDeleted={onAttachmentChanged}
+            onAttachmentRenamed={onAttachmentChanged}
             {...(isTemp ? { disabledUpload: true } : {})}
           />
         </div>

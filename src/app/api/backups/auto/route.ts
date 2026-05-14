@@ -1,10 +1,24 @@
 import { NextResponse } from 'next/server';
 import { promises as fs } from 'fs';
 import path from 'path';
+import { notifyBackupSuccess, notifyBackupError } from '@/lib/telegram';
 
 export const dynamic = 'force-dynamic';
 
 const BACKUP_DIR = process.env.BACKUP_DIR || './backups';
+const ARGENTINA_TIMEZONE = 'America/Buenos_Aires';
+
+/**
+ * Get current time in Argentina timezone
+ */
+function getArgentinaTime(): { hours: number; minutes: number } {
+  const now = new Date();
+  const argentinaTime = new Date(now.toLocaleString('en-US', { timeZone: ARGENTINA_TIMEZONE }));
+  return {
+    hours: argentinaTime.getHours(),
+    minutes: argentinaTime.getMinutes(),
+  };
+}
 
 interface BackupSettings {
   retentionCount: number;
@@ -34,16 +48,27 @@ function shouldRunAutoBackup(settings: BackupSettings): boolean {
     return false;
   }
 
-  const now = new Date();
+  // Use Argentina timezone for time comparison
+  const argentinaTime = getArgentinaTime();
   const [targetHour, targetMinute] = settings.autoBackupTime.split(':').map(Number);
   
-  // Check if we're within the backup window (target time ± 30 minutes)
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  // Check if we're within the backup window (from target time to 5 minutes after)
+  // Never run before the scheduled time
+  const currentMinutes = argentinaTime.hours * 60 + argentinaTime.minutes;
   const targetMinutes = targetHour * 60 + targetMinute;
-  const diff = Math.abs(currentMinutes - targetMinutes);
   
-  if (diff > 30 && diff < (24 * 60 - 30)) {
-    // Not in the backup window
+  // Calculate minutes since target time (handling midnight wraparound)
+  let minutesSinceTarget = currentMinutes - targetMinutes;
+  if (minutesSinceTarget < -60) {
+    // We're before midnight and target is after (e.g., current 23:30, target 00:00)
+    minutesSinceTarget += 24 * 60;
+  } else if (minutesSinceTarget > 23 * 60) {
+    // We're after midnight and target was before (e.g., current 00:02, target 23:58)
+    minutesSinceTarget -= 24 * 60;
+  }
+  
+  // Only run if we're at or after the target time, within 5-minute window
+  if (minutesSinceTarget < 0 || minutesSinceTarget > 5) {
     return false;
   }
 
@@ -51,6 +76,7 @@ function shouldRunAutoBackup(settings: BackupSettings): boolean {
     return true;
   }
 
+  const now = new Date();
   const lastBackup = new Date(settings.lastAutoBackup);
   const hoursSinceLastBackup = (now.getTime() - lastBackup.getTime()) / (1000 * 60 * 60);
 
@@ -79,9 +105,12 @@ export async function POST() {
     }
 
     if (!shouldRunAutoBackup(settings)) {
+      const argentinaTime = getArgentinaTime();
       return NextResponse.json({ 
         skipped: true, 
         reason: 'Auto backup not due yet',
+        currentArgentinaTime: `${String(argentinaTime.hours).padStart(2, '0')}:${String(argentinaTime.minutes).padStart(2, '0')}`,
+        targetTime: settings.autoBackupTime,
         lastAutoBackup: settings.lastAutoBackup,
         frequency: settings.autoBackupFrequency,
       });
@@ -94,8 +123,10 @@ export async function POST() {
     // Ensure backup directory exists
     await fs.mkdir(BACKUP_DIR, { recursive: true });
 
-    // Generate filename with timestamp
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    // Generate filename with timestamp in Argentina timezone
+    const now = new Date();
+    const argentinaDate = new Date(now.toLocaleString('en-US', { timeZone: ARGENTINA_TIMEZONE }));
+    const timestamp = `${argentinaDate.getFullYear()}-${String(argentinaDate.getMonth() + 1).padStart(2, '0')}-${String(argentinaDate.getDate()).padStart(2, '0')}T${String(argentinaDate.getHours()).padStart(2, '0')}-${String(argentinaDate.getMinutes()).padStart(2, '0')}-${String(argentinaDate.getSeconds()).padStart(2, '0')}`;
     const filename = `backup-auto-${timestamp}.zip`;
     const filePath = path.join(BACKUP_DIR, filename);
 
@@ -111,7 +142,7 @@ export async function POST() {
     });
 
     // Export database tables
-    const [clients, projects, notes, attachments, activityLogs, timesheets, taskComments] = await Promise.all([
+    const [clients, projects, notes, attachments, activityLogs, timesheets, taskComments, billingMethods, billingRuns, billingRunItems, todoNotificationsSent] = await Promise.all([
       prisma.client.findMany(),
       prisma.project.findMany(),
       prisma.note.findMany(),
@@ -119,7 +150,29 @@ export async function POST() {
       prisma.taskActivityLog.findMany(),
       prisma.timesheet.findMany(),
       prisma.taskComment.findMany(),
+      prisma.billingMethod.findMany(),
+      prisma.billingRun.findMany(),
+      prisma.billingRunItem.findMany(),
+      prisma.todoNotificationSent.findMany(),
     ]);
+
+    // Task todos may not exist in older DB schemas (missing client_id column), so fall back safely
+    let taskTodos = [] as unknown[];
+    let taskTodosError: string | null = null;
+
+    try {
+      taskTodos = await prisma.taskTodo.findMany();
+    } catch (err) {
+      console.warn('Failed to fetch taskTodos with Prisma (schema mismatch), falling back to raw SQL:', err);
+      taskTodosError = String(err);
+      try {
+        // Raw query should work even if schema differs; it selects whatever columns exist
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        taskTodos = await prisma.$queryRawUnsafe('SELECT * FROM task_todos');
+      } catch (rawErr) {
+        console.error('Fallback raw query for task_todos failed:', rawErr);
+      }
+    }
 
     // Create manifest
     const manifest = {
@@ -136,7 +189,13 @@ export async function POST() {
         timesheets: timesheets.length,
         activityLogs: activityLogs.length,
         taskComments: taskComments.length,
+        taskTodos: taskTodos.length,
+        todoNotificationsSent: todoNotificationsSent.length,
+        billingMethods: billingMethods.length,
+        billingRuns: billingRuns.length,
+        billingRunItems: billingRunItems.length,
       },
+      taskTodosError,
       appVersion: '1.0.0',
     };
 
@@ -150,6 +209,16 @@ export async function POST() {
     archive.append(JSON.stringify(timesheets, null, 2), { name: 'db/timesheets.json' });
     archive.append(JSON.stringify(activityLogs, null, 2), { name: 'db/activityLogs.json' });
     archive.append(JSON.stringify(taskComments, null, 2), { name: 'db/taskComments.json' });
+    archive.append(JSON.stringify(taskTodos, null, 2), { name: 'db/taskTodos.json' });
+    archive.append(JSON.stringify(todoNotificationsSent, null, 2), { name: 'db/todoNotificationsSent.json' });
+    archive.append(JSON.stringify(billingMethods, null, 2), { name: 'db/billingMethods.json' });
+
+    const billingRunsWithData = billingRuns.map(r => ({
+      ...r,
+      pdfData: r.pdfData ? r.pdfData.toString('base64') : null,
+    }));
+    archive.append(JSON.stringify(billingRunsWithData, null, 2), { name: 'db/billingRuns.json' });
+    archive.append(JSON.stringify(billingRunItems, null, 2), { name: 'db/billingRunItems.json' });
 
     // Encode attachment data to base64
     const attachmentsWithData = attachments.map(a => ({
@@ -157,6 +226,39 @@ export async function POST() {
       data: a.data.toString('base64'),
     }));
     archive.append(JSON.stringify(attachmentsWithData, null, 2), { name: 'db/attachments.json' });
+
+    // Add data directory if exists (telegram config, etc)
+    const dataDir = process.env.DATA_DIR || './data';
+    try {
+      const addDirectory = async (dirPath: string, archivePath: string): Promise<void> => {
+        const entries = await fs.readdir(dirPath, { withFileTypes: true });
+        
+        for (const entry of entries) {
+          const fullPath = path.join(dirPath, entry.name);
+          const archiveEntryPath = path.join(archivePath, entry.name);
+          
+          if (entry.isDirectory()) {
+            await addDirectory(fullPath, archiveEntryPath);
+          } else {
+            const content = await fs.readFile(fullPath);
+            archive.append(content, { name: archiveEntryPath });
+          }
+        }
+      };
+      
+      await addDirectory(dataDir, 'data');
+    } catch {
+      // Data directory doesn't exist - that's fine
+    }
+
+    // Add backup settings
+    const backupSettingsPath = path.join(BACKUP_DIR, 'backup-settings.json');
+    try {
+      const settingsContent = await fs.readFile(backupSettingsPath);
+      archive.append(settingsContent, { name: 'config/backup-settings.json' });
+    } catch {
+      // Settings file doesn't exist - that's fine
+    }
 
     await archive.finalize();
     const zipBuffer = await finishPromise;
@@ -171,6 +273,14 @@ export async function POST() {
     // Apply retention policy
     await applyRetentionPolicy(settings.retentionCount);
 
+    // Send Telegram notification (async, don't block response)
+    notifyBackupSuccess({
+      filename,
+      sizeBytes: zipBuffer.length,
+      type: 'auto',
+      filePath,
+    }).catch(err => console.error('Telegram notification failed:', err));
+
     return NextResponse.json({
       success: true,
       filename,
@@ -180,6 +290,13 @@ export async function POST() {
     });
   } catch (error) {
     console.error('Error creating auto backup:', error);
+    
+    // Send error notification (async)
+    notifyBackupError({
+      type: 'auto',
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }).catch(err => console.error('Telegram error notification failed:', err));
+    
     return NextResponse.json({ error: 'Failed to create auto backup' }, { status: 500 });
   }
 }

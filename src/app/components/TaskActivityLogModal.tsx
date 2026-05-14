@@ -86,7 +86,7 @@ function formatDateLabel(dateStr: string): string {
 
 function formatTime(dateStr: string): string {
   const date = new Date(dateStr);
-  return date.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+  return date.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
 function groupLogsByDate(logs: TaskActivityLog[]): GroupedLogs[] {

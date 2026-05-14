@@ -187,6 +187,25 @@ Local development uses [`.env.local`](.env.local). Start from [`.env.example`](.
 - No concurrent access protection
 - No authentication
 
+## GitHub Copilot Specs
+
+Este proyecto utiliza la metodología **GitHub Copilot Specs** para desarrollo estructurado.
+
+### Estructura
+
+| Archivo | Propósito |
+|---------|-----------|
+| `.github/copilot-instructions.md` | Instrucciones globales para Copilot |
+| `specs/README.md` | Índice de especificaciones técnicas |
+| `specs/SPEC-XXX-*.md` | Especificaciones técnicas |
+| `docs/REQ-XXX-*.md` | Requerimientos de negocio |
+
+### Flujo de Desarrollo
+
+1. **Consultar specs:** Ver `specs/README.md` para índice
+2. **Crear nueva feature:** Seguir flujo en `.github/copilot-instructions.md`
+3. **Agregar spec:** Usar plantilla en `specs/README.md`
+
 ## License
 
 Private / Internal Use

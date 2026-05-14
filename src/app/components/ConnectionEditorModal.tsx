@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ChevronDown, Plus, Copy, Check, Eye, EyeOff, ExternalLink } from 'lucide-react';
 import { BaseEditorModal } from './BaseEditorModal';
 import { QuickCreateModal } from './QuickCreateModal';
@@ -104,7 +104,8 @@ export function ConnectionEditorModal({ noteId, onClose, onSaved, inline = false
     trackChange?.({ clientId: clientId || undefined, projectId: newProjectId || undefined });
   };
 
-  const handleFieldsChange = (data: Partial<Note>) => {
+  // Stabilize handleFieldsChange with useCallback to prevent unnecessary re-runs
+  const handleFieldsChange = useCallback((data: Partial<Note>) => {
     if ('clientId' in data) {
       setSelectedClientId(data.clientId || '');
       setSelectedProjectId('');
@@ -121,7 +122,7 @@ export function ConnectionEditorModal({ noteId, onClose, onSaved, inline = false
     if ('password' in data) {
       setPassword((data as ConnectionNote).password || '');
     }
-  };
+  }, []);
 
   const renderFields = (trackChange: (data: Partial<Note>) => void) => (
     <div className="space-y-4">

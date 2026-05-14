@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Save, Loader2, Maximize2, Minimize2, Pencil, Clock, ChevronDown, Plus, Check, Star, Archive, ArchiveRestore, Trash2, Copy, History, Paperclip, Code } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { X, Save, Loader2, Maximize2, Minimize2, Pencil, Clock, ChevronDown, Plus, Check, Star, Archive, ArchiveRestore, Trash2, Copy, History, Paperclip, Code, Flag } from 'lucide-react';
 import { TipTapEditor, TipTapEditorHandle } from './TipTapEditor';
 import { AttachmentsModal } from './AttachmentsModal';
 import { TimeSheetModal } from './TimeSheetModal';
@@ -10,6 +10,8 @@ import { Toast } from './Toast';
 import { UnsavedChangesModal } from './UnsavedChangesModal';
 import { TaskActivityLogModal } from './TaskActivityLogModal';
 import { TaskComments, TaskCommentsRef } from './TaskComments';
+import { TaskTodosModal } from './TaskTodosModal';
+import { TaskTodosBanner } from './TaskTodosBanner';
 import { useApp } from '../context/AppContext';
 import type { TaskNote, Client, Project, TaskStatus, TaskPriority } from '@/lib/types';
 
@@ -38,7 +40,7 @@ interface TaskEditorModalProps {
 }
 
 export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defaultClientId }: TaskEditorModalProps) {
-  const { refreshNotes, refreshClients, toggleFavorite, autoSaveEnabled, setIsDirty: setGlobalIsDirty, setPendingChanges: setGlobalPendingChanges, updateNote, deleteNote, setSelectedNoteId, isNotesListCollapsed, setNotesListCollapsed } = useApp();
+  const { refreshNotes, refreshClients, toggleFavorite, autoSaveEnabled, setIsDirty: setGlobalIsDirty, setPendingChanges: setGlobalPendingChanges, updateNote, deleteNote, setSelectedNoteId, isNotesListCollapsed, setNotesListCollapsed, filteredNotes } = useApp();
   const [showAttachmentsModal, setShowAttachmentsModal] = useState(false);
   const isCreatedRef = useRef(false);
   useEffect(() => {
@@ -74,22 +76,30 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
   const [isDirty, setIsDirtyLocal] = useState(!taskId); // New notes start dirty
   const [isMaximized, setIsMaximized] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(!taskId); // Auto-edit title for new notes
-  const [toast, setToast] = useState<{ message: string } | null>(null);
+  const [toast, setToast] = useState<{ message: string; action?: { label: string; onClick: () => void } } | null>(null);
   const [showTimeSheetModal, setShowTimeSheetModal] = useState(false);
   const [showActivityLog, setShowActivityLog] = useState(false); // REQ-010: Activity log modal
   const [showCoderHintsModal, setShowCoderHintsModal] = useState(false);
-  
+  const [showTodosModal, setShowTodosModal] = useState(false); // REQ-021: TODOs modal
+
   // Header fields edit mode - enabled by default for NEW tasks, disabled for existing
   const [isHeaderEditing, setIsHeaderEditing] = useState(!taskId);
   
   // Task fields state
   const [clients, setClients] = useState<Client[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+
+  const isGeneralProject = useMemo(() => {
+    const project = projects.find(p => p.id === task.projectId);
+    return project?.name?.toLowerCase() === 'general';
+  }, [projects, task.projectId]);
+
   const [selectedClientId, setSelectedClientId] = useState<string>(defaultClientId || '');
   const [showCreateClient, setShowCreateClient] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [commentsCount, setCommentsCount] = useState(0);
+  const [todoPendingCount, setTodoPendingCount] = useState(0); // REQ-021: Pending TODOs count
   const [bodyCollapsed, setBodyCollapsed] = useState(false); // collapse body when comments exist
   
   // Sync local isDirty with global context (for inline mode navigation protection)
@@ -273,9 +283,8 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
     } else {
       // New note - focus title after mount and try to read clipboard
       setTimeout(async () => {
-        titleInputRef.current?.focus();
-        
         // Try to read clipboard and auto-fill if pattern found
+        let autoFilledFromClipboard = false;
         try {
           const clipboardText = await navigator.clipboard.readText();
           if (clipboardText) {
@@ -302,16 +311,43 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
               };
               pendingChangesRef.current = { ...pendingChangesRef.current, ...clipboardUpdates };
               setTask(prev => ({ ...prev, ...clipboardUpdates }));
+              autoFilledFromClipboard = true;
             }
           }
         } catch {
           // Clipboard access denied or not available - ignore silently
         }
         
-        titleInputRef.current?.select();
+        // If auto-filled from clipboard, focus the editor body; otherwise focus title
+        if (autoFilledFromClipboard) {
+          // Small delay to ensure editor is mounted
+          setTimeout(() => {
+            editorRef.current?.focus();
+          }, 50);
+        } else {
+          titleInputRef.current?.focus();
+          titleInputRef.current?.select();
+        }
       }, 100);
     }
   }, [taskId]);
+
+  // Sync attachments from global context (for when files are dropped via GlobalDropZone)
+  useEffect(() => {
+    const targetId = taskId || (isCreatedRef.current ? task.id : null);
+    if (!targetId) return;
+    
+    const globalNote = filteredNotes.find(n => n.id === targetId);
+    if (globalNote && globalNote.attachments) {
+      // Only update if attachments actually changed (by length or IDs)
+      const localIds = (task.attachments || []).map(a => a.id).sort().join(',');
+      const globalIds = globalNote.attachments.map(a => a.id).sort().join(',');
+      
+      if (localIds !== globalIds) {
+        setTask(prev => ({ ...prev, attachments: globalNote.attachments }));
+      }
+    }
+  }, [filteredNotes, taskId, task.id, task.attachments]);
 
   // Handle client change - load projects for client
   const handleClientChange = async (clientId: string) => {
@@ -454,7 +490,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
     // Update fields based on parsed data
     const updates: Partial<TaskNote> = {};
     
-    if (parsed.ticket && !task.ticketPhaseCode) {
+    if (parsed.ticket && !task.ticketPhaseCode && isGeneralProject) {
       updates.ticketPhaseCode = parsed.ticket;
     }
     
@@ -470,7 +506,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
     if (Object.keys(updates).length > 0) {
       trackChange(updates);
     }
-  }, [title, task.ticketPhaseCode, task.shortDescription, parseTaskTitle, trackChange]);
+  }, [title, task.ticketPhaseCode, task.shortDescription, parseTaskTitle, trackChange, isGeneralProject]);
 
   const handleContentChange = (contentJson: object) => {
     // Ignore TipTap's initial onChange events during load
@@ -519,6 +555,16 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
           setSelectedNoteId(savedTask.id);
           onClose();
           onSaved?.();
+        } else if (res.status === 409) {
+          const body = (await res.json().catch(() => ({}))) as { existingId?: string; error?: string };
+          const existingId = body.existingId;
+          setToast({ message: body.error || 'Ya existe una tarea con ese ticket/fase', action: existingId ? {
+            label: 'Abrir existente',
+            onClick: () => {
+              setSelectedNoteId(existingId);
+              onClose();
+            },
+          } : undefined });
         } else {
           setToast({ message: 'Error al crear la tarea' });
         }
@@ -539,6 +585,16 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
           setToast({ message: 'Guardado exitosamente' });
           await refreshNotes();
           onSaved?.();
+        } else if (res.status === 409) {
+          const body = (await res.json().catch(() => ({}))) as { existingId?: string; error?: string };
+          const existingId = body.existingId;
+          setToast({ message: body.error || 'Ya existe una tarea con ese ticket/fase', action: existingId ? {
+            label: 'Abrir existente',
+            onClick: () => {
+              setSelectedNoteId(existingId);
+              onClose();
+            },
+          } : undefined });
         } else {
           setToast({ message: 'Error al guardar' });
         }
@@ -595,6 +651,15 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
 
   const renderContent = () => (
     <>
+      {/* REQ-021: TODO Banner - shows when task has pending TODOs */}
+      {(taskId || isCreatedRef.current) && (
+        <TaskTodosBanner 
+          taskId={taskId || task.id} 
+          onClick={() => setShowTodosModal(true)}
+          onPendingCountChange={setTodoPendingCount}
+        />
+      )}
+
       {/* Task Fields - Compact Header */}
       <div className="mb-4 space-y-2">
         {/* Validation Summary + Edit Toggle */}
@@ -873,6 +938,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
               onChange={handleContentChange}
               noteId={task.id}
               onPersistNote={persistTask}
+              onAttachmentAdded={() => commentsRef.current?.reloadComments()}
               placeholder="Descripción de la tarea..."
             />
             {commentsCount > 0 && (
@@ -941,7 +1007,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
                 <h2 className="text-lg font-semibold text-white truncate">
                   {task.ticketPhaseCode ? (
                     <>
-                      <span className="text-blue-400 font-semibold">#{task.ticketPhaseCode}</span>{' '}
+                      <span className="text-blue-400 font-semibold">{isGeneralProject ? `#${task.ticketPhaseCode}` : task.ticketPhaseCode}</span>{' '}
                       {task.shortDescription || title || 'Sin título'}
                     </>
                   ) : (
@@ -951,7 +1017,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
                 <button
                   onClick={() => {
                     const titleText = task.ticketPhaseCode 
-                      ? `#${task.ticketPhaseCode} ${task.shortDescription || title || ''}`.trim()
+                      ? `${isGeneralProject ? '#' : ''}${task.ticketPhaseCode} ${task.shortDescription || title || ''}`.trim()
                       : (title || '');
                     navigator.clipboard.writeText(titleText);
                     setToast({ message: 'Título copiado' });
@@ -1082,6 +1148,23 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
                 <span className="ml-1 text-xs">{attachmentCount}</span>
               </button>
             )}
+            {/* REQ-021: TODO icon - open TODOs modal */}
+            {(taskId || isCreatedRef.current) && (
+              <button
+                onClick={() => setShowTodosModal(true)}
+                className={`flex items-center p-2 rounded transition-colors ${
+                  todoPendingCount > 0 
+                    ? 'text-orange-400 hover:text-orange-300 hover:bg-gray-800' 
+                    : 'text-gray-400 hover:text-orange-400 hover:bg-gray-800'
+                }`}
+                title={`TODOs (${todoPendingCount} pendientes)`}
+              >
+                <Flag size={20} />
+                {todoPendingCount > 0 && (
+                  <span className="ml-1 text-xs">{todoPendingCount}</span>
+                )}
+              </button>
+            )}
             {/* Collapse to note list button (inline mode only) */}
             {inline && (
               <button
@@ -1109,6 +1192,18 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
             onSaved={() => {
               setToast({ message: 'Horas registradas' });
             }}
+          />
+        )}
+
+        {/* REQ-021: TODOs Modal */}
+        {showTodosModal && (taskId || isCreatedRef.current) && (
+          <TaskTodosModal
+            taskId={taskId || task.id}
+            taskTitle={title}
+            isOpen={showTodosModal}
+            currentUser={currentUser}
+            onClose={() => setShowTodosModal(false)}
+            onTodosChange={setTodoPendingCount}
           />
         )}
 
@@ -1141,6 +1236,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
         {toast && (
           <Toast
             message={toast.message}
+            action={toast.action}
             onClose={() => setToast(null)}
           />
         )}
@@ -1167,9 +1263,11 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
           <AttachmentsModal
             noteId={taskId || task.id}
             attachments={task.attachments || []}
-            onChange={(newList) => {
-              setTask(prev => ({ ...prev, attachments: newList }));
-              trackChange({ attachments: newList });
+            onChange={() => {
+              // After any attachment change, refresh from server to get updated list
+              refreshNotes();
+              // Reload comments to show system comment for new attachments
+              commentsRef.current?.reloadComments();
             }}
             onClose={() => setShowAttachmentsModal(false)}
             disabledUpload={task.id.startsWith('temp-')}
@@ -1260,7 +1358,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
                 <h2 className="text-lg font-semibold text-white truncate">
                   {task.ticketPhaseCode ? (
                     <>
-                      <span className="text-blue-400 font-semibold">#{task.ticketPhaseCode}</span>{' '}
+                      <span className="text-blue-400 font-semibold">{isGeneralProject ? `#${task.ticketPhaseCode}` : task.ticketPhaseCode}</span>{' '}
                       {task.shortDescription || title || 'Sin título'}
                     </>
                   ) : (
@@ -1270,7 +1368,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
                 <button
                   onClick={() => {
                     const titleText = task.ticketPhaseCode 
-                      ? `#${task.ticketPhaseCode} ${task.shortDescription || title || ''}`.trim()
+                      ? `${isGeneralProject ? '#' : ''}${task.ticketPhaseCode} ${task.shortDescription || title || ''}`.trim()
                       : (title || '');
                     navigator.clipboard.writeText(titleText);
                     setToast({ message: 'Título copiado' });
@@ -1455,6 +1553,18 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
         />
       )}
 
+      {/* REQ-021: TODOs Modal */}
+      {showTodosModal && (taskId || isCreatedRef.current) && (
+        <TaskTodosModal
+          taskId={taskId || task.id}
+          taskTitle={title}
+          isOpen={showTodosModal}
+          currentUser={currentUser}
+          onClose={() => setShowTodosModal(false)}
+          onTodosChange={setTodoPendingCount}
+        />
+      )}
+
       {/* Quick Create Modals */}
       {showCreateClient && (
         <QuickCreateModal
@@ -1493,9 +1603,9 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
         <AttachmentsModal
           noteId={taskId || task.id}
           attachments={task.attachments || []}
-          onChange={(newList) => {
-            setTask(prev => ({ ...prev, attachments: newList }));
-            trackChange({ attachments: newList });
+          onChange={() => {
+            // After any attachment change, refresh from server to get updated list
+            refreshNotes();
           }}
           onClose={() => setShowAttachmentsModal(false)}
           disabledUpload={task.id.startsWith('temp-')}

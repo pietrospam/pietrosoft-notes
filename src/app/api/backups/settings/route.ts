@@ -77,6 +77,7 @@ export async function PUT(request: NextRequest) {
       autoBackupTime: typeof body.autoBackupTime === 'string' && /^\d{2}:\d{2}$/.test(body.autoBackupTime)
         ? body.autoBackupTime
         : currentSettings.autoBackupTime,
+      // Preserve lastAutoBackup - only updated when a real backup is created
       lastAutoBackup: currentSettings.lastAutoBackup,
     };
     

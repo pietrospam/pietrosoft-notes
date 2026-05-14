@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import prisma from '@/lib/db';
-import { Prisma } from '@prisma/client';
 
 // TimeSheet entry with enriched data for the grid
 export interface TimeSheetGridEntry {
@@ -14,6 +14,7 @@ export interface TimeSheetGridEntry {
   taskShortDescription: string; // Short description from the task
   projectId: string;
   projectName: string;
+  projectCode: string; // Optional project code (e.g. PRJ-001)
   clientId: string;
   clientName: string;
   state: string; // DRAFT or FINAL
@@ -96,9 +97,10 @@ export async function GET(request: Request) {
       taskShortDescription: ts.task?.taskShortDescription || '',
       projectId: ts.projectId || ts.task?.projectId || '',
       projectName: ts.project?.name || ts.task?.project?.name || 'Sin proyecto',
+      projectCode: ts.project?.code || ts.task?.project?.code || '',
       clientId: ts.clientId || ts.task?.project?.clientId || '',
       clientName: ts.client?.name || ts.task?.project?.client?.name || 'Sin cliente',
-      state: ts.state,
+      state: ts.state || 'DRAFT',
       createdAt: ts.createdAt.toISOString(),
       updatedAt: ts.updatedAt.toISOString(),
     }));
@@ -126,17 +128,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'hoursWorked must be a number' }, { status: 400 });
     }
 
-    const data: Prisma.TimesheetUncheckedCreateInput = {
-      workDate: new Date(body.workDate),
-      hoursWorked: body.hoursWorked,
-      description: body.description || null,
-      taskId: body.taskId || null,
-      projectId: body.projectId || null,
-      clientId: body.clientId || null,
-      rate: body.rate || null,
-      state: body.state || undefined,
-    };
-    const created = await prisma.timesheet.create({ data });
+    const created = await prisma.timesheet.create({
+      data: {
+        id: randomUUID(),
+        workDate: new Date(`${body.workDate}T00:00:00`),
+        hoursWorked: body.hoursWorked,
+        description: body.description || null,
+        taskId: body.taskId || null,
+        projectId: body.projectId || null,
+        clientId: body.clientId || null,
+        rate: body.rate || null,
+        state: body.state || undefined,
+      },
+    });
     return NextResponse.json(created);
   } catch (error) {
     console.error('Error creating timesheet:', error);

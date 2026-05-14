@@ -230,3 +230,198 @@ export interface TaskActivityLog {
   description?: string;
   createdAt: string;
 }
+
+// ============================================================================
+// REQ-021: Task TODO Types
+// ============================================================================
+
+export type TodoStatus = 'pending' | 'completed' | 'deleted';
+
+export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly';
+
+export interface RecurrenceRule {
+  frequency: RecurrenceFrequency;
+  interval?: number; // Every N days/weeks/months (default 1)
+  endDate?: string; // ISO 8601 date when recurrence stops
+}
+
+export interface TaskTodo {
+  id: UUID;
+  taskId?: UUID;
+  clientId?: UUID;
+  author: string;
+  content: unknown; // TipTap JSON
+  deadline?: string; // ISO 8601 datetime (null for checklist-style TODO)
+  status: TodoStatus;
+  completedAt?: string;
+  deletedAt?: string;
+  snoozedUntil?: string; // ISO 8601 datetime
+  recurrenceRule?: RecurrenceRule | null;
+  recurrenceParentId?: string;
+  createdAt: string;
+}
+
+export type CreateTodoInput = {
+  taskId?: UUID;
+  clientId?: UUID;
+  author: string;
+  content: unknown;
+  deadline?: string;
+  recurrenceRule?: RecurrenceRule;
+};
+
+export type UpdateTodoInput = Partial<{
+  content: unknown;
+  deadline: string | null;
+  status: TodoStatus;
+  snoozedUntil: string | null;
+  recurrenceRule: RecurrenceRule | null;
+}>;
+
+// Todo with related task info for sidebar display
+export interface TodoWithTask extends TaskTodo {
+  task?: {
+    id: UUID;
+    title: string;
+    ticketPhaseCode?: string;
+    projectId?: UUID;
+  };
+  client?: {
+    id: UUID;
+    name: string;
+  };
+}
+
+// ============================================================================
+// REQ-021: Telegram TODO Notification Config
+// ============================================================================
+
+export interface TodoNotificationConfig {
+  enabled: boolean;
+  dailySummaryTime?: string; // HH:mm format, e.g., "08:00"
+  reminderMinutes?: number[]; // Minutes before deadline to send reminders, e.g., [60, 15]
+}
+
+export type TodoNotificationType = 'daily_summary' | 'reminder' | 'overdue';
+
+// ============================================================================
+// REQ-026: Billing Types
+// ============================================================================
+
+export type BillingAuthType = 'none' | 'bearer' | 'basic' | 'apiKeyHeader' | 'apiKeyQuery';
+
+export interface BillingAuthConfig {
+  token?: string;        // For bearer
+  username?: string;     // For basic
+  password?: string;     // For basic
+  headerName?: string;   // For apiKeyHeader
+  headerValue?: string;  // For apiKeyHeader
+  queryParam?: string;   // For apiKeyQuery
+  queryValue?: string;   // For apiKeyQuery
+}
+
+export interface BillingMethod {
+  id: UUID;
+  name: string;
+  endpointUrl: string;
+  authType: BillingAuthType;
+  authConfig?: BillingAuthConfig;
+  payloadTemplate?: Record<string, unknown>; // Template JSON for invoice payload
+  nextInvoiceNumber: number; // Per-method invoice counter
+  invoicePrefix?: string; // Optional prefix e.g. "FAC-"
+  clientParentId: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+  clientName?: string;
+}
+
+export type CreateBillingMethodInput = Omit<BillingMethod, 'id' | 'createdAt' | 'updatedAt'>;
+export type UpdateBillingMethodInput = Partial<CreateBillingMethodInput>;
+
+export type BillingRunStatus = 'pending' | 'success' | 'failed';
+
+export type BillingInvoiceState = 'borrador' | 'validada' | 'enviada';
+
+export interface BillingRunItem {
+  id: UUID;
+  billingRunId: UUID;
+  name: string;
+  quantity: number;
+  unitCost: number;
+  total: number;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BillingRun {
+  id: UUID;
+  clientParentId: UUID;
+  year: number;
+  month: number;
+  methodId: UUID;
+  invoiceTitle?: string;
+  invoiceNumber?: string;
+  totalHours: number;
+  totalAmount?: number;
+  currency?: string;
+  exchangeRateUsd?: number;
+  requestJson: Record<string, unknown>;
+  responseStatus?: number;
+  responseBody?: string;
+  pdfFilename?: string;
+  status: BillingRunStatus;
+  invoiceState: BillingInvoiceState;
+  validated: boolean;
+  sentToClient: boolean;
+  locked: boolean;
+  errorText?: string;
+  noteId?: string;
+  periodStart: string;
+  periodEnd: string;
+  createdAt: string;
+  updatedAt: string;
+  // Enriched (optional, from joins)
+  clientName?: string;
+  methodName?: string;
+  items?: BillingRunItem[];
+}
+
+export interface BillingPreview {
+  clientParentId: UUID;
+  clientName: string;
+  year: number;
+  month: number;
+  periodStart: string;
+  periodEnd: string;
+  totalHours: number;
+  entryCount: number;
+  entries: Array<{
+    taskCode: string;
+    taskTitle: string;
+    projectName: string;
+    hours: number;
+  }>;
+  dailyEntries: Array<{
+    date: string; // YYYY-MM-DD
+    totalHours: number;
+    entries: Array<{
+      taskCode: string;
+      taskTitle: string;
+      projectName: string;
+      description: string;
+      hours: number;
+    }>;
+  }>;
+}
+
+export interface CreateBillingRunInput {
+  clientParentId: UUID;
+  year: number;
+  month: number;
+  methodId: UUID;
+  periodStart: string;
+  periodEnd: string;
+  requestJsonOverride?: Record<string, unknown>; // Optional override of generated payload
+}

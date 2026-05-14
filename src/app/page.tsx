@@ -2,7 +2,8 @@
 
 import { useEffect, useCallback, useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
-import { TopBar, Sidebar, NotesList, ConfigPanel, TimeSheetView, UnsavedChangesModal, FloatingActionButton, Toast, GlobalDropZone } from './components';
+import { TopBar, Sidebar, NotesList, ConfigPanel, TimeSheetView, UnsavedChangesModal, FloatingActionButton, Toast, GlobalDropZone, TodosCardsView, BillingScreen } from './components';
+import { BillingEditorModal } from './components/BillingEditorModal';
 import { TaskEditorModal } from './components/TaskEditorModal';
 import { NoteEditorModal } from './components/NoteEditorModal';
 import { ConnectionEditorModal } from './components/ConnectionEditorModal';
@@ -91,7 +92,20 @@ function InlineEditorPanel() {
 }
 
 function MainContent() {
-  const { currentView, showUnsavedModal, discardAndExecute, cancelPendingAction, saveAndExecute } = useApp();
+  const { 
+    currentView, 
+    showUnsavedModal, 
+    discardAndExecute, 
+    cancelPendingAction, 
+    saveAndExecute,
+    todosFilterTaskId,
+    setCurrentView,
+    setSelectedNoteId,
+    selectedClientId,
+    clients,
+    billingEditorRun,
+    closeBillingEditor,
+  } = useApp();
 
   if (currentView === 'config') {
     return (
@@ -111,6 +125,71 @@ function MainContent() {
     return (
       <>
         <TimeSheetView />
+        <UnsavedChangesModal
+          isOpen={showUnsavedModal}
+          onDiscard={discardAndExecute}
+          onCancel={cancelPendingAction}
+          onSave={saveAndExecute}
+        />
+      </>
+    );
+  }
+
+  // REQ-026: Billing view
+  if (currentView === 'billing') {
+    return (
+      <>
+        <BillingScreen />
+        <UnsavedChangesModal
+          isOpen={showUnsavedModal}
+          onDiscard={discardAndExecute}
+          onCancel={cancelPendingAction}
+          onSave={saveAndExecute}
+        />
+      </>
+    );
+  }
+
+  if (currentView === 'billingEditor') {
+    const defaultClient = clients.find((client) => client.id === selectedClientId);
+
+    return (
+      <div className="flex-1 flex flex-col bg-gray-950 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-800 flex items-center justify-end">
+          <button
+            type="button"
+            onClick={() => setCurrentView('billing')}
+            className="px-3 py-2 bg-gray-800 text-gray-200 rounded hover:bg-gray-700"
+          >
+            Volver al historial
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6">
+          <BillingEditorModal
+            open
+            billingRun={billingEditorRun ?? undefined}
+            clientId={defaultClient?.id || ''}
+            clientName={billingEditorRun?.clientName || defaultClient?.name || 'Seleccionar cliente'}
+            onClose={closeBillingEditor}
+            onSaved={() => {
+              closeBillingEditor();
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // REQ-021: TODOs view - dual panel: TodosCardsView (left) + InlineEditorPanel (right)
+  if (currentView === 'todos') {
+    return (
+      <>
+        <TodosCardsView 
+          filterTaskId={todosFilterTaskId}
+          onNavigateToTask={(taskId) => setSelectedNoteId(taskId)}
+          onClose={todosFilterTaskId ? () => setCurrentView('all') : undefined}
+        />
+        <InlineEditorPanel />
         <UnsavedChangesModal
           isOpen={showUnsavedModal}
           onDiscard={discardAndExecute}
@@ -154,6 +233,24 @@ function AppLayout() {
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
   }, [saveCurrentNote]);
+
+  // REQ-021: Poll for TODO notifications every minute
+  useEffect(() => {
+    const checkNotifications = async () => {
+      try {
+        await fetch('/api/todos/notify', { method: 'POST' });
+      } catch (error) {
+        console.error('Error checking TODO notifications:', error);
+      }
+    };
+
+    // Check immediately on mount
+    checkNotifications();
+    
+    // Then check every minute
+    const interval = setInterval(checkNotifications, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="h-screen flex flex-col bg-gray-950 text-white overflow-hidden">

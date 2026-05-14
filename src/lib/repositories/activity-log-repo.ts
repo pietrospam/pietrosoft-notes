@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../db';
 import type { TaskActivityLog, TaskActivityEventType } from '../types';
 
@@ -11,14 +12,14 @@ function toActivityLog(prismaLog: {
   taskId: string;
   eventType: string;
   description: string | null;
-  createdAt: Date;
+  createdAt: Date | null;
 }): TaskActivityLog {
   return {
     id: prismaLog.id,
     taskId: prismaLog.taskId,
     eventType: prismaLog.eventType as TaskActivityEventType,
     description: prismaLog.description ?? undefined,
-    createdAt: prismaLog.createdAt.toISOString(),
+    createdAt: prismaLog.createdAt?.toISOString() ?? new Date().toISOString(),
   };
 }
 
@@ -47,6 +48,7 @@ export async function createActivityLog(
 ): Promise<TaskActivityLog> {
   const log = await prisma.taskActivityLog.create({
     data: {
+      id: randomUUID(),
       taskId,
       eventType,
       description,
@@ -65,6 +67,7 @@ export async function createActivityLogs(
   // Use createMany for bulk insert
   await prisma.taskActivityLog.createMany({
     data: events.map(e => ({
+      id: randomUUID(),
       taskId,
       eventType: e.eventType,
       description: e.description,
@@ -143,6 +146,7 @@ export async function createPlaceholderTimesheet(
   // Create placeholder timesheet
   await prisma.timesheet.create({
     data: {
+      id: randomUUID(),
       workDate: today,
       hoursWorked: 0,
       description,

@@ -10,6 +10,7 @@ function toProject(prismaProject: {
   id: string;
   clientId: string;
   name: string;
+  code: string | null;
   description: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -18,6 +19,7 @@ function toProject(prismaProject: {
     id: prismaProject.id,
     clientId: prismaProject.clientId,
     name: prismaProject.name,
+    code: prismaProject.code ?? undefined,
     description: prismaProject.description ?? undefined,
     createdAt: prismaProject.createdAt.toISOString(),
     updatedAt: prismaProject.updatedAt.toISOString(),
@@ -53,6 +55,7 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
       id,
       clientId: input.clientId,
       name: input.name,
+      code: input.code ?? null,
       description: input.description,
     },
   });
@@ -61,10 +64,11 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
 
 export async function updateProject(id: string, input: UpdateProjectInput): Promise<Project | null> {
   try {
-    const data: { clientId?: string; name?: string; description?: string | null } = {};
+    const data: { clientId?: string; name?: string; code?: string | null; description?: string | null } = {};
     
     if (input.clientId !== undefined) data.clientId = input.clientId;
     if (input.name !== undefined) data.name = input.name;
+    if (input.code !== undefined) data.code = input.code || null;
     if (input.description !== undefined) data.description = input.description;
 
     const project = await prisma.project.update({

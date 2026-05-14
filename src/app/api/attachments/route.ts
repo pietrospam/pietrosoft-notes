@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/db';
 import type { AttachmentMeta } from '@/lib/types';
+import { createSystemComment, formatFileSize, formatDate } from '@/lib/system-comments';
 
 // Max file size: 10MB
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -54,6 +55,17 @@ export async function POST(request: NextRequest) {
         size: file.size,
         data: buffer,
       },
+    });
+    
+    // Create system comment for the attachment
+    const sizeStr = formatFileSize(file.size);
+    const dateStr = formatDate();
+    await createSystemComment({
+      noteId,
+      message: '📎 Se ha agregado un archivo anexo: ',
+      linkText: file.name,
+      linkHref: `/api/attachments/${attachment.id}`,
+      afterLinkText: ` (${sizeStr}) - ${dateStr}`,
     });
     
     const response: AttachmentMeta = {

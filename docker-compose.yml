@@ -47,6 +47,18 @@ services:
   #     - app
   #   restart: unless-stopped
 
+  # REQ-022: Automations cron container
+  # Runs every minute and calls the centralized automations endpoint
+  automations-cron:
+    image: alpine:latest
+    command: >
+      sh -c "apk add --no-cache curl &&
+             echo '* * * * * curl -s -X POST http://app:3000/api/automations' | crontab - &&
+             crond -f -l 2"
+    depends_on:
+      - app
+    restart: unless-stopped
+
   adminer:
     image: adminer:latest
     ports:

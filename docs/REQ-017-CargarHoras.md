@@ -24,6 +24,9 @@ directamente desde el modal.
 
 2. **Columnas mostradas en el modal**
    - Proyecto (de la task asociada)
+     - Si el proyecto es distinto de "General" y tiene un **código de proyecto** configurado,
+       se muestra como `CODIGO (Nombre del Proyecto)` (ej. `PRJ-001 (Website Redesign)`)
+     - En caso contrario se muestra sólo el nombre del proyecto
    - Ticket/Fase (campo `taskCode` del timesheet, corresponde a `ticketPhaseCode` de la tarea)
    - Cantidad de horas (campo `hoursWorked`, formato con 1 decimal)
    - Fecha (campo `workDate`, formato DD/MM/YY)
@@ -33,6 +36,7 @@ directamente desde el modal.
 3. **Funcionalidad de copiado**
    - Cada celda de datos (excepto Estado) es clickeable
    - Al hacer click se copia el valor como texto plano al portapapeles
+   - Para la celda Proyecto: si el proyecto tiene código, se copia **sólo el código** (no el texto completo `CODIGO (Nombre)`)
    - Feedback visual: icono de Check verde y toast de confirmación
    - Icono de Copy aparece en hover sobre la celda
 
@@ -98,6 +102,8 @@ directamente desde el modal.
 - [ ] **AC9:** Modal respeta los filtros activos de la vista de TimeSheets
 - [ ] **AC10:** Checkbox "Solo horas > 0" filtra correctamente y está habilitado por defecto
 - [ ] **AC11:** Toggles de estado filtran por Todos/Borrador/Imputado, con Borrador seleccionado por defecto
+- [ ] **AC12:** Columna Proyecto muestra `CODIGO (Nombre)` cuando el proyecto no es General y tiene código configurado
+- [ ] **AC13:** Al copiar la celda Proyecto con código, se copia sólo el código (no el texto completo de display)
 - [ ] **AC12:** Contador en header refleja "X de Y entradas" cuando hay filtros
 - [ ] **AC13:** Subtotales diarios se muestran después de cada grupo de fecha
 - [ ] **AC14:** Indicador de color en subtotal: verde >= 8h, amarillo < 8h

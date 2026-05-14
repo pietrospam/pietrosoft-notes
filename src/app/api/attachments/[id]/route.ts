@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/db';
 import type { AttachmentMeta } from '@/lib/types';
+import { createSystemComment, formatFileSize } from '@/lib/system-comments';
 
 interface Params {
   params: { id: string };
@@ -53,14 +54,24 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
   try {
     const { id } = params;
     
-    // Delete from database (cascade will handle if note is deleted)
-    const attachment = await prisma.attachment.delete({
+    // Get attachment info before deleting (for system comment)
+    const attachmentInfo = await prisma.attachment.findUnique({
       where: { id },
-    }).catch(() => null);
+      select: { noteId: true, originalName: true, size: true },
+    });
     
-    if (!attachment) {
+    if (!attachmentInfo) {
       return NextResponse.json({ error: 'Attachment not found' }, { status: 404 });
     }
+    
+    // Delete from database
+    await prisma.attachment.delete({ where: { id } });
+    
+    // Create system comment for deletion
+    await createSystemComment({
+      noteId: attachmentInfo.noteId,
+      message: `🗑️ Se ha eliminado el archivo anexo: "${attachmentInfo.originalName}" (${formatFileSize(attachmentInfo.size)})`,
+    });
     
     return new NextResponse(null, { status: 204 });
     
@@ -79,14 +90,31 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: 'originalName is required' }, { status: 400 });
     }
     
+    // Get old name for comparison
+    const oldAttachment = await prisma.attachment.findUnique({
+      where: { id },
+      select: { noteId: true, originalName: true },
+    });
+    
+    if (!oldAttachment) {
+      return NextResponse.json({ error: 'Attachment not found' }, { status: 404 });
+    }
+    
+    const oldName = oldAttachment.originalName;
+    const newName = body.originalName;
+    
     // Update attachment name in database
     const attachment = await prisma.attachment.update({
       where: { id },
-      data: { originalName: body.originalName },
-    }).catch(() => null);
+      data: { originalName: newName },
+    });
     
-    if (!attachment) {
-      return NextResponse.json({ error: 'Attachment not found' }, { status: 404 });
+    // Create system comment if name changed
+    if (oldName !== newName) {
+      await createSystemComment({
+        noteId: attachment.noteId,
+        message: `✏️ Se ha renombrado el archivo anexo: "${oldName}" → "${newName}"`,
+      });
     }
     
     const response: AttachmentMeta = {

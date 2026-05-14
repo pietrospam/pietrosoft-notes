@@ -3,10 +3,21 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import JSZip from 'jszip';
 import archiver from 'archiver';
+import { notifyBackupSuccess, notifyBackupError } from '@/lib/telegram';
 
 export const dynamic = 'force-dynamic';
 
 const BACKUP_DIR = process.env.BACKUP_DIR || './backups';
+const ARGENTINA_TIMEZONE = 'America/Buenos_Aires';
+
+/**
+ * Generate timestamp string in Argentina timezone for filenames
+ */
+function getArgentinaTimestamp(): string {
+  const now = new Date();
+  const argentinaDate = new Date(now.toLocaleString('en-US', { timeZone: ARGENTINA_TIMEZONE }));
+  return `${argentinaDate.getFullYear()}-${String(argentinaDate.getMonth() + 1).padStart(2, '0')}-${String(argentinaDate.getDate()).padStart(2, '0')}T${String(argentinaDate.getHours()).padStart(2, '0')}-${String(argentinaDate.getMinutes()).padStart(2, '0')}-${String(argentinaDate.getSeconds()).padStart(2, '0')}`;
+}
 
 interface BackupManifest {
   version: string;
@@ -22,7 +33,13 @@ interface BackupManifest {
     timesheets: number;
     activityLogs: number;
     taskComments?: number;
+    taskTodos?: number;
+    todoNotificationsSent?: number;
+    billingMethods?: number;
+    billingRuns?: number;
+    billingRunItems?: number;
   };
+  taskTodosError?: string;
   appVersion: string;
 }
 
@@ -212,8 +229,8 @@ export async function POST(request: NextRequest) {
     // Ensure backup directory exists
     await fs.mkdir(BACKUP_DIR, { recursive: true });
     
-    // Generate filename with timestamp
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    // Generate filename with timestamp in Argentina timezone
+    const timestamp = getArgentinaTimestamp();
     const filename = `backup-${timestamp}.zip`;
     const filePath = path.join(BACKUP_DIR, filename);
     
@@ -230,8 +247,8 @@ export async function POST(request: NextRequest) {
     
     // Export database tables
     const { prisma } = await import('@/lib/db');
-    
-    const [clients, projects, notes, attachments, activityLogs, timesheets, taskComments] = await Promise.all([
+
+    const [clients, projects, notes, attachments, activityLogs, timesheets, taskComments, billingMethods, billingRuns, billingRunItems, todoNotificationsSent] = await Promise.all([
       prisma.client.findMany(),
       prisma.project.findMany(),
       prisma.note.findMany(),
@@ -239,7 +256,29 @@ export async function POST(request: NextRequest) {
       prisma.taskActivityLog.findMany(),
       prisma.timesheet.findMany(),
       prisma.taskComment.findMany(),
+      prisma.billingMethod.findMany(),
+      prisma.billingRun.findMany(),
+      prisma.billingRunItem.findMany(),
+      prisma.todoNotificationSent.findMany(),
     ]);
+
+    // Task todos may not exist in older schemas (missing client_id column), so fallback gracefully.
+    let taskTodos: unknown[] = [];
+    let taskTodosError: string | undefined;
+
+    try {
+      taskTodos = await prisma.taskTodo.findMany();
+    } catch (err) {
+      console.warn('Failed to fetch taskTodos with Prisma (schema mismatch), falling back to raw SQL:', err);
+      taskTodosError = String(err);
+      try {
+        // Raw query should work even if schema differs; it selects existing columns only
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        taskTodos = await prisma.$queryRawUnsafe('SELECT * FROM task_todos');
+      } catch (rawErr) {
+        console.error('Fallback raw query for task_todos failed:', rawErr);
+      }
+    }
     
     // Create manifest
     const manifest: BackupManifest = {
@@ -249,14 +288,20 @@ export async function POST(request: NextRequest) {
       description,
       protected: isProtected,
       stats: {
-        notes: notes.length,
+          notes: notes.length,
         clients: clients.length,
         projects: projects.length,
         attachments: attachments.length,
         timesheets: timesheets.length,
         activityLogs: activityLogs.length,
         taskComments: taskComments.length,
+        taskTodos: taskTodos.length,
+        todoNotificationsSent: todoNotificationsSent.length,
+        billingMethods: billingMethods.length,
+        billingRuns: billingRuns.length,
+        billingRunItems: billingRunItems.length,
       },
+      taskTodosError,
       appVersion: '1.0.0',
     };
     
@@ -270,6 +315,8 @@ export async function POST(request: NextRequest) {
     archive.append(JSON.stringify(timesheets, null, 2), { name: 'db/timesheets.json' });
     archive.append(JSON.stringify(activityLogs, null, 2), { name: 'db/activityLogs.json' });
     archive.append(JSON.stringify(taskComments, null, 2), { name: 'db/taskComments.json' });
+    archive.append(JSON.stringify(taskTodos, null, 2), { name: 'db/taskTodos.json' });
+    archive.append(JSON.stringify(todoNotificationsSent, null, 2), { name: 'db/todoNotificationsSent.json' });
     
     // Encode attachment data to base64
     const attachmentsWithData = attachments.map(a => ({
@@ -278,8 +325,22 @@ export async function POST(request: NextRequest) {
     }));
     archive.append(JSON.stringify(attachmentsWithData, null, 2), { name: 'db/attachments.json' });
     
+    // Billing methods (no binary data)
+    archive.append(JSON.stringify(billingMethods, null, 2), { name: 'db/billingMethods.json' });
+    
+    // Billing runs - encode pdfData (Bytes?) to base64
+    const billingRunsWithData = billingRuns.map(r => ({
+      ...r,
+      pdfData: r.pdfData ? r.pdfData.toString('base64') : null,
+    }));
+    archive.append(JSON.stringify(billingRunsWithData, null, 2), { name: 'db/billingRuns.json' });
+    archive.append(JSON.stringify(billingRunItems, null, 2), { name: 'db/billingRunItems.json' });
+    
     // Add data directory if exists
     const dataDir = process.env.DATA_DIR || './data';
+    const telegramConfigPath = process.env.WORKSPACE_PATH
+      ? path.join(process.env.WORKSPACE_PATH, 'telegram-config.json')
+      : path.join(dataDir, 'telegram-config.json');
     try {
       await fs.access(dataDir);
       
@@ -303,6 +364,23 @@ export async function POST(request: NextRequest) {
     } catch {
       // Data directory doesn't exist - that's fine
     }
+
+    // Add Telegram configuration if exists
+    try {
+      const telegramConfigContent = await fs.readFile(telegramConfigPath);
+      archive.append(telegramConfigContent, { name: 'config/telegram-config.json' });
+    } catch {
+      // Telegram config file doesn't exist - that's fine
+    }
+
+    // Add backup settings if exists
+    const backupSettingsPath = path.join(BACKUP_DIR, 'backup-settings.json');
+    try {
+      const settingsContent = await fs.readFile(backupSettingsPath);
+      archive.append(settingsContent, { name: 'config/backup-settings.json' });
+    } catch {
+      // Settings file doesn't exist - that's fine
+    }
     
     await archive.finalize();
     const zipBuffer = await finishPromise;
@@ -312,7 +390,15 @@ export async function POST(request: NextRequest) {
     
     // Apply retention policy
     await applyRetentionPolicy();
-    
+
+    // Send Telegram notification (async, don't block response)
+    notifyBackupSuccess({
+      filename,
+      sizeBytes: zipBuffer.length,
+      type: 'manual',
+      filePath,
+    }).catch(err => console.error('Telegram notification failed:', err));
+
     return NextResponse.json({
       success: true,
       filename,
@@ -321,6 +407,13 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error creating backup:', error);
+    
+    // Send error notification (async)
+    notifyBackupError({
+      type: 'manual',
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }).catch(err => console.error('Telegram error notification failed:', err));
+    
     return NextResponse.json({ error: 'Failed to create backup' }, { status: 500 });
   }
 }

@@ -10,13 +10,14 @@ import { Toast } from './Toast';
 import { UnsavedChangesModal } from './UnsavedChangesModal';
 import { Trash2, Save, Archive, ArchiveRestore, RotateCcw, Circle, Pencil, Clock } from 'lucide-react';
 import { TimeSheetModal } from './TimeSheetModal';
-import type { Note, TaskNote, ConnectionNote, AttachmentMeta } from '@/lib/types';
+import type { Note, TaskNote, ConnectionNote } from '@/lib/types';
 
 export function EditorPanel() {
   const { 
     selectedNote, 
     updateNote, 
     deleteNote, 
+    refreshNotes,
     isSaving, 
     setIsSaving, 
     lastSaved, 
@@ -81,18 +82,58 @@ export function EditorPanel() {
     }
   }, [selectedNoteId, selectedNote, setLastSaved, setIsDirty]);
 
-  // Auto-select title text when creating a new note
+  // Auto-select title text when creating a new note (or focus body if clipboard has ticket)
   useEffect(() => {
-    if (isNewNote && titleInputRef.current) {
+    if (isNewNote && selectedNote) {
       // Small timeout to ensure the input is rendered and focused
-      const timer = setTimeout(() => {
+      const timer = setTimeout(async () => {
+        // For tasks, try to read clipboard and auto-fill if ticket pattern found
+        if (selectedNote.type === 'task') {
+          try {
+            const clipboardText = await navigator.clipboard.readText();
+            if (clipboardText) {
+              const text = clipboardText.substring(0, 200); // Max 200 chars
+              const TICKET_PATTERN = /#(\d{5})#?/;  // #<5 digits>
+              const ticketMatch = text.match(TICKET_PATTERN);
+              
+              if (ticketMatch) {
+                // Found ticket pattern - auto-fill fields
+                const ticketCode = ticketMatch[1];
+                let description = text.replace(TICKET_PATTERN, '').replace(/\s+/g, ' ').trim();
+                if (description.length > 100) description = description.substring(0, 100);
+                
+                const newTitle = description ? `#${ticketCode} - ${description}` : `#${ticketCode}`;
+                setTitle(newTitle);
+                setLocalNote(prev => prev ? { 
+                  ...prev, 
+                  title: newTitle,
+                  ticketPhaseCode: ticketCode,
+                  shortDescription: description || ticketCode,
+                } as Note : null);
+                pendingChangesRef.current = {
+                  ...pendingChangesRef.current,
+                  title: newTitle,
+                  ticketPhaseCode: ticketCode,
+                  shortDescription: description || ticketCode,
+                };
+                // Focus the editor body instead of title
+                setTimeout(() => editorRef.current?.focus(), 50);
+                return;
+              }
+            }
+          } catch {
+            // Clipboard access denied - ignore
+          }
+        }
+        
+        // Default behavior: focus title
         titleInputRef.current?.focus();
         titleInputRef.current?.select();
         setIsEditingTitle(true);
       }, 100);
       return () => clearTimeout(timer);
     }
-  }, [isNewNote, selectedNoteId]);
+  }, [isNewNote, selectedNoteId, selectedNote?.type]);
 
   // Cleanup auto-save timer on unmount
   useEffect(() => {
@@ -423,21 +464,17 @@ export function EditorPanel() {
           noteId={selectedNote.id}
           onPersistNote={isNewNote ? handlePersistForUpload : undefined}
           attachments={selectedNote.attachments || []}
-          onAttachmentAdded={(attachment: AttachmentMeta) => {
-            const updatedAttachments = [...(selectedNote.attachments || []), attachment];
-            updateNote(selectedNote.id, { attachments: updatedAttachments });
+          onAttachmentAdded={() => {
+            // After adding, refresh to get the updated list from DB
+            refreshNotes();
           }}
-          onAttachmentDeleted={(attachmentId: string) => {
-            const updatedAttachments = (selectedNote.attachments || []).filter(
-              (a) => a.id !== attachmentId
-            );
-            updateNote(selectedNote.id, { attachments: updatedAttachments });
+          onAttachmentDeleted={() => {
+            // After deleting, refresh to get the updated list from DB
+            refreshNotes();
           }}
-          onAttachmentRenamed={(attachmentId: string, newName: string) => {
-            const updatedAttachments = (selectedNote.attachments || []).map(
-              (a) => a.id === attachmentId ? { ...a, originalName: newName } : a
-            );
-            updateNote(selectedNote.id, { attachments: updatedAttachments });
+          onAttachmentRenamed={() => {
+            // After renaming, refresh to get the updated list from DB
+            refreshNotes();
           }}
         />
       </div>

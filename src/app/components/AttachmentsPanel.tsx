@@ -1,8 +1,9 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { Paperclip, Download, Trash2, Upload, File, Image as ImageIcon, FileText, Loader2, Eye, Pencil, X, Check } from 'lucide-react';
+import { Paperclip, Download, Trash2, Upload, Loader2, Eye, Pencil, X, Check } from 'lucide-react';
 import { AttachmentViewer } from './AttachmentViewer';
+import { getFileTypeInfo, isPreviewable } from '@/lib/fileIcons';
 import type { AttachmentMeta } from '@/lib/types';
 
 interface AttachmentsPanelProps {
@@ -22,14 +23,8 @@ function formatFileSize(bytes: number): string {
 
 function formatDateTime(iso: string): string {
   const d = new Date(iso);
-  // Show local short format; could later be replaced with relative formatting
-  return d.toLocaleString();
-}
-
-function getFileIcon(mimeType: string) {
-  if (mimeType.startsWith('image/')) return ImageIcon;
-  if (mimeType.includes('pdf') || mimeType.includes('document')) return FileText;
-  return File;
+  // Show local short format in 24h; could later be replaced with relative formatting
+  return d.toLocaleString('es-AR', { hour12: false });
 }
 
 export function AttachmentsPanel({ 
@@ -42,6 +37,7 @@ export function AttachmentsPanel({
 }: AttachmentsPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [viewingAttachment, setViewingAttachment] = useState<AttachmentMeta | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -89,6 +85,19 @@ export function AttachmentsPanel({
     } finally {
       setUploading(false);
     }
+  };
+
+  const handleMultipleUpload = async (files: File[]) => {
+    if (files.length === 0) return;
+    
+    setUploadProgress({ current: 0, total: files.length });
+    
+    for (let i = 0; i < files.length; i++) {
+      setUploadProgress({ current: i + 1, total: files.length });
+      await handleUpload(files[i]);
+    }
+    
+    setUploadProgress(null);
   };
 
   const handleDelete = async (attachmentId: string) => {
@@ -177,10 +186,7 @@ export function AttachmentsPanel({
     const files = Array.from(e.dataTransfer.files);
     if (files.length === 0) return;
 
-    // Upload files sequentially
-    for (const file of files) {
-      await handleUpload(file);
-    }
+    await handleMultipleUpload(files);
   };
 
   return (
@@ -212,16 +218,25 @@ export function AttachmentsPanel({
         <input
           ref={fileInputRef}
           type="file"
+          multiple
           className="hidden"
           onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) {
-              handleUpload(file);
+            const files = e.target.files;
+            if (files && files.length > 0) {
+              handleMultipleUpload(Array.from(files));
             }
             e.target.value = '';
           }}
         />
       </div>
+
+      {/* Upload progress indicator */}
+      {uploadProgress && (
+        <div className="text-xs text-blue-400 mb-2 flex items-center gap-2">
+          <Loader2 size={12} className="animate-spin" />
+          <span>Subiendo {uploadProgress.current} de {uploadProgress.total}...</span>
+        </div>
+      )}
 
       {attachments.length === 0 ? (
         <div className={`text-center py-4 border-2 border-dashed rounded-lg ${isDragOver ? 'border-blue-500 bg-blue-900/10' : 'border-gray-700'}`}>
@@ -234,16 +249,17 @@ export function AttachmentsPanel({
       ) : (
         <div className="space-y-2">
           {attachments.map((attachment) => {
-            const Icon = getFileIcon(attachment.mimeType);
+            const { icon: FileIcon, color: iconColor } = getFileTypeInfo(attachment.originalName, attachment.mimeType);
+            const canPreview = isPreviewable(attachment.originalName, attachment.mimeType);
             const isDeleting = deletingId === attachment.id;
             const isRenaming = renamingId === attachment.id;
             
             return (
               <div
                 key={attachment.id}
-                className="flex items-center gap-3 p-2 bg-gray-900 rounded group hover:bg-gray-800 transition-colors"
+                className="flex items-start gap-3 p-2 bg-gray-900 rounded group hover:bg-gray-800 transition-colors"
               >
-                <Icon size={16} className="text-gray-500 flex-shrink-0" />
+                <FileIcon size={16} className={`${iconColor} flex-shrink-0 mt-0.5`} />
                 
                 <div className="flex-1 min-w-0">
                   {isRenaming ? (
@@ -274,7 +290,7 @@ export function AttachmentsPanel({
                     </div>
                   ) : (
                     <>
-                      <p className="text-sm text-gray-300 truncate">{attachment.originalName}</p>
+                      <p className="text-sm text-gray-300 break-words leading-tight">{attachment.originalName}</p>
                       <p className="text-xs text-gray-600">{formatFileSize(attachment.size)}</p>
                       <p className="text-xs text-gray-500">{formatDateTime(attachment.createdAt)}</p>
                     </>
@@ -282,15 +298,17 @@ export function AttachmentsPanel({
                 </div>
                 
                 {!isRenaming && (
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {/* Preview */}
-                    <button
-                      onClick={() => setViewingAttachment(attachment)}
-                      className="p-1.5 text-gray-500 hover:text-white hover:bg-gray-700 rounded transition-colors"
-                      title="Ver"
-                    >
-                      <Eye size={14} />
-                    </button>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                    {/* Preview - only for supported file types */}
+                    {canPreview && (
+                      <button
+                        onClick={() => setViewingAttachment(attachment)}
+                        className="p-1.5 text-gray-500 hover:text-white hover:bg-gray-700 rounded transition-colors"
+                        title="Ver"
+                      >
+                        <Eye size={14} />
+                      </button>
+                    )}
                     
                     {/* Download */}
                     <a

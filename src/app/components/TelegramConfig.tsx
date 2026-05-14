@@ -1,0 +1,744 @@
+'use client';
+
+/**
+ * TelegramConfig Component
+ * SPEC-007: Telegram Backup Notifications
+ */
+
+import { useState, useEffect, useCallback } from 'react';
+import { Send, Eye, EyeOff, Loader2, CheckCircle, XCircle, AlertCircle, HelpCircle, ChevronDown, ChevronUp, ExternalLink, Flag, Clock, Bell, Cog, Save } from 'lucide-react';
+
+interface TelegramConfigState {
+  enabled: boolean;
+  botToken: string;
+  hasToken: boolean;
+  chatId: string;
+  notifyAuto: boolean;
+  notifyManual: boolean;
+  notifyErrors: boolean;
+  sendFile: boolean;
+}
+
+interface TodoNotificationConfig {
+  enabled: boolean;
+  dailySummaryTime: string;
+  reminderMinutes: number[];
+}
+
+interface AutomationsStatus {
+  lastExecution: string | null;
+  executionCount: number;
+}
+
+// Helper to compare configs
+function configsEqual(a: TelegramConfigState, b: TelegramConfigState): boolean {
+  return a.enabled === b.enabled &&
+    a.chatId === b.chatId &&
+    a.notifyAuto === b.notifyAuto &&
+    a.notifyManual === b.notifyManual &&
+    a.notifyErrors === b.notifyErrors &&
+    a.sendFile === b.sendFile;
+}
+
+function todoConfigsEqual(a: TodoNotificationConfig, b: TodoNotificationConfig): boolean {
+  return a.enabled === b.enabled &&
+    a.dailySummaryTime === b.dailySummaryTime &&
+    JSON.stringify(a.reminderMinutes) === JSON.stringify(b.reminderMinutes);
+}
+
+export function TelegramConfig() {
+  const [config, setConfig] = useState<TelegramConfigState>({
+    enabled: false,
+    botToken: '',
+    hasToken: false,
+    chatId: '',
+    notifyAuto: true,
+    notifyManual: true,
+    notifyErrors: true,
+    sendFile: true,
+  });
+  const [originalConfig, setOriginalConfig] = useState<TelegramConfigState | null>(null);
+  
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
+  const [testMessage, setTestMessage] = useState<string>('');
+  const [showToken, setShowToken] = useState(false);
+  const [newToken, setNewToken] = useState<string>('');
+  const [editingToken, setEditingToken] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  
+  // REQ-021: TODO notification settings
+  const [todoConfig, setTodoConfig] = useState<TodoNotificationConfig>({
+    enabled: false,
+    dailySummaryTime: '08:00',
+    reminderMinutes: [60, 15],
+  });
+  const [originalTodoConfig, setOriginalTodoConfig] = useState<TodoNotificationConfig | null>(null);
+  
+  // REQ-022: Automations status
+  const [automationsStatus, setAutomationsStatus] = useState<AutomationsStatus | null>(null);
+
+  // Check if there are pending changes
+  const hasChanges = useCallback(() => {
+    if (!originalConfig || !originalTodoConfig) return false;
+    return !configsEqual(config, originalConfig) || !todoConfigsEqual(todoConfig, originalTodoConfig);
+  }, [config, originalConfig, todoConfig, originalTodoConfig]);
+
+  // Load configuration on mount
+  useEffect(() => {
+    loadConfig();
+    loadTodoConfig();
+    loadAutomationsStatus();
+  }, []);
+  
+  // Refresh automations status every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(loadAutomationsStatus, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadConfig = async () => {
+    try {
+      const res = await fetch('/api/telegram/config');
+      if (res.ok) {
+        const data = await res.json();
+        setConfig(data);
+        setOriginalConfig(data);
+      }
+    } catch (error) {
+      console.error('Failed to load Telegram config:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // REQ-021: Load TODO notification config
+  const loadTodoConfig = async () => {
+    try {
+      const res = await fetch('/api/telegram/todo-config');
+      if (res.ok) {
+        const data = await res.json();
+        setTodoConfig(data);
+        setOriginalTodoConfig(data);
+      }
+    } catch (error) {
+      console.error('Failed to load TODO notification config:', error);
+    }
+  };
+
+  // REQ-022: Load automations status
+  const loadAutomationsStatus = async () => {
+    try {
+      const res = await fetch('/api/automations');
+      if (res.ok) {
+        const data = await res.json();
+        setAutomationsStatus({
+          lastExecution: data.lastExecution,
+          executionCount: data.executionCount,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load automations status:', error);
+    }
+  };
+
+  // Save all changes
+  const handleSaveAll = async () => {
+    setSaving(true);
+    setSaveSuccess(false);
+    try {
+      // Save telegram config if changed
+      if (originalConfig && !configsEqual(config, originalConfig)) {
+        const res = await fetch('/api/telegram/config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setConfig(data);
+          setOriginalConfig(data);
+        }
+      }
+      
+      // Save TODO config if changed
+      if (originalTodoConfig && !todoConfigsEqual(todoConfig, originalTodoConfig)) {
+        const res = await fetch('/api/telegram/todo-config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(todoConfig),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setTodoConfig(data);
+          setOriginalTodoConfig(data);
+        }
+      }
+      
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (error) {
+      console.error('Failed to save config:', error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Save only the token (special case)
+  const handleSaveToken = async () => {
+    if (!newToken.trim()) return;
+    setSaving(true);
+    try {
+      const res = await fetch('/api/telegram/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ botToken: newToken.trim() }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setConfig(data);
+        setOriginalConfig(data);
+        setEditingToken(false);
+        setNewToken('');
+      }
+    } catch (error) {
+      console.error('Failed to save token:', error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTest = async () => {
+    setTesting(true);
+    setTestResult(null);
+    setTestMessage('');
+    
+    try {
+      const res = await fetch('/api/telegram/test', { method: 'POST' });
+      const data = await res.json();
+      
+      if (data.success) {
+        setTestResult('success');
+        setTestMessage(data.botName ? `Conectado como @${data.botName}` : 'Conexión exitosa');
+      } else {
+        setTestResult('error');
+        setTestMessage(data.error || 'Error desconocido');
+      }
+    } catch {
+      setTestResult('error');
+      setTestMessage('Error de conexión');
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="bg-gray-900 rounded-lg p-4 border border-gray-800">
+        <div className="flex items-center gap-3">
+          <Loader2 className="animate-spin text-gray-400" size={20} />
+          <span className="text-gray-400">Cargando configuración...</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-gray-900 rounded-lg p-4 border border-gray-800">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-blue-500/20 rounded-lg">
+            <Send size={20} className="text-blue-400" />
+          </div>
+          <div>
+            <h3 className="text-lg font-medium text-white">Notificaciones de Telegram</h3>
+            <p className="text-gray-400 text-sm">Recibe los backups en tu Telegram</p>
+          </div>
+        </div>
+        
+        {/* Main toggle */}
+        <button
+          onClick={() => setConfig(prev => ({ ...prev, enabled: !prev.enabled }))}
+          disabled={saving}
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+            config.enabled ? 'bg-blue-600' : 'bg-gray-600'
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+              config.enabled ? 'translate-x-6' : 'translate-x-1'
+            }`}
+          />
+        </button>
+      </div>
+
+      {config.enabled && (
+        <div className="space-y-4 mt-4 pt-4 border-t border-gray-800">
+          {/* Bot Token */}
+          <div>
+            <label className="block text-sm text-white mb-1">Bot Token</label>
+            {editingToken ? (
+              <div className="flex gap-2">
+                <input
+                  type={showToken ? 'text' : 'password'}
+                  value={newToken}
+                  onChange={(e) => setNewToken(e.target.value)}
+                  placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz..."
+                  className="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+                <button
+                  onClick={() => setShowToken(!showToken)}
+                  className="p-2 bg-gray-800 border border-gray-700 rounded hover:bg-gray-700"
+                >
+                  {showToken ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+                <button
+                  onClick={handleSaveToken}
+                  disabled={!newToken.trim() || saving}
+                  className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 rounded text-sm"
+                >
+                  {saving ? <Loader2 size={16} className="animate-spin" /> : 'Guardar'}
+                </button>
+                <button
+                  onClick={() => { setEditingToken(false); setNewToken(''); }}
+                  className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm"
+                >
+                  Cancelar
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={config.hasToken ? config.botToken : ''}
+                  readOnly
+                  placeholder="No configurado"
+                  className="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-400"
+                />
+                <button
+                  onClick={() => setEditingToken(true)}
+                  className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm"
+                >
+                  {config.hasToken ? 'Cambiar' : 'Configurar'}
+                </button>
+              </div>
+            )}
+            <p className="text-xs text-gray-500 mt-1">
+              Obtén el token creando un bot con @BotFather en Telegram
+            </p>
+          </div>
+
+          {/* Chat ID */}
+          <div>
+            <label className="block text-sm text-white mb-1">Chat ID</label>
+            <input
+              type="text"
+              value={config.chatId}
+              onChange={(e) => setConfig(prev => ({ ...prev, chatId: e.target.value }))}
+              placeholder="123456789"
+              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Tu ID de usuario o grupo donde recibir las notificaciones
+            </p>
+          </div>
+
+          {/* Test connection */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleTest}
+              disabled={testing || !config.hasToken || !config.chatId}
+              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:text-gray-500 rounded text-sm flex items-center gap-2"
+            >
+              {testing ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <Send size={16} />
+              )}
+              Probar conexión
+            </button>
+            
+            {testResult === 'success' && (
+              <span className="flex items-center gap-1 text-green-400 text-sm">
+                <CheckCircle size={16} />
+                {testMessage}
+              </span>
+            )}
+            {testResult === 'error' && (
+              <span className="flex items-center gap-1 text-red-400 text-sm">
+                <XCircle size={16} />
+                {testMessage}
+              </span>
+            )}
+          </div>
+
+          {/* Notification options */}
+          <div className="pt-4 border-t border-gray-800">
+            <p className="text-sm text-white mb-3">Notificar:</p>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm text-gray-300">
+                <input
+                  type="checkbox"
+                  checked={config.notifyAuto}
+                  onChange={(e) => setConfig(prev => ({ ...prev, notifyAuto: e.target.checked }))}
+                  className="rounded bg-gray-800 border-gray-600"
+                />
+                Backups automáticos
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-300">
+                <input
+                  type="checkbox"
+                  checked={config.notifyManual}
+                  onChange={(e) => setConfig(prev => ({ ...prev, notifyManual: e.target.checked }))}
+                  className="rounded bg-gray-800 border-gray-600"
+                />
+                Backups manuales
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-300">
+                <input
+                  type="checkbox"
+                  checked={config.notifyErrors}
+                  onChange={(e) => setConfig(prev => ({ ...prev, notifyErrors: e.target.checked }))}
+                  className="rounded bg-gray-800 border-gray-600"
+                />
+                Errores de backup
+              </label>
+            </div>
+          </div>
+
+          {/* File attachment option */}
+          <div className="pt-4 border-t border-gray-800">
+            <label className="flex items-center gap-2 text-sm text-gray-300">
+              <input
+                type="checkbox"
+                checked={config.sendFile}
+                onChange={(e) => setConfig(prev => ({ ...prev, sendFile: e.target.checked }))}
+                className="rounded bg-gray-800 border-gray-600"
+              />
+              Adjuntar archivo de backup (máx. 1GB)
+            </label>
+            <p className="text-xs text-gray-500 mt-1 ml-6">
+              Si está desactivado o el archivo excede 1GB, solo se enviará una notificación de texto
+            </p>
+          </div>
+
+          {/* REQ-021: TODO Notifications section */}
+          <div className="pt-4 border-t border-gray-800">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Flag size={16} className="text-orange-400" />
+                <span className="text-sm text-white font-medium">Notificaciones de TODOs</span>
+              </div>
+              <button
+                onClick={() => setTodoConfig(prev => ({ ...prev, enabled: !prev.enabled }))}
+                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                  todoConfig.enabled ? 'bg-orange-600' : 'bg-gray-600'
+                }`}
+              >
+                <span
+                  className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
+                    todoConfig.enabled ? 'translate-x-5' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {todoConfig.enabled && (
+              <div className="space-y-3 pl-6 border-l-2 border-orange-500/30 ml-2">
+                {/* Daily Summary Time */}
+                <div>
+                  <label className="flex items-center gap-2 text-sm text-gray-300 mb-1">
+                    <Clock size={14} className="text-gray-400" />
+                    Resumen diario a las:
+                  </label>
+                  <input
+                    type="time"
+                    value={todoConfig.dailySummaryTime}
+                    onChange={(e) => setTodoConfig(prev => ({ ...prev, dailySummaryTime: e.target.value }))}
+                    className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Recibe un resumen de TODOs pendientes a esta hora
+                  </p>
+                </div>
+
+                {/* Reminder intervals */}
+                <div>
+                  <label className="flex items-center gap-2 text-sm text-gray-300 mb-2">
+                    <Bell size={14} className="text-gray-400" />
+                    Recordatorios antes del deadline:
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { value: 1440, label: '24h' },
+                      { value: 60, label: '1h' },
+                      { value: 30, label: '30m' },
+                      { value: 15, label: '15m' },
+                      { value: 5, label: '5m' },
+                    ].map((option) => {
+                      const isSelected = todoConfig.reminderMinutes.includes(option.value);
+                      return (
+                        <button
+                          key={option.value}
+                          onClick={() => {
+                            const newReminders = isSelected
+                              ? todoConfig.reminderMinutes.filter(m => m !== option.value)
+                              : [...todoConfig.reminderMinutes, option.value].sort((a, b) => b - a);
+                            setTodoConfig(prev => ({ ...prev, reminderMinutes: newReminders }));
+                          }}
+                          className={`px-3 py-1 rounded text-xs transition-colors ${
+                            isSelected
+                              ? 'bg-orange-600 text-white'
+                              : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Selecciona cuánto tiempo antes del deadline recibir recordatorios
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Help section - always visible, collapsible */}
+          <div className="border border-gray-700 rounded-lg mt-4 overflow-hidden">
+            <button
+              onClick={() => setShowHelp(!showHelp)}
+              className="w-full flex items-center justify-between p-3 bg-gray-800/50 hover:bg-gray-800 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <HelpCircle size={16} className="text-blue-400" />
+                <span className="text-sm text-gray-200 font-medium">Cómo configurar Telegram</span>
+              </div>
+              {showHelp ? (
+                <ChevronUp size={16} className="text-gray-400" />
+              ) : (
+                <ChevronDown size={16} className="text-gray-400" />
+              )}
+            </button>
+            
+            {showHelp && (
+              <div className="p-4 space-y-4 bg-gray-900/50">
+                {/* Step 1: Create Bot */}
+                <div>
+                  <h4 className="text-sm font-medium text-blue-400 mb-2">1. Crear un Bot en Telegram</h4>
+                  <ol className="text-xs text-gray-400 space-y-1 list-decimal list-inside ml-2">
+                    <li>Abre Telegram y busca <code className="bg-gray-800 px-1 rounded">@BotFather</code></li>
+                    <li>Envía el comando <code className="bg-gray-800 px-1 rounded">/newbot</code></li>
+                    <li>Sigue las instrucciones para nombrar tu bot</li>
+                    <li>BotFather te dará un <strong className="text-white">Token</strong> similar a:
+                      <code className="block bg-gray-800 px-2 py-1 rounded mt-1 text-yellow-400">
+                        1234567890:ABCdefGHIjklMNOpqrsTUVwxyz
+                      </code>
+                    </li>
+                    <li>Copia ese token y pégalo arriba en &quot;Bot Token&quot;</li>
+                  </ol>
+                </div>
+
+                {/* Step 2: Get Chat ID */}
+                <div>
+                  <h4 className="text-sm font-medium text-blue-400 mb-2">2. Obtener tu Chat ID</h4>
+                  <p className="text-xs text-gray-400 mb-2">Hay varias formas de obtener tu Chat ID:</p>
+                  
+                  <div className="space-y-3 ml-2">
+                    {/* Option A */}
+                    <div className="bg-gray-800/50 p-2 rounded">
+                      <p className="text-xs text-green-400 font-medium mb-1">Opción A: Usando @userinfobot (más fácil)</p>
+                      <ol className="text-xs text-gray-400 space-y-1 list-decimal list-inside">
+                        <li>Busca <code className="bg-gray-800 px-1 rounded">@userinfobot</code> en Telegram</li>
+                        <li>Inicia la conversación con <code className="bg-gray-800 px-1 rounded">/start</code></li>
+                        <li>El bot te responderá con tu ID</li>
+                      </ol>
+                    </div>
+
+                    {/* Option B */}
+                    <div className="bg-gray-800/50 p-2 rounded">
+                      <p className="text-xs text-green-400 font-medium mb-1">Opción B: Usando @RawDataBot</p>
+                      <ol className="text-xs text-gray-400 space-y-1 list-decimal list-inside">
+                        <li>Busca <code className="bg-gray-800 px-1 rounded">@RawDataBot</code> en Telegram</li>
+                        <li>Envía cualquier mensaje</li>
+                        <li>El bot te responderá con información detallada incluyendo tu Chat ID</li>
+                      </ol>
+                    </div>
+
+                    {/* Option C */}
+                    <div className="bg-gray-800/50 p-2 rounded">
+                      <p className="text-xs text-green-400 font-medium mb-1">Opción C: Usando la API (método técnico)</p>
+                      <ol className="text-xs text-gray-400 space-y-1 list-decimal list-inside">
+                        <li>Primero inicia una conversación con TU bot (el que creaste)</li>
+                        <li>Envía cualquier mensaje a tu bot</li>
+                        <li>Visita esta URL en tu navegador (reemplaza TOKEN con tu token):
+                          <code className="block bg-gray-800 px-2 py-1 rounded mt-1 text-yellow-400 break-all">
+                            https://api.telegram.org/bot&lt;TOKEN&gt;/getUpdates
+                          </code>
+                        </li>
+                        <li>Busca el campo <code className="bg-gray-800 px-1 rounded">&quot;chat&quot;:&#123;&quot;id&quot;:</code> en la respuesta</li>
+                      </ol>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Step 3: Important */}
+                <div className="bg-yellow-500/10 border border-yellow-500/30 rounded p-2">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle size={14} className="text-yellow-400 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-xs text-yellow-300 font-medium">Importante</p>
+                      <ul className="text-xs text-gray-400 mt-1 space-y-1 list-disc list-inside">
+                        <li>Debes iniciar una conversación con tu bot antes de que pueda enviarte mensajes</li>
+                        <li>El Token es secreto - no lo compartas públicamente</li>
+                        <li>Usa &quot;Probar conexión&quot; para verificar que todo funciona</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                {/* External links */}
+                <div className="flex items-center gap-4 pt-2 border-t border-gray-800">
+                  <a
+                    href="https://t.me/BotFather"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300"
+                  >
+                    <ExternalLink size={12} />
+                    @BotFather
+                  </a>
+                  <a
+                    href="https://t.me/userinfobot"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300"
+                  >
+                    <ExternalLink size={12} />
+                    @userinfobot
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* REQ-022: Automations Status Section */}
+      <div className="mt-6 pt-4 border-t border-gray-700">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="p-1.5 bg-purple-500/20 rounded-lg">
+            <Cog size={16} className="text-purple-400" />
+          </div>
+          <div>
+            <h4 className="text-sm font-medium text-white">Estado de Automatizaciones</h4>
+            <p className="text-xs text-gray-500">Cron container ejecuta cada minuto</p>
+          </div>
+        </div>
+        
+        <div className="bg-gray-800/50 rounded-lg p-3">
+          {automationsStatus ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-400">Última ejecución:</span>
+                <span className={`text-xs font-medium ${
+                  automationsStatus.lastExecution 
+                    ? 'text-green-400' 
+                    : 'text-yellow-400'
+                }`}>
+                  {automationsStatus.lastExecution 
+                    ? new Date(automationsStatus.lastExecution).toLocaleString('es-AR', { hour12: false })
+                    : 'Nunca (esperando primera ejecución)'
+                  }
+                </span>
+              </div>
+              {automationsStatus.lastExecution && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-400">Hace:</span>
+                    <span className="text-xs text-gray-300">
+                      {(() => {
+                        const diff = Date.now() - new Date(automationsStatus.lastExecution).getTime();
+                        const minutes = Math.floor(diff / 60000);
+                        const hours = Math.floor(minutes / 60);
+                        if (hours > 0) return `${hours}h ${minutes % 60}m`;
+                        if (minutes > 0) return `${minutes} minuto${minutes !== 1 ? 's' : ''}`;
+                        return 'menos de 1 minuto';
+                      })()}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-400">Total ejecuciones:</span>
+                    <span className="text-xs text-gray-300">
+                      {automationsStatus.executionCount.toLocaleString()}
+                    </span>
+                  </div>
+                </>
+              )}
+              {automationsStatus.lastExecution && (() => {
+                const diff = Date.now() - new Date(automationsStatus.lastExecution).getTime();
+                const minutes = Math.floor(diff / 60000);
+                if (minutes > 5) {
+                  return (
+                    <div className="flex items-start gap-2 mt-2 pt-2 border-t border-gray-700">
+                      <AlertCircle size={14} className="text-yellow-400 mt-0.5 flex-shrink-0" />
+                      <p className="text-xs text-yellow-300">
+                        Hace más de 5 minutos desde la última ejecución. 
+                        El contenedor de cron podría no estar corriendo.
+                      </p>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+            </div>
+          ) : (
+            <div className="text-xs text-gray-500">
+              Cargando estado de automatizaciones...
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Save Button - always visible */}
+      <div className="mt-6 pt-4 border-t border-gray-700">
+        <button
+          onClick={handleSaveAll}
+          disabled={saving || !hasChanges()}
+          className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-all ${
+            hasChanges()
+              ? 'bg-blue-600 hover:bg-blue-700 text-white'
+              : 'bg-gray-700 text-gray-400 cursor-not-allowed'
+          }`}
+        >
+          {saving ? (
+            <>
+              <Loader2 size={18} className="animate-spin" />
+              Guardando...
+            </>
+          ) : saveSuccess ? (
+            <>
+              <CheckCircle size={18} className="text-green-400" />
+              ¡Guardado!
+            </>
+          ) : (
+            <>
+              <Save size={18} />
+              {hasChanges() ? 'Guardar cambios' : 'Sin cambios pendientes'}
+            </>
+          )}
+        </button>
+        {hasChanges() && (
+          <p className="text-xs text-yellow-400 text-center mt-2">
+            Tienes cambios sin guardar
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
