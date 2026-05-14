@@ -121,6 +121,7 @@ export async function POST(request: NextRequest) {
         projects: 0,
         attachments: 0,
         activityLogs: 0,
+        taskComments: 0,
       };
 
       const dbDir = entries.some(e => e.entryName.startsWith('db/')) ? path.join(dataPath, 'db') : null;
@@ -131,6 +132,7 @@ export async function POST(request: NextRequest) {
           // wipe tables: timesheets must be cleared before notes in case they reference
           // taskId -> notes; otherwise note deletion will fail due to FK constraint.
           await prisma.$transaction([
+            prisma.taskComment.deleteMany(),
             prisma.taskActivityLog.deleteMany(),
             prisma.attachment.deleteMany(),
             prisma.timesheet.deleteMany(),
@@ -149,34 +151,152 @@ export async function POST(request: NextRequest) {
             }
           };
 
+          // Sanitize data functions - keep only fields that exist in current schema
+          const sanitizeClient = (obj: unknown): Record<string, unknown> => {
+            if (typeof obj !== 'object' || obj === null) return {};
+            const data = obj as Record<string, unknown>;
+            const result: Record<string, unknown> = {};
+            const validFields = ['id', 'name', 'description', 'color', 'active', 'parentClientId', 'createdAt', 'updatedAt'];
+            for (const field of validFields) {
+              if (field in data) {
+                result[field] = data[field];
+              }
+            }
+            // Convert date strings
+            if (typeof result.createdAt === 'string') result.createdAt = new Date(result.createdAt);
+            if (typeof result.updatedAt === 'string') result.updatedAt = new Date(result.updatedAt);
+            return result;
+          };
+
+          const sanitizeProject = (obj: unknown): Record<string, unknown> => {
+            if (typeof obj !== 'object' || obj === null) return {};
+            const data = obj as Record<string, unknown>;
+            const result: Record<string, unknown> = {};
+            const validFields = ['id', 'name', 'description', 'clientId', 'createdAt', 'updatedAt'];
+            for (const field of validFields) {
+              if (field in data) {
+                result[field] = data[field];
+              }
+            }
+            if (typeof result.createdAt === 'string') result.createdAt = new Date(result.createdAt);
+            if (typeof result.updatedAt === 'string') result.updatedAt = new Date(result.updatedAt);
+            return result;
+          };
+
+          const sanitizeNote = (obj: unknown): Record<string, unknown> => {
+            if (typeof obj !== 'object' || obj === null) return {};
+            const data = obj as Record<string, unknown>;
+            const result: Record<string, unknown> = {};
+            const validFields = ['id', 'type', 'title', 'content', 'projectId', 'clientId', 'archived', 'isFavorite', 'favoriteOrder', 'attachments', 'taskStatus', 'taskPriority', 'taskDueDate', 'connectionUrl', 'connectionUsername', 'connectionCredentials', 'createdAt', 'updatedAt', 'contentJson', 'taskTicketPhaseCode', 'taskShortDescription', 'taskBudgetHours'];
+            for (const field of validFields) {
+              if (field in data) {
+                result[field] = data[field];
+              }
+            }
+            if (typeof result.createdAt === 'string') result.createdAt = new Date(result.createdAt);
+            if (typeof result.updatedAt === 'string') result.updatedAt = new Date(result.updatedAt);
+            if (typeof result.taskDueDate === 'string') result.taskDueDate = new Date(result.taskDueDate);
+            return result;
+          };
+
+          const sanitizeTimesheet = (obj: unknown): Record<string, unknown> => {
+            if (typeof obj !== 'object' || obj === null) return {};
+            const data = obj as Record<string, unknown>;
+            const result: Record<string, unknown> = {};
+            const validFields = ['id', 'workDate', 'hoursWorked', 'description', 'taskId', 'projectId', 'clientId', 'rate', 'state', 'createdAt', 'updatedAt'];
+            for (const field of validFields) {
+              if (field in data) {
+                result[field] = data[field];
+              }
+            }
+            if (typeof result.createdAt === 'string') result.createdAt = new Date(result.createdAt);
+            if (typeof result.updatedAt === 'string') result.updatedAt = new Date(result.updatedAt);
+            if (typeof result.workDate === 'string') result.workDate = new Date(result.workDate);
+            return result;
+          };
+
+          const sanitizeAttachment = (obj: unknown): Record<string, unknown> => {
+            if (typeof obj !== 'object' || obj === null) return {};
+            const data = obj as Record<string, unknown>;
+            const result: Record<string, unknown> = {};
+            const validFields = ['id', 'noteId', 'filename', 'mimeType', 'size', 'data', 'createdAt', 'originalName'];
+            for (const field of validFields) {
+              if (field in data) {
+                result[field] = data[field];
+              }
+            }
+            if (typeof result.createdAt === 'string') result.createdAt = new Date(result.createdAt);
+            return result;
+          };
+
+          const sanitizeActivityLog = (obj: unknown): Record<string, unknown> => {
+            if (typeof obj !== 'object' || obj === null) return {};
+            const data = obj as Record<string, unknown>;
+            const result: Record<string, unknown> = {};
+            const validFields = ['id', 'taskId', 'eventType', 'description', 'createdAt'];
+            for (const field of validFields) {
+              if (field in data) {
+                result[field] = data[field];
+              }
+            }
+            if (typeof result.createdAt === 'string') result.createdAt = new Date(result.createdAt);
+            return result;
+          };
+
+          const sanitizeTaskComment = (obj: unknown): Record<string, unknown> => {
+            if (typeof obj !== 'object' || obj === null) return {};
+            const data = obj as Record<string, unknown>;
+            const result: Record<string, unknown> = {};
+            const validFields = ['id', 'taskId', 'author', 'content', 'createdAt'];
+            for (const field of validFields) {
+              if (field in data) {
+                result[field] = data[field];
+              }
+            }
+            if (typeof result.author !== 'string' || !result.author) result.author = 'Imported';
+            if (typeof result.createdAt === 'string') result.createdAt = new Date(result.createdAt);
+            return result;
+          };
+
           const clients = await readJson('clients.json');
           if (clients) {
-            await prisma.client.createMany({ data: clients });
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore: input derived from exported JSON and should match schema
+            await prisma.client.createMany({ data: clients.map(sanitizeClient) });
             counts.clients = clients.length;
           }
           const projects = await readJson('projects.json');
           if (projects) {
-            await prisma.project.createMany({ data: projects });
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore: input derived from exported JSON and should match schema
+            await prisma.project.createMany({ data: projects.map(sanitizeProject) });
             counts.projects = projects.length;
           }
           const notes = await readJson('notes.json');
           if (notes) {
-            await prisma.note.createMany({ data: notes });
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore: input derived from exported JSON and should match schema
+            await prisma.note.createMany({ data: notes.map(sanitizeNote) });
             counts.notes = notes.length;
           }
           const timesheets = await readJson('timesheets.json');
           if (timesheets) {
-            await prisma.timesheet.createMany({ data: timesheets });
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore: input derived from exported JSON and should match schema
+            await prisma.timesheet.createMany({ data: timesheets.map(sanitizeTimesheet) });
             counts.timesheets = timesheets.length;
           }
           const attachments = await readJson('attachments.json');
           if (attachments) {
             // decode base64
             interface AttachmentJson { [key: string]: unknown; data: string; }
-            const withBinary = (attachments as AttachmentJson[]).map(a => ({
-              ...a,
-              data: Buffer.from(a.data, 'base64'),
-            }));
+            const withBinary = (attachments as AttachmentJson[]).map(a => {
+              const sanitized = sanitizeAttachment(a);
+              return {
+                ...sanitized,
+                data: Buffer.from(a.data, 'base64'),
+              };
+            });
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore: input derived from exported JSON and should match schema
             await prisma.attachment.createMany({ data: withBinary });
@@ -184,8 +304,17 @@ export async function POST(request: NextRequest) {
           }
           const logs = await readJson('activityLogs.json');
           if (logs) {
-            await prisma.taskActivityLog.createMany({ data: logs });
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore: input derived from exported JSON and should match schema
+            await prisma.taskActivityLog.createMany({ data: logs.map(sanitizeActivityLog) });
             counts.activityLogs = logs.length;
+          }
+          const taskComments = await readJson('taskComments.json');
+          if (taskComments) {
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore: input derived from exported JSON and should match schema
+            await prisma.taskComment.createMany({ data: taskComments.map(sanitizeTaskComment) });
+            counts.taskComments = taskComments.length;
           }
         } catch (err) {
           console.error('DB import error:', err);

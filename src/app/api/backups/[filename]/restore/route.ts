@@ -72,32 +72,123 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       prisma.client.deleteMany(),
     ]);
     
+    const sanitizeClient = (obj: unknown): Record<string, unknown> => {
+      if (typeof obj !== 'object' || obj === null) return {};
+      const data = obj as Record<string, unknown>;
+      const result: Record<string, unknown> = {};
+      const validFields = ['id', 'name', 'description', 'color', 'active', 'parentClientId', 'createdAt', 'updatedAt'];
+      for (const field of validFields) {
+        if (field in data) result[field] = data[field];
+      }
+      if (typeof result.createdAt === 'string') result.createdAt = new Date(result.createdAt);
+      if (typeof result.updatedAt === 'string') result.updatedAt = new Date(result.updatedAt);
+      return result;
+    };
+
+    const sanitizeProject = (obj: unknown): Record<string, unknown> => {
+      if (typeof obj !== 'object' || obj === null) return {};
+      const data = obj as Record<string, unknown>;
+      const result: Record<string, unknown> = {};
+      const validFields = ['id', 'name', 'description', 'clientId', 'createdAt', 'updatedAt'];
+      for (const field of validFields) {
+        if (field in data) result[field] = data[field];
+      }
+      if (typeof result.createdAt === 'string') result.createdAt = new Date(result.createdAt);
+      if (typeof result.updatedAt === 'string') result.updatedAt = new Date(result.updatedAt);
+      return result;
+    };
+
+    const sanitizeNote = (obj: unknown): Record<string, unknown> => {
+      if (typeof obj !== 'object' || obj === null) return {};
+      const data = obj as Record<string, unknown>;
+      const result: Record<string, unknown> = {};
+      const validFields = ['id', 'type', 'title', 'content', 'projectId', 'clientId', 'archived', 'isFavorite', 'favoriteOrder', 'attachments', 'taskStatus', 'taskPriority', 'taskDueDate', 'connectionUrl', 'connectionUsername', 'connectionCredentials', 'createdAt', 'updatedAt', 'contentJson', 'taskTicketPhaseCode', 'taskShortDescription', 'taskBudgetHours'];
+      for (const field of validFields) {
+        if (field in data) result[field] = data[field];
+      }
+      if (typeof result.createdAt === 'string') result.createdAt = new Date(result.createdAt);
+      if (typeof result.updatedAt === 'string') result.updatedAt = new Date(result.updatedAt);
+      if (typeof result.taskDueDate === 'string') result.taskDueDate = new Date(result.taskDueDate);
+      return result;
+    };
+
+    const sanitizeTimesheet = (obj: unknown): Record<string, unknown> => {
+      if (typeof obj !== 'object' || obj === null) return {};
+      const data = obj as Record<string, unknown>;
+      const result: Record<string, unknown> = {};
+      const validFields = ['id', 'workDate', 'hoursWorked', 'description', 'taskId', 'projectId', 'clientId', 'rate', 'state', 'createdAt', 'updatedAt'];
+      for (const field of validFields) {
+        if (field in data) result[field] = data[field];
+      }
+      if (typeof result.createdAt === 'string') result.createdAt = new Date(result.createdAt);
+      if (typeof result.updatedAt === 'string') result.updatedAt = new Date(result.updatedAt);
+      if (typeof result.workDate === 'string') result.workDate = new Date(result.workDate);
+      return result;
+    };
+
+    const sanitizeAttachment = (obj: unknown): Record<string, unknown> => {
+      if (typeof obj !== 'object' || obj === null) return {};
+      const data = obj as Record<string, unknown>;
+      const result: Record<string, unknown> = {};
+      const validFields = ['id', 'noteId', 'filename', 'originalName', 'mimeType', 'size', 'data', 'createdAt'];
+      for (const field of validFields) {
+        if (field in data) result[field] = data[field];
+      }
+      if (typeof result.createdAt === 'string') result.createdAt = new Date(result.createdAt);
+      return result;
+    };
+
+    const sanitizeActivityLog = (obj: unknown): Record<string, unknown> => {
+      if (typeof obj !== 'object' || obj === null) return {};
+      const data = obj as Record<string, unknown>;
+      const result: Record<string, unknown> = {};
+      const validFields = ['id', 'taskId', 'eventType', 'description', 'createdAt'];
+      for (const field of validFields) {
+        if (field in data) result[field] = data[field];
+      }
+      if (typeof result.createdAt === 'string') result.createdAt = new Date(result.createdAt);
+      return result;
+    };
+
+    const sanitizeTaskComment = (obj: unknown): Record<string, unknown> => {
+      if (typeof obj !== 'object' || obj === null) return {};
+      const data = obj as Record<string, unknown>;
+      const result: Record<string, unknown> = {};
+      const validFields = ['id', 'taskId', 'author', 'content', 'createdAt'];
+      for (const field of validFields) {
+        if (field in data) result[field] = data[field];
+      }
+      if (typeof result.author !== 'string' || !result.author) result.author = 'Imported';
+      if (typeof result.createdAt === 'string') result.createdAt = new Date(result.createdAt);
+      return result;
+    };
+
     // Import in correct order (parents before children)
     const clients = await readJson('db/clients.json');
     if (clients && Array.isArray(clients)) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await prisma.client.createMany({ data: clients as any });
+      await prisma.client.createMany({ data: clients.map(sanitizeClient) as any });
       counts.clients = clients.length;
     }
     
     const projects = await readJson('db/projects.json');
     if (projects && Array.isArray(projects)) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await prisma.project.createMany({ data: projects as any });
+      await prisma.project.createMany({ data: projects.map(sanitizeProject) as any });
       counts.projects = projects.length;
     }
     
     const notes = await readJson('db/notes.json');
     if (notes && Array.isArray(notes)) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await prisma.note.createMany({ data: notes as any });
+      await prisma.note.createMany({ data: notes.map(sanitizeNote) as any });
       counts.notes = notes.length;
     }
     
     const timesheets = await readJson('db/timesheets.json');
     if (timesheets && Array.isArray(timesheets)) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await prisma.timesheet.createMany({ data: timesheets as any });
+      await prisma.timesheet.createMany({ data: timesheets.map(sanitizeTimesheet) as any });
       counts.timesheets = timesheets.length;
     }
     
@@ -105,10 +196,13 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     if (attachments && Array.isArray(attachments)) {
       // Decode base64 data back to Buffer
       interface AttachmentJson { [key: string]: unknown; data: string; }
-      const withBinary = (attachments as AttachmentJson[]).map(a => ({
-        ...a,
-        data: Buffer.from(a.data, 'base64'),
-      }));
+      const withBinary = (attachments as AttachmentJson[]).map(a => {
+        const sanitized = sanitizeAttachment(a);
+        return {
+          ...sanitized,
+          data: Buffer.from(a.data, 'base64'),
+        };
+      });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await prisma.attachment.createMany({ data: withBinary as any });
       counts.attachments = attachments.length;
@@ -117,14 +211,14 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     const activityLogs = await readJson('db/activityLogs.json');
     if (activityLogs && Array.isArray(activityLogs)) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await prisma.taskActivityLog.createMany({ data: activityLogs as any });
+      await prisma.taskActivityLog.createMany({ data: activityLogs.map(sanitizeActivityLog) as any });
       counts.activityLogs = activityLogs.length;
     }
     
     const taskComments = await readJson('db/taskComments.json');
     if (taskComments && Array.isArray(taskComments)) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await prisma.taskComment.createMany({ data: taskComments as any });
+      await prisma.taskComment.createMany({ data: taskComments.map(sanitizeTaskComment) as any });
       counts.taskComments = taskComments.length;
     }
     

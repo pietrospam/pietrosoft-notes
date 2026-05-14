@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "web": "bash scripts/redeploy.sh"
+    "web": "DEPLOY_HOST=root@192.168.100.113 bash scripts/redeploy.sh",
+    "test": "DEPLOY_HOST=root@192.168.100.114 bash scripts/redeploy.sh"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
