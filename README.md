@@ -21,6 +21,10 @@ docker compose up --build
 
 Open [http://localhost:3000](http://localhost:3000)
 
+### Infrastructure
+
+Consulta `docs/INFRASTRUCTURE.md` para la descripción completa de servidores, despliegue y arquitectura Docker.
+
 ### Production Deployment
 
 **Server:** `192.168.100.113`

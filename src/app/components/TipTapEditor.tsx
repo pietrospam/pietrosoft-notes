@@ -5,6 +5,7 @@ import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
+import HardBreak from '@tiptap/extension-hard-break';
 import TiptapUnderline from '@tiptap/extension-underline';
 import { TextStyle } from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
@@ -50,6 +51,30 @@ import {
 } from 'lucide-react';
 import { copyHtmlWithEmbeddedImages } from '@/lib/clipboard';
 import { Toast } from './Toast';
+
+const ToolbarButton = ({ 
+  onClick, 
+  isActive = false, 
+  children 
+}: { 
+  onClick: (event: ReactMouseEvent<HTMLButtonElement>) => void; 
+  isActive?: boolean; 
+  children: React.ReactNode 
+}) => (
+  <button
+    type="button"
+    onMouseDown={(event) => event.preventDefault()}
+    onClick={onClick}
+    className={`
+      p-1.5 rounded transition-colors
+      ${isActive 
+        ? 'bg-gray-700 text-white' 
+        : 'text-gray-400 hover:bg-gray-800 hover:text-white'}
+    `}
+  >
+    {children}
+  </button>
+);
 
 interface TipTapEditorProps {
   content: object | null;
@@ -156,6 +181,7 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
           levels: [1, 2, 3],
         },
       }),
+      HardBreak,
       TextStyle,
       Color,
       TiptapUnderline,
@@ -247,7 +273,7 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
         // Shift+Enter -> soft line break
         // Ctrl+Enter / Cmd+Enter -> no special action
         if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-          return true;
+          return false;
         }
 
         if (!effectiveCopyWithImagesOnCopy) return false;
@@ -478,30 +504,6 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
   if (!editor) {
     return <div className="animate-pulse bg-gray-800 h-48 rounded" />;
   }
-
-  const ToolbarButton = ({ 
-    onClick, 
-    isActive = false, 
-    children 
-  }: { 
-    onClick: (event: ReactMouseEvent<HTMLButtonElement>) => void; 
-    isActive?: boolean; 
-    children: React.ReactNode 
-  }) => (
-    <button
-      type="button"
-      onMouseDown={(event) => event.preventDefault()}
-      onClick={onClick}
-      className={`
-        p-1.5 rounded transition-colors
-        ${isActive 
-          ? 'bg-gray-700 text-white' 
-          : 'text-gray-400 hover:bg-gray-800 hover:text-white'}
-      `}
-    >
-      {children}
-    </button>
-  );
 
   return (
     <div

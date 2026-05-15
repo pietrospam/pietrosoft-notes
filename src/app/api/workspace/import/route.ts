@@ -121,17 +121,28 @@ export async function POST(request: NextRequest) {
         projects: 0,
         attachments: 0,
         activityLogs: 0,
+        comments: 0,
+        billingMethods: 0,
+        billingRuns: 0,
+        billingRunItems: 0,
+        taskTodos: 0,
       };
 
       const dbDir = entries.some(e => e.entryName.startsWith('db/')) ? path.join(dataPath, 'db') : null;
-      if (dbDir) {
+      const hasLegacyTaskComments = entries.some(e => e.entryName === 'taskComments.json');
+      if (dbDir || hasLegacyTaskComments) {
         let dbError: unknown = null;
         try {
           const { prisma } = await import('@/lib/db');
           // wipe tables: timesheets must be cleared before notes in case they reference
           // taskId -> notes; otherwise note deletion will fail due to FK constraint.
           await prisma.$transaction([
+            prisma.billingRunItem.deleteMany(),
+            prisma.billingRun.deleteMany(),
+            prisma.billingMethod.deleteMany(),
             prisma.taskActivityLog.deleteMany(),
+            prisma.taskComment.deleteMany(),
+            prisma.taskTodo.deleteMany(),
             prisma.attachment.deleteMany(),
             prisma.timesheet.deleteMany(),
             prisma.note.deleteMany(),
@@ -178,7 +189,7 @@ export async function POST(request: NextRequest) {
               data: Buffer.from(a.data, 'base64'),
             }));
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore: input derived from exported JSON and should match schema
+            // @ts-expect-error: input derived from exported JSON and should match schema
             await prisma.attachment.createMany({ data: withBinary });
             counts.attachments = attachments.length;
           }
@@ -186,6 +197,56 @@ export async function POST(request: NextRequest) {
           if (logs) {
             await prisma.taskActivityLog.createMany({ data: logs });
             counts.activityLogs = logs.length;
+          }
+          // Try db/comments.json (new format) then db/taskComments.json (current PROD format)
+          const comments = await readJson('comments.json') ?? await readJson('taskComments.json');
+          if (comments) {
+            console.log(`DB import: restoring ${comments.length} comments`);
+            await prisma.taskComment.createMany({ data: comments, skipDuplicates: true });
+            counts.comments = comments.length;
+          } else {
+            console.warn('DB import: no comments file found in backup');
+          }
+
+          const billingMethods = await readJson('billingMethods.json');
+          if (billingMethods) {
+            await prisma.billingMethod.createMany({ data: billingMethods });
+            counts.billingMethods = billingMethods.length;
+          }
+          const billingRuns = await readJson('billingRuns.json');
+          if (billingRuns) {
+            interface BillingRunJson { [key: string]: unknown; pdfData: string | null; }
+            const withBinaryPdf = (billingRuns as BillingRunJson[]).map(r => ({
+              ...r,
+              pdfData: r.pdfData ? Buffer.from(r.pdfData, 'base64') : null,
+            }));
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-expect-error: input derived from exported JSON and should match schema
+            await prisma.billingRun.createMany({ data: withBinaryPdf });
+            counts.billingRuns = billingRuns.length;
+          }
+          const billingRunItems = await readJson('billingRunItems.json');
+          if (billingRunItems) {
+            await prisma.billingRunItem.createMany({ data: billingRunItems });
+            counts.billingRunItems = billingRunItems.length;
+          }
+          const taskTodos = await readJson('taskTodos.json');
+          if (taskTodos) {
+            // Two-pass insert to handle self-referencing recurrenceParentId FK:
+            // 1st pass: insert all with recurrenceParentId = null
+            // 2nd pass: update the ones that had a parent
+            interface TaskTodoJson { id: string; recurrenceParentId: string | null; [key: string]: unknown; }
+            const normalized = (taskTodos as TaskTodoJson[]).map(t => ({ ...t, recurrenceParentId: null }));
+            // @ts-expect-error: input derived from exported JSON and should match schema
+            await prisma.taskTodo.createMany({ data: normalized });
+            const withParent = (taskTodos as TaskTodoJson[]).filter(t => t.recurrenceParentId);
+            for (const todo of withParent) {
+              await prisma.taskTodo.update({
+                where: { id: todo.id },
+                data: { recurrenceParentId: todo.recurrenceParentId },
+              });
+            }
+            counts.taskTodos = taskTodos.length;
           }
         } catch (err) {
           console.error('DB import error:', err);
