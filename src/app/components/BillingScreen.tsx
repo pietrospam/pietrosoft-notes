@@ -27,7 +27,7 @@ const MONTHS = [
 ];
 
 export function BillingScreen() {
-  const { clients, selectedClientId, setSelectedClientId, openBillingEditor, openConfig } = useApp();
+  const { clients, selectedClientId, openBillingEditor, openConfig } = useApp();
 
   // Data
   const [billingRuns, setBillingRuns] = useState<BillingRun[]>([]);
@@ -47,8 +47,6 @@ export function BillingScreen() {
   const [openBillingNoteAttachments, setOpenBillingNoteAttachments] = useState(false);
 
   // Also include standalone clients (no parent, no children but have timesheets)
-  const topLevelClients = clients.filter(c => !c.disabled && !c.parentClientId);
-
   const openNewBillingEditor = () => {
     openBillingEditor(null);
   };
@@ -157,16 +155,6 @@ export function BillingScreen() {
     await updateBillingRunFlags(run, undefined, undefined, !run.locked);
   };
 
-  const handleMarkValidated = async (run: BillingRun) => {
-    if (run.validated) return;
-    await updateBillingRunFlags(run, true, undefined);
-  };
-
-  const handleMarkSent = async (run: BillingRun) => {
-    if (run.sentToClient) return;
-    await updateBillingRunFlags(run, undefined, true);
-  };
-
   // Handle delete
   const handleDelete = async (id: string) => {
     if (!confirm('¿Eliminar este registro de facturación?')) return;
@@ -252,14 +240,6 @@ export function BillingScreen() {
         return <AlertCircle size={14} className="text-red-400" />;
       default:
         return <Clock size={14} className="text-yellow-400" />;
-    }
-  };
-
-  const statusLabel = (status: string) => {
-    switch (status) {
-      case 'success': return 'Exitoso';
-      case 'failed': return 'Fallido';
-      default: return 'Pendiente';
     }
   };
 

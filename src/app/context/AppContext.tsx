@@ -269,26 +269,6 @@ export function AppProvider({ children }: AppProviderProps) {
   // Ref to track pending changes for save
   const pendingChangesRef = useRef<Partial<Note>>({});
 
-  // Audio notification for new/updated notes via mail ingest
-  const playNotificationSound = useCallback(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ctx = new ((window as any).AudioContext || (window as any).webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.value = 880;
-      gain.gain.value = 0.1;
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.12);
-    } catch {
-      // ignore if audio not available
-    }
-  }, []);
-
   // Fetch clients from API
   const refreshClients = useCallback(async () => {
     try {
@@ -761,7 +741,6 @@ export function AppProvider({ children }: AppProviderProps) {
         if (!res.ok) return;
         const newNotes: Note[] = await res.json();
         if (newNotes.length > 0) {
-          playNotificationSound();
           refreshNotes();
         }
       } catch {
@@ -770,7 +749,7 @@ export function AppProvider({ children }: AppProviderProps) {
     }, 8000);
 
     return () => clearInterval(interval);
-  }, [refreshNotes, playNotificationSound]);
+  }, [refreshNotes]);
 
   // Helper to get client for a note
   const getClientForNote = useCallback((note: Note): Client | null => {
@@ -791,7 +770,7 @@ export function AppProvider({ children }: AppProviderProps) {
     
     
     return null;
-  }, [state.clients, state.projects, state.notes]);
+  }, [state.clients, state.projects]);
 
   // Helper to extract text from TipTap JSON content
   const extractTextFromJson = useCallback((json: object | null): string => {

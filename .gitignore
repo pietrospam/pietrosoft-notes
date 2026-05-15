@@ -1,6 +1,6 @@
 # Workspace data directory - git ignored
 /data/
-
+/backups/
 # Dependencies
 /node_modules
 /.pnp

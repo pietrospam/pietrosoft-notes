@@ -133,7 +133,7 @@ export function EditorPanel() {
       }, 100);
       return () => clearTimeout(timer);
     }
-  }, [isNewNote, selectedNoteId, selectedNote?.type]);
+  }, [isNewNote, selectedNoteId, selectedNote]);
 
   // Cleanup auto-save timer on unmount
   useEffect(() => {

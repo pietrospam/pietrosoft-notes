@@ -198,7 +198,7 @@ export function BaseEditorModal({
         titleInputRef.current?.select();
       }, 100);
     }
-  }, [noteId, onFieldsChange]);
+  }, [noteId, onFieldsChange, openAttachmentsOnOpen, setIsDirty]);
 
   // Sync attachments from global context (for when files are dropped via GlobalDropZone)
   useEffect(() => {
@@ -217,6 +217,15 @@ export function BaseEditorModal({
     }
   }, [filteredNotes, noteId, note.id, note.attachments]);
 
+  const handleClose = useCallback(() => {
+    // If dirty, show confirmation modal
+    if (isDirty && Object.keys(pendingChangesRef.current).length > 0) {
+      setShowUnsavedModal(true);
+      return;
+    }
+    onClose();
+  }, [isDirty, onClose]);
+
   // Handle Escape key (only in popup mode)
   useEffect(() => {
     if (inline) return; // Don't handle Escape in inline mode
@@ -227,7 +236,7 @@ export function BaseEditorModal({
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [inline]);
+  }, [inline, handleClose]);
 
   // Cleanup
   useEffect(() => {
@@ -354,15 +363,6 @@ export function BaseEditorModal({
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleClose = () => {
-    // If dirty, show confirmation modal
-    if (isDirty && Object.keys(pendingChangesRef.current).length > 0) {
-      setShowUnsavedModal(true);
-      return;
-    }
-    onClose();
   };
 
   const handleDiscardAndClose = () => {

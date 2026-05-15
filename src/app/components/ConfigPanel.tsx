@@ -562,7 +562,7 @@ function BackupManager() {
       console.log('Import response:', result);
 
       if (response.ok) {
-        const msg = `Imported: ${result.imported.notes} notes, ${result.imported.timesheets || 0} timesheets, ${result.imported.clients} clients, ${result.imported.projects} projects, ${result.imported.attachments} attachments, ${result.imported.activityLogs || 0} activity logs`;
+        const msg = `Imported: ${result.imported.notes} notes, ${result.imported.timesheets || 0} timesheets, ${result.imported.clients} clients, ${result.imported.projects} projects, ${result.imported.attachments} attachments, ${result.imported.activityLogs || 0} activity logs, ${result.imported.comments || 0} comments`;
         setImportResult({ success: true, message: msg });
         // show modal asking user to refresh UI
         setInfoMessage(msg + '\nPlease refresh to update the interface.');

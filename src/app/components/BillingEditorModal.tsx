@@ -52,7 +52,7 @@ export function BillingEditorModal({
   open,
   billingRun,
   clientId,
-  clientName,
+  // clientName, // kept in props interface but not used in body
   onClose,
   onSaved,
 }: BillingEditorModalProps) {

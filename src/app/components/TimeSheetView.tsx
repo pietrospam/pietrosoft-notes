@@ -224,9 +224,9 @@ export function TimeSheetView() {
   const selectedMonthStr = `${selectedYear}-${selectedMonth.toString().padStart(2, '0')}`;
   
   // REQ-010: Get client IDs that are sub-clients of a parent (NOT including the parent itself)
-  const getSubClientIds = (parentId: string): string[] => {
+  const getSubClientIds = useCallback((parentId: string): string[] => {
     return clients.filter(c => c.parentClientId === parentId).map(c => c.id);
-  };
+  }, [clients]);
   
   // Get days range for a specific week index
   const getWeekDaysRange = useCallback((weekIndex: number): { start: number; end: number } | null => {
@@ -285,7 +285,7 @@ export function TimeSheetView() {
       
       return true;
     });
-  }, [timesheets, selectedMonthStr, selectedDay, selectedWeek, getWeekDaysRange, filterDateFrom, filterDateTo, filterClient, filterProject, selectedTimesheetClientId, clients, filterState, filterPositiveHours]);
+  }, [timesheets, selectedMonthStr, selectedDay, selectedWeek, getWeekDaysRange, filterDateFrom, filterDateTo, filterClient, filterProject, selectedTimesheetClientId, filterState, filterPositiveHours, editingRows, getSubClientIds]);
 
   const totalHours = filteredTimesheets.reduce((sum, ts) => sum + ts.hoursWorked, 0);
   const totalImputadas = filteredTimesheets.filter(ts => ts.state === 'FINAL').reduce((sum, ts) => sum + ts.hoursWorked, 0);

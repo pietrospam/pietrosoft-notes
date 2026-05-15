@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { Plus, Pencil, Trash2, Check, X, Eye, EyeOff, ChevronDown } from 'lucide-react';
 import { DynamicIcon } from './IconPicker';
@@ -21,7 +21,7 @@ export function ProjectsManager() {
   const [formDescription, setFormDescription] = useState('');
 
   // Fetch data
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setIsLoading(true);
       const [projectsRes, clientsRes] = await Promise.all([
@@ -36,11 +36,11 @@ export function ProjectsManager() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [showDisabled]);
 
   useEffect(() => {
     fetchData();
-  }, [showDisabled]);
+  }, [fetchData]);
 
   const resetForm = () => {
     setFormName('');
@@ -60,10 +60,14 @@ export function ProjectsManager() {
     setIsCreating(false);
   };
 
-  const handleCreate = () => {
-    resetForm();
+  const handleCreate = useCallback(() => {
+    setFormName('');
+    setFormClientId('');
+    setFormCode('');
+    setFormDescription('');
+    setEditingProject(null);
     setIsCreating(true);
-  };
+  }, []);
 
   // respond to global configRequest
   const { configRequest, clearConfigRequest } = useApp();

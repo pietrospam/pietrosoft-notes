@@ -170,6 +170,7 @@ export function AttachmentViewer({ attachment, allAttachments, onClose, onNaviga
 
         {/* Image viewer */}
         {isImageType(attachment.mimeType) && (
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={url}
             alt={attachment.originalName}

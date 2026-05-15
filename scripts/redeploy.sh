@@ -65,4 +65,12 @@ echo "📊 Container status:"
 ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && docker compose ps"
 
 echo ""
-echo "✅ Redeploy complete! App available at http://$REMOTE_IP:3001"
+if [ "$REMOTE_HOST" = "$PROD_HOST" ]; then
+  echo "✅ Redeploy complete! App available at:"
+  echo "   http://$REMOTE_IP:3001"
+  echo "   http://bitacora.pietrosoft.ddnsfree.com"
+else
+  echo "✅ Redeploy complete! App available at:"
+  echo "   http://$REMOTE_IP:3001"
+  echo "   http://test.bitacora.pietrosoft.ddnsfree.com"
+fi

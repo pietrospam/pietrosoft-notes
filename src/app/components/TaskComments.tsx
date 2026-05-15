@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useImperativeHandle, forwardRef, useRef } from 'react';
+import { useState, useEffect, useImperativeHandle, forwardRef, useRef, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { TipTapEditor, TipTapEditorHandle } from './TipTapEditor';
 import { Pencil, Trash2, Copy, Loader2 } from 'lucide-react';
@@ -35,24 +35,26 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
   const [copyingCommentId, setCopyingCommentId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string } | null>(null);
   const commentEditorRefs = useRef<Record<string, TipTapEditorHandle | null>>({});
+  const onCommentsLoadedRef = useRef(onCommentsLoaded);
+  onCommentsLoadedRef.current = onCommentsLoaded;
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`/api/tasks/${taskId}/comments`);
       if (res.ok) {
         const data = await res.json();
         setComments(data);
-        onCommentsLoaded?.(data.length);
+        onCommentsLoadedRef.current?.(data.length);
       }
     } finally {
       setLoading(false);
     }
-  };
+  }, [taskId]);
 
   useEffect(() => {
     if (taskId) load();
-  }, [taskId]);
+  }, [taskId, load]);
 
   // Helper to check if content has changed
   const hasContentChanged = () => {
@@ -130,8 +132,13 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
         body: JSON.stringify({ author: currentUser, content: newContent }),
       });
       if (res.ok) {
+        const newComment = await res.json();
+        setComments(prev => {
+          const updated = [...prev, newComment];
+          onCommentsLoaded?.(updated.length);
+          return updated;
+        });
         setNewContent({ type: 'doc', content: [] }); // Reset to empty doc
-        load();
         onAttachmentsChange?.(); // Refresh attachments in case images were pasted
         return true;
       }
@@ -151,8 +158,9 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
         body: JSON.stringify({ id: editing.id, content: editing.content }),
       });
       if (res.ok) {
+        const updatedComment = await res.json();
+        setComments(prev => prev.map(c => c.id === updatedComment.id ? updatedComment : c));
         stopEditing();
-        load();
         onAttachmentsChange?.(); // Refresh attachments in case images were pasted
         return true;
       }
@@ -195,7 +203,11 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
 
   const handleDelete = async (id: string) => {
     await fetch(`/api/tasks/${taskId}/comments?id=${id}`, { method: 'DELETE' });
-    load();
+    setComments(prev => {
+      const updated = prev.filter(c => c.id !== id);
+      onCommentsLoaded?.(updated.length);
+      return updated;
+    });
     onSaveTask?.(); // Refresh notes list (updatedAt changed)
   };
 

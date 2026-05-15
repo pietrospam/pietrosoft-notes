@@ -330,7 +330,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
         }
       }, 100);
     }
-  }, [taskId]);
+  }, [taskId, setIsDirty]);
 
   // Sync attachments from global context (for when files are dropped via GlobalDropZone)
   useEffect(() => {
@@ -365,6 +365,15 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
     }
   };
 
+  const handleClose = useCallback(() => {
+    // If dirty, show confirmation modal
+    if (isDirty && Object.keys(pendingChangesRef.current).length > 0) {
+      setShowUnsavedModal(true);
+      return;
+    }
+    onClose();
+  }, [isDirty, onClose]);
+
   // Handle Escape key (only in popup mode)
   useEffect(() => {
     if (inline) return; // Don't handle Escape in inline mode
@@ -380,7 +389,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [inline, showCoderHintsModal]);
+  }, [inline, showCoderHintsModal, handleClose]);
 
   // Handle Escape for CoderHints modal in inline mode
   useEffect(() => {
@@ -605,15 +614,6 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleClose = () => {
-    // If dirty, show confirmation modal
-    if (isDirty && Object.keys(pendingChangesRef.current).length > 0) {
-      setShowUnsavedModal(true);
-      return;
-    }
-    onClose();
   };
 
   const handleDiscardAndClose = () => {
