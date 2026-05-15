@@ -1,0 +1,1114 @@
+[
+  {
+    "id": "0aceccad-5e4d-45a5-b413-d33717d6c9d8",
+    "taskId": "note-1773138939574-wgcvyfv",
+    "author": "usuario",
+    "content": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "Hola Buenas!  Eze, estos 4 temas los estimo en un total de ",
+              "type": "text"
+            },
+            {
+              "text": "8 hs .",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "hardBreak"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "En el CIU no sale impreso cuando la cosecha es mecánica:  1 hs",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "Egreso de Teu simple con cero bines: 2 hs",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "Crear TEU desde app:  2 hs",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "Guardar antes de anunciar: 3hs",
+              "type": "text"
+            }
+          ]
+        }
+      ]
+    },
+    "createdAt": "2026-05-04T15:31:20.581Z"
+  },
+  {
+    "id": "c0478d91-8ff3-4412-aec5-7072278b4bb4",
+    "taskId": "note-1773138939574-wgcvyfv",
+    "author": "usuario",
+    "content": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph"
+        }
+      ]
+    },
+    "createdAt": "2026-05-04T15:31:32.287Z"
+  },
+  {
+    "id": "de9aba28-813a-448e-a064-f2cc58455c16",
+    "taskId": "note-1776181510699-w0oa2h5",
+    "author": "🤖 Sistema",
+    "content": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "📎 Se ha agregado un archivo anexo: ",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "italic"
+                }
+              ]
+            },
+            {
+              "text": "Petición Qualita VisualizaciónDocumentosSERES en JDE.docx",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "italic"
+                },
+                {
+                  "type": "link",
+                  "attrs": {
+                    "rel": "noopener noreferrer nofollow",
+                    "href": "/api/attachments/6e029748-870c-4126-9f52-a0b9706573c7",
+                    "class": null,
+                    "target": "_blank"
+                  }
+                }
+              ]
+            },
+            {
+              "text": " (95.9 KB) - 05/05/2026, 09:38 a. m.",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "italic"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "createdAt": "2026-05-05T09:38:51.891Z"
+  },
+  {
+    "id": "0288826b-8ed1-4d2f-b517-be9a0815cd79",
+    "taskId": "note-1776181510699-w0oa2h5",
+    "author": "🤖 Sistema",
+    "content": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "📎 Se ha agregado un archivo anexo: ",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "italic"
+                }
+              ]
+            },
+            {
+              "text": "image.png",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "italic"
+                },
+                {
+                  "type": "link",
+                  "attrs": {
+                    "rel": "noopener noreferrer nofollow",
+                    "href": "/api/attachments/903c1fbb-0f57-4b1f-a38d-3eee39c3c937",
+                    "class": null,
+                    "target": "_blank"
+                  }
+                }
+              ]
+            },
+            {
+              "text": " (47.1 KB) - 05/05/2026, 09:51 a. m.",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "italic"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "createdAt": "2026-05-05T09:51:49.631Z"
+  },
+  {
+    "id": "f411ad81-0b56-4b5b-afd2-13b01bc60edb",
+    "taskId": "note-1776181510699-w0oa2h5",
+    "author": "🤖 Sistema",
+    "content": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "📎 Se ha agregado un archivo anexo: ",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "italic"
+                }
+              ]
+            },
+            {
+              "text": "image.png",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "italic"
+                },
+                {
+                  "type": "link",
+                  "attrs": {
+                    "rel": "noopener noreferrer nofollow",
+                    "href": "/api/attachments/0e411173-5bc5-46d6-86eb-748b30d5b692",
+                    "class": null,
+                    "target": "_blank"
+                  }
+                }
+              ]
+            },
+            {
+              "text": " (54.0 KB) - 05/05/2026, 09:53 a. m.",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "italic"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "createdAt": "2026-05-05T09:53:17.815Z"
+  },
+  {
+    "id": "22f10b6b-a3ed-41bb-9437-67b6de59c5b3",
+    "taskId": "note-1776181510699-w0oa2h5",
+    "author": "usuario",
+    "content": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "Les detallo a continuación los cambios a realizar en las aplicaciones ",
+              "type": "text"
+            },
+            {
+              "text": "P09200, P0411 y P550411A",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "text": ":",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "1. Agregado de Processing Option",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "hardBreak"
+            },
+            {
+              "text": "Se deberá agregar el siguiente ",
+              "type": "text"
+            },
+            {
+              "text": "Processing Option",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "text": ":",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "type": "bulletList",
+          "content": [
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "text": "“Dirección URL Planeta Imagen Factura SERES”",
+                      "type": "text",
+                      "marks": [
+                        {
+                          "type": "bold"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "2. Agregado de Processing Option adicional (si resultara necesario)",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "hardBreak"
+            },
+            {
+              "text": "En caso de que la solución lo requiera, se deberá agregar también el siguiente ",
+              "type": "text"
+            },
+            {
+              "text": "Processing Option",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "text": ":",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "type": "bulletList",
+          "content": [
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "text": "“Orquestación de Encriptación de URL”",
+                      "type": "text",
+                      "marks": [
+                        {
+                          "type": "bold"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "3. Modificación de la lógica del botón FILA → “Imagen”",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "hardBreak"
+            },
+            {
+              "text": "Se deberá realizar una modificación en el código asociado al botón de fila ",
+              "type": "text"
+            },
+            {
+              "text": "“Imagen”",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "text": " (o al botón que finalmente se defina).",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "En este caso, cuando el usuario seleccione una fila y presione el botón indicado, se deberá ejecutar la rutina correspondiente según la tabla en la que se encuentre el documento seleccionado.",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "Para la nueva funcionalidad asociada a ",
+              "type": "text"
+            },
+            {
+              "text": "SERES",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "text": ", la búsqueda deberá realizarse sobre las tablas ",
+              "type": "text"
+            },
+            {
+              "text": "FE1FERI / F55ADFR",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "text": ".",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "A partir de la información de la factura, se generará un string concatenando los campos correspondientes. Luego, mediante el ",
+              "type": "text"
+            },
+            {
+              "text": "orchestrator",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "text": ", se obtendrá el ",
+              "type": "text"
+            },
+            {
+              "text": "hash / encriptación",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "text": " necesario para construir la porción correspondiente de la URL. Finalmente, se ejecutará el ",
+              "type": "text"
+            },
+            {
+              "text": "GOTO URL",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "text": " para abrir la ventana con el documento.",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "Quedo atento a tus comentarios.",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "Saludos.",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "type": "image",
+          "attrs": {
+            "alt": null,
+            "src": "/api/attachments/0e411173-5bc5-46d6-86eb-748b30d5b692",
+            "title": null,
+            "width": null,
+            "height": null
+          }
+        },
+        {
+          "type": "paragraph"
+        }
+      ]
+    },
+    "createdAt": "2026-05-05T09:54:52.355Z"
+  },
+  {
+    "id": "c5c145cc-37b0-4316-8959-d91764d42176",
+    "taskId": "note-1776181510699-w0oa2h5",
+    "author": "usuario",
+    "content": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph"
+        }
+      ]
+    },
+    "createdAt": "2026-05-05T10:02:42.271Z"
+  },
+  {
+    "id": "8846ba38-46de-483e-a721-34efac59c61b",
+    "taskId": "note-1777027922688-gawvpo9",
+    "author": "🤖 Sistema",
+    "content": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "📎 Se ha agregado un archivo anexo: ",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "italic"
+                }
+              ]
+            },
+            {
+              "text": "image.png",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "italic"
+                },
+                {
+                  "type": "link",
+                  "attrs": {
+                    "rel": "noopener noreferrer nofollow",
+                    "href": "/api/attachments/43fc78f9-4687-4af7-9457-10e72001ff83",
+                    "class": null,
+                    "target": "_blank"
+                  }
+                }
+              ]
+            },
+            {
+              "text": " (8.1 KB) - 05/05/2026, 10:08 a. m.",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "italic"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "createdAt": "2026-05-05T10:08:40.681Z"
+  },
+  {
+    "id": "2165e0cc-cc4e-4dac-9dd2-f591c8a86f15",
+    "taskId": "note-1777027922688-gawvpo9",
+    "author": "🤖 Sistema",
+    "content": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "📎 Se ha agregado un archivo anexo: ",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "italic"
+                }
+              ]
+            },
+            {
+              "text": "image.png",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "italic"
+                },
+                {
+                  "type": "link",
+                  "attrs": {
+                    "rel": "noopener noreferrer nofollow",
+                    "href": "/api/attachments/03605b85-9be8-4399-a5bb-e1e2a4bac0c9",
+                    "class": null,
+                    "target": "_blank"
+                  }
+                }
+              ]
+            },
+            {
+              "text": " (41.6 KB) - 05/05/2026, 10:12 a. m.",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "italic"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "createdAt": "2026-05-05T10:12:13.226Z"
+  },
+  {
+    "id": "16e793ce-1046-464e-b8f7-a558ca461d78",
+    "taskId": "note-1777027922688-gawvpo9",
+    "author": "usuario",
+    "content": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "Se generó paquete a PD (PD260501U) del proyecto:  QUA_30288",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "type": "image",
+          "attrs": {
+            "alt": null,
+            "src": "/api/attachments/43fc78f9-4687-4af7-9457-10e72001ff83",
+            "title": null,
+            "width": null,
+            "height": null
+          }
+        },
+        {
+          "type": "image",
+          "attrs": {
+            "alt": null,
+            "src": "/api/attachments/03605b85-9be8-4399-a5bb-e1e2a4bac0c9",
+            "title": null,
+            "width": null,
+            "height": null
+          }
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "hardBreak"
+            }
+          ]
+        }
+      ]
+    },
+    "createdAt": "2026-05-05T10:12:15.398Z"
+  },
+  {
+    "id": "74a41e33-5c34-41a2-abfd-a13983941cce",
+    "taskId": "note-1776181510699-w0oa2h5",
+    "author": "usuario",
+    "content": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "Hola Esperanza, ",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "Quería consultarte 2 cosas en cuanto a la lógica:",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "type": "orderedList",
+          "attrs": {
+            "type": null,
+            "start": 1
+          },
+          "content": [
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "text": "No encuentro la tabla ",
+                      "type": "text"
+                    },
+                    {
+                      "text": "FE1FERI",
+                      "type": "text",
+                      "marks": [
+                        {
+                          "type": "bold"
+                        }
+                      ]
+                    },
+                    {
+                      "text": ", ¿Será que tiene otro nombre?",
+                      "type": "text"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "text": "La tabla ",
+                      "type": "text"
+                    },
+                    {
+                      "text": "F55ADFR, ",
+                      "type": "text",
+                      "marks": [
+                        {
+                          "type": "bold"
+                        }
+                      ]
+                    },
+                    {
+                      "text": "se utiliza actualmente por ejemplo en P0411 botón \"",
+                      "type": "text"
+                    },
+                    {
+                      "text": "Imagen",
+                      "type": "text",
+                      "marks": [
+                        {
+                          "type": "bold"
+                        }
+                      ]
+                    },
+                    {
+                      "text": "\". ¿Cómo podemos saber si el documento es de Seres o de otro origen?",
+                      "type": "text"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "Aguardo tus comentarios. ",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "Muchas gracias! ",
+              "type": "text"
+            }
+          ]
+        }
+      ]
+    },
+    "createdAt": "2026-05-05T11:02:53.321Z"
+  },
+  {
+    "id": "30aaae32-2abe-4ac1-b7b4-3a820033e0da",
+    "taskId": "note-1777982967332-7kkhwks",
+    "author": "🤖 Sistema",
+    "content": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "📎 Se ha agregado un archivo anexo: ",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "italic"
+                }
+              ]
+            },
+            {
+              "text": "PLAN_FORMACIÓN_ORCHESTRATOR_20hs.docx",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "italic"
+                },
+                {
+                  "type": "link",
+                  "attrs": {
+                    "rel": "noopener noreferrer nofollow",
+                    "href": "/api/attachments/1c463a1c-a07b-4e58-a4a0-3276a924182a",
+                    "class": null,
+                    "target": "_blank"
+                  }
+                }
+              ]
+            },
+            {
+              "text": " (32.7 KB) - 05/05/2026, 12:09 p. m.",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "italic"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "createdAt": "2026-05-05T12:09:38.010Z"
+  },
+  {
+    "id": "f681c958-a657-49a2-bac1-abca581fe9c8",
+    "taskId": "note-1777982967332-7kkhwks",
+    "author": "🤖 Sistema",
+    "content": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "📎 Se ha agregado un archivo anexo: ",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "italic"
+                }
+              ]
+            },
+            {
+              "text": "PLAN_FORMACIÓN_ORCHESTRATOR_40hs.docx",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "italic"
+                },
+                {
+                  "type": "link",
+                  "attrs": {
+                    "rel": "noopener noreferrer nofollow",
+                    "href": "/api/attachments/780c754e-51a7-4853-947c-246709c88436",
+                    "class": null,
+                    "target": "_blank"
+                  }
+                }
+              ]
+            },
+            {
+              "text": " (35.7 KB) - 05/05/2026, 12:09 p. m.",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "italic"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "createdAt": "2026-05-05T12:09:38.044Z"
+  },
+  {
+    "id": "b9781866-94f5-41fd-ab16-83525a1da1eb",
+    "taskId": "note-1773922387924-1y5lbh9",
+    "author": "🤖 Sistema",
+    "content": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "📎 Se ha agregado un archivo anexo: ",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "italic"
+                }
+              ]
+            },
+            {
+              "text": "image.png",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "italic"
+                },
+                {
+                  "type": "link",
+                  "attrs": {
+                    "rel": "noopener noreferrer nofollow",
+                    "href": "/api/attachments/ba5991a1-48c4-4768-aa7b-89616a08d9ea",
+                    "class": null,
+                    "target": "_blank"
+                  }
+                }
+              ]
+            },
+            {
+              "text": " (18.8 KB) - 05/05/2026, 05:09 p. m.",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "italic"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "createdAt": "2026-05-05T17:09:42.758Z"
+  },
+  {
+    "id": "8e0c80fa-7920-4b81-9985-debcedd37bd5",
+    "taskId": "note-1773922387924-1y5lbh9",
+    "author": "usuario",
+    "content": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "Se hace un cambio dentro del albarán RQ8742565 para regularizar la fecha PDDJ de F4211",
+              "type": "text"
+            },
+            {
+              "type": "hardBreak"
+            }
+          ]
+        },
+        {
+          "type": "image",
+          "attrs": {
+            "alt": null,
+            "src": "/api/attachments/ba5991a1-48c4-4768-aa7b-89616a08d9ea",
+            "title": null,
+            "width": null,
+            "height": null
+          }
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "hardBreak"
+            },
+            {
+              "type": "hardBreak"
+            },
+            {
+              "text": "// BEGIN MODIFICATION PPIETRO QUALITA 34485 05/05/2026",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "// Si tengo F4201.PDDJ y F4211.PDDJ <> F4201.PDDJ  la regularizo.",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "VA evt_jdF4201_PDDJ = \"\"",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "F4201.Fetch Single",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "If BC Date - Scheduled Pick (F4211)(PDDJ) is not equal to VA evt_jdF4201_PDDJ And VA evt_jdF4201_PDDJ is greater than <Null Date>",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "F4211.Update",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "End If",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "//",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "text": "// END MODIFICATION PPIETRO QUALITA 34485 05/05/2026",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "type": "paragraph"
+        }
+      ]
+    },
+    "createdAt": "2026-05-05T17:11:05.535Z"
+  }
+]
