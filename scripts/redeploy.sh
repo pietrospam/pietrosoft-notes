@@ -11,6 +11,7 @@ CONTROL_SOCKET="/tmp/pietrosoft-notes-${REMOTE_IP}.sock"
 SSH_OPTS=(-o ControlMaster=auto -o ControlPersist=10m -o ControlPath="$CONTROL_SOCKET")
 
 if [ "$REMOTE_HOST" = "$PROD_HOST" ]; then
+  APP_ENV=production
   echo "⚠️  ATENCION: estas por desplegar en PRODUCCION ($REMOTE_IP)."
   echo "⚠️  Este proceso puede wipear datos por los pasos de limpieza y recreacion de contenedores."
   read -r -p "Escribi OK para continuar con PRODUCCION: " PROD_CONFIRM_1
@@ -24,6 +25,8 @@ if [ "$REMOTE_HOST" = "$PROD_HOST" ]; then
     echo "❌ Deploy cancelado por el usuario."
     exit 1
   fi
+else
+  APP_ENV=test
 fi
 
 echo "🚀 Starting redeploy to $REMOTE_HOST..."
@@ -53,7 +56,7 @@ rsync -avz --delete -e "ssh ${SSH_OPTS[*]}" \
 
 # Step 2: Rebuild and restart containers on remote server
 echo "🔧 Building and restarting Docker containers..."
-ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && docker compose down && docker compose build --no-cache && docker compose up -d"
+ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && docker compose down && APP_ENV=$APP_ENV docker compose build --no-cache && APP_ENV=$APP_ENV docker compose up -d"
 
 # Step 3: Wait for containers and show logs
 echo "⏳ Waiting for app to start..."

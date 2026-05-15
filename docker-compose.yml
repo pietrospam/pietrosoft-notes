@@ -13,6 +13,7 @@ services:
       - WORKSPACE_PATH=/data
       - BACKUP_DIR=/backups
       - NODE_ENV=production
+      - APP_ENV=${APP_ENV:-production}
     depends_on:
       postgres:
         condition: service_healthy
