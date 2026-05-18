@@ -44,17 +44,32 @@ echo "🧹 Cleaning up Docker resources..."
 ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "docker system prune -af --volumes 2>/dev/null || true"
 ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "docker builder prune -af 2>/dev/null || true"
 
-# Step 1: Sync files to remote server (excluding node_modules, .next, etc)
+# Step 1: Clean up remote env files before syncing so excluded env files do not persist on the server.
+echo "📄 Removing stale env files from remote server..."
+ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && rm -f .env.local .env.test .env.production .env"
+
+# Step 1.2: Sync files to remote server (excluding node_modules, .next, etc)
 echo "📦 Syncing files to remote server..."
-rsync -avz --delete -e "ssh ${SSH_OPTS[*]}" \
+# Exclude .env files from deploy to avoid accidentally shipping local/test env settings.
+rsync -avz --delete --delete-excluded -e "ssh ${SSH_OPTS[*]}" \
   --exclude 'node_modules' \
   --exclude '.next' \
   --exclude '.git' \
   --exclude 'data/attachments/*' \
   --exclude '*.log' \
+  --exclude '.env*' \
   "$LOCAL_PATH/" "$REMOTE_HOST:$REMOTE_PATH/"
 
-# Step 2: Rebuild and restart containers on remote server
+# Step 1.3: Copy the target environment file explicitly
+if [ "$REMOTE_HOST" = "$PROD_HOST" ]; then
+  echo "📄 Copying production env file to remote server..."
+  scp -o ControlMaster=no -o ControlPath="$CONTROL_SOCKET" -o ControlPersist=10m .env.production "$REMOTE_HOST:$REMOTE_PATH/.env"
+else
+  echo "📄 Copying test env file to remote server..."
+  scp -o ControlMaster=no -o ControlPath="$CONTROL_SOCKET" -o ControlPersist=10m .env.test "$REMOTE_HOST:$REMOTE_PATH/.env"
+fi
+
+# Step 2: Rebuild and restart Docker containers on remote server
 echo "🔧 Building and restarting Docker containers..."
 ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && docker compose down && APP_ENV=$APP_ENV docker compose build --no-cache && APP_ENV=$APP_ENV docker compose up -d"
 

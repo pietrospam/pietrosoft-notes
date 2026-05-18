@@ -28,10 +28,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased${isTest ? ' test-theme' : ''}`}
       >
         {isTest && (
-          <div className="fixed top-0 left-0 right-0 z-50 bg-yellow-400 text-yellow-900 text-xs font-bold text-center py-1 tracking-widest uppercase shadow">
+          <div className="fixed top-0 left-0 right-0 z-50 bg-emerald-200 text-emerald-900 text-xs font-bold text-center py-1 tracking-widest uppercase shadow-lg shadow-emerald-500/20">
             ⚠ ENTORNO DE PRUEBAS — TEST
           </div>
         )}

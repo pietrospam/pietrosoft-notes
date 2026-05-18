@@ -5,12 +5,48 @@
 :root {
   --background: #030712;
   --foreground: #f9fafb;
+  --surface: #111827;
+  --muted: #9ca3af;
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
   font-family: system-ui, -apple-system, sans-serif;
+}
+
+body.test-theme {
+  --background: #ebf7e7;
+  --foreground: #0f3c1b;
+  --surface: #d8eed2;
+  --muted: #4f6f55;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+body.test-theme .ProseMirror {
+  color: var(--foreground);
+}
+
+body.test-theme .ProseMirror pre {
+  background: #d4e9d6;
+}
+
+body.test-theme .ProseMirror code {
+  background: #c8dfca;
+}
+
+body.test-theme .ProseMirror blockquote {
+  border-left-color: #34d399;
+  color: var(--muted);
+}
+
+body.test-theme *::-webkit-scrollbar-thumb {
+  background-color: #6ee7b7;
+}
+
+body.test-theme * {
+  scrollbar-color: #6ee7b7 transparent;
 }
 
 /* TipTap Editor Styles */
