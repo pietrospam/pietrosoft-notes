@@ -474,12 +474,15 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
 
   // Update content when it changes externally
   useEffect(() => {
-    if (editor && content) {
-      const currentContent = JSON.stringify(editor.getJSON());
-      const newContent = JSON.stringify(content);
-      if (currentContent !== newContent) {
-        editor.commands.setContent(content);
+    if (!editor || content == null) return;
+
+    const currentContent = JSON.stringify(editor.getJSON());
+    const newContent = JSON.stringify(content);
+    if (currentContent !== newContent) {
+      if (editor.isFocused) {
+        return;
       }
+      editor.commands.setContent(content);
     }
   }, [editor, content]);
 

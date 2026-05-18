@@ -431,7 +431,7 @@ export function EditorPanel() {
         <TipTapEditor
           ref={editorRef}
           key={selectedNote.id}
-          content={selectedNote.contentJson}
+          content={localNote?.contentJson ?? selectedNote.contentJson}
           onChange={handleContentChange}
           noteId={selectedNote.id}
           onPersistNote={isNewNote ? handlePersistForUpload : undefined}

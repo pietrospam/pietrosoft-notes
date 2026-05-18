@@ -6,7 +6,7 @@ import { useApp } from '../context/AppContext';
 import { Toast } from './Toast';
 import { TaskEditorModal } from './TaskEditorModal';
 import { CargarHorasModal } from './CargarHorasModal';
-import type { TaskNote, Project } from '@/lib/types';
+import { TimeSheetModal } from './TimeSheetModal';
 import { getContrastTextColor } from '@/lib/colorPalette';
 
 interface TimeSheetGridEntry {
@@ -88,22 +88,17 @@ export function TimeSheetView() {
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const taskPopupRef = useRef<HTMLDivElement>(null);
   
-  // Create TimeSheet modal state - search based
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  // Create TimeSheet modal state
+  const [showTimeSheetModal, setShowTimeSheetModal] = useState(false);
   const { globalTimeSheetRequest, clearTimeSheetRequest } = useApp();
 
   // if another part of app requests a quick timesheet, open modal
   useEffect(() => {
     if (globalTimeSheetRequest) {
-      setShowCreateModal(true);
+      setShowTimeSheetModal(true);
       clearTimeSheetRequest();
     }
   }, [globalTimeSheetRequest, clearTimeSheetRequest]);
-  const [taskSearchQuery, setTaskSearchQuery] = useState('');
-  const [taskSearchResults, setTaskSearchResults] = useState<Array<TaskNote & { clientName: string; projectName: string }>>([]);
-  const [selectedSearchIndex, setSelectedSearchIndex] = useState(0);
-  const [allTasksWithContext, setAllTasksWithContext] = useState<Array<TaskNote & { clientName: string; projectName: string }>>([]);
-  const searchInputRef = useRef<HTMLInputElement>(null);
   
   // Project detail popup
   const [projectPopup, setProjectPopup] = useState<ProjectDetail | null>(null);
@@ -659,139 +654,8 @@ export function TimeSheetView() {
     }
   };
 
-  // Open create TimeSheet modal - load all tasks with client/project info
-  const handleOpenCreateModal = async () => {
-    try {
-      // Fetch all tasks
-      const tasksRes = await fetch('/api/notes?type=task');
-      if (!tasksRes.ok) return;
-      const tasks: TaskNote[] = await tasksRes.json();
-      
-      // Fetch all projects and clients for context
-      const [projectsRes, clientsRes] = await Promise.all([
-        fetch('/api/projects'),
-        fetch('/api/clients')
-      ]);
-      const projects: Project[] = projectsRes.ok ? await projectsRes.json() : [];
-      const clients: Array<{ id: string; name: string }> = clientsRes.ok ? await clientsRes.json() : [];
-      
-      // Build lookup maps
-      const projectMap = new Map(projects.map(p => [p.id, p]));
-      const clientMap = new Map(clients.map(c => [c.id, c.name]));
-      
-      // Enrich tasks with client and project names
-      const tasksWithContext = tasks.map(task => {
-        const project = projectMap.get(task.projectId);
-        const clientName = project?.clientId ? clientMap.get(project.clientId) || 'Sin Cliente' : 'Sin Cliente';
-        const projectName = project?.name || 'Sin Proyecto';
-        return { ...task, clientName, projectName };
-      });
-      
-      setAllTasksWithContext(tasksWithContext);
-      setTaskSearchResults(tasksWithContext.slice(0, 10));
-      setTaskSearchQuery('');
-      setSelectedSearchIndex(0);
-      setShowCreateModal(true);
-      
-      // Focus search input after modal opens
-      setTimeout(() => searchInputRef.current?.focus(), 100);
-    } catch (err) {
-      console.error('Error loading tasks:', err);
-      setToast({ message: 'Error al cargar tareas', type: 'error' });
-    }
-  };
-
-  // Filter tasks based on search query
-  const handleTaskSearch = (query: string) => {
-    setTaskSearchQuery(query);
-    setSelectedSearchIndex(0);
-    
-    if (!query.trim()) {
-      setTaskSearchResults(allTasksWithContext.slice(0, 10));
-      return;
-    }
-    
-    const lowerQuery = query.toLowerCase();
-    const filtered = allTasksWithContext.filter(task => 
-      task.title.toLowerCase().includes(lowerQuery) ||
-      (task.ticketPhaseCode?.toLowerCase().includes(lowerQuery)) ||
-      task.clientName.toLowerCase().includes(lowerQuery) ||
-      task.projectName.toLowerCase().includes(lowerQuery)
-    );
-    setTaskSearchResults(filtered.slice(0, 10));
-  };
-
-  // Handle keyboard navigation in search results
-  const handleSearchKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setSelectedSearchIndex(prev => Math.min(prev + 1, taskSearchResults.length - 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setSelectedSearchIndex(prev => Math.max(prev - 1, 0));
-    } else if (e.key === 'Enter' && taskSearchResults.length > 0) {
-      e.preventDefault();
-      handleQuickCreateTimesheet(taskSearchResults[selectedSearchIndex]);
-    } else if (e.key === 'Escape') {
-      setShowCreateModal(false);
-    }
-  };
-
-  // Create timesheet directly and add to grid in edit mode
-  const handleQuickCreateTimesheet = async (task: TaskNote & { clientName: string; projectName: string }) => {
-    const now = new Date();
-    const today = [
-      now.getFullYear().toString().padStart(4, '0'),
-      (now.getMonth() + 1).toString().padStart(2, '0'),
-      now.getDate().toString().padStart(2, '0'),
-    ].join('-');
-    
-    try {
-      const res = await fetch('/api/timesheets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          taskId: task.id,
-          workDate: today,
-          hoursWorked: 0,
-          description: task.title,
-          state: 'DRAFT',
-          projectId: task.projectId || null,
-          clientId: null,
-        }),
-      });
-      
-      if (res.ok) {
-        const newTimesheet = await res.json();
-        setShowCreateModal(false);
-        await fetchTimesheets();
-        
-        // Put the new entry in edit mode and focus hours input
-        setTimeout(() => {
-          setEditingRows(prev => {
-            const newMap = new Map(prev);
-            newMap.set(newTimesheet.id, { hours: '', state: 'DRAFT', description: task.title, workDate: today });
-            return newMap;
-          });
-          // Focus hours input after state update
-          setTimeout(() => {
-            const input = hoursInputRefs.current.get(newTimesheet.id);
-            if (input) {
-              input.focus();
-              input.select();
-            }
-          }, 100);
-        }, 200);
-        
-        setToast({ message: 'TimeSheet creado - ingresa las horas', type: 'success' });
-      } else {
-        const errBody = await res.json().catch(() => null);
-        throw new Error(errBody?.error || 'Failed to create timesheet');
-      }
-    } catch (err) {
-      console.error('Error creating timesheet:', err);
-      setToast({ message: 'Error al crear TimeSheet', type: 'error' });
-    }
+  const handleOpenCreateModal = () => {
+    setShowTimeSheetModal(true);
   };
 
   // Format date for display in grid - fixed format "Lunes, 20/06"
@@ -1788,87 +1652,14 @@ export function TimeSheetView() {
         </div>
       )}
 
-      {/* Create TimeSheet Modal - Search Based */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-gray-900 rounded-lg border border-gray-700 p-6 w-full max-w-lg shadow-xl">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                <Plus size={20} className="text-orange-400" />
-                Crear TimeSheet
-              </h3>
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="p-1 rounded hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            
-            {/* Search Input */}
-            <div className="mb-4">
-              <input
-                ref={searchInputRef}
-                type="text"
-                value={taskSearchQuery}
-                onChange={(e) => handleTaskSearch(e.target.value)}
-                onKeyDown={handleSearchKeyDown}
-                placeholder="Buscar por cliente, proyecto, ticket o tarea..."
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                autoFocus
-              />
-              <p className="mt-1 text-xs text-gray-500">
-                Usa ↑↓ para navegar, Enter para seleccionar, Esc para cerrar
-              </p>
-            </div>
-            
-            {/* Task Cards Results */}
-            <div className="max-h-80 overflow-y-auto space-y-2">
-              {taskSearchResults.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-4 italic">
-                  No se encontraron tareas
-                </p>
-              ) : (
-                taskSearchResults.map((task, idx) => (
-                  <button
-                    key={task.id}
-                    onClick={() => handleQuickCreateTimesheet(task)}
-                    className={`w-full text-left p-3 rounded-lg border transition-colors ${
-                      idx === selectedSearchIndex
-                        ? 'bg-orange-600/20 border-orange-500'
-                        : 'bg-gray-800 border-gray-700 hover:bg-gray-750 hover:border-gray-600'
-                    }`}
-                  >
-                    {/* Primary: Ticket/Phase + Title */}
-                    <div className="flex items-start gap-2">
-                      {task.ticketPhaseCode && (
-                        <span className="shrink-0 px-2 py-0.5 bg-blue-600/30 text-blue-400 text-xs font-mono rounded">
-                          {task.ticketPhaseCode}
-                        </span>
-                      )}
-                      <span className="text-white font-medium text-sm line-clamp-2">
-                        {task.title}
-                      </span>
-                    </div>
-                    {/* Secondary: Client → Project */}
-                    <div className="mt-1.5 text-xs text-gray-500">
-                      {task.clientName} → {task.projectName}
-                    </div>
-                  </button>
-                ))
-              )}
-            </div>
-            
-            <div className="mt-4 pt-4 border-t border-gray-700 flex justify-end">
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white text-sm font-medium transition-colors"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
+      {showTimeSheetModal && (
+        <TimeSheetModal
+          onClose={() => setShowTimeSheetModal(false)}
+          onSaved={async () => {
+            setShowTimeSheetModal(false);
+            await fetchTimesheets();
+          }}
+        />
       )}
 
       {/* Toast */}
