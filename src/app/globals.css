@@ -16,10 +16,10 @@ body {
 }
 
 body.test-theme {
-  --background: #ebf7e7;
-  --foreground: #0f3c1b;
-  --surface: #d8eed2;
-  --muted: #4f6f55;
+  --background: #030712;
+  --foreground: #f9fafb;
+  --surface: #111827;
+  --muted: #9ca3af;
   background: var(--background);
   color: var(--foreground);
 }
