@@ -197,6 +197,7 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
         placeholder,
       }),
       Image.configure({
+        inline: true,
         HTMLAttributes: {
           class: 'max-w-full rounded-lg',
         },
@@ -224,14 +225,16 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
         for (const item of Array.from(items)) {
           if (item.type.startsWith('image/')) {
             const file = item.getAsFile();
-            if (file && noteIdRef.current) {
+            if (file) {
               event.preventDefault();
+              event.stopPropagation();
               uploadImage(file).then(url => {
                 if (url && view.state.selection) {
                   const { state, dispatch } = view;
                   const node = state.schema.nodes.image.create({ src: url });
-                  const tr = state.tr.replaceSelectionWith(node);
+                  const tr = state.tr.replaceSelectionWith(node).scrollIntoView();
                   dispatch(tr);
+                  view.focus();
                 }
               });
               return true;
