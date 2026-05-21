@@ -58,6 +58,8 @@ export function TimeSheetModal({ task, initialDate, onClose, onSaved }: TimeShee
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const initialLoadPerformed = useRef(false);
   const [error, setError] = useState('');
   const [selectedTask, setSelectedTask] = useState<TaskNote | null>(task || null);
   const [loadingTasks, setLoadingTasks] = useState(false);
@@ -92,6 +94,13 @@ export function TimeSheetModal({ task, initialDate, onClose, onSaved }: TimeShee
   useEffect(() => {
     setSelectedTask(task || null);
   }, [task]);
+
+  useEffect(() => {
+    if (selectedTask) {
+      initialLoadPerformed.current = false;
+      setInitialLoading(true);
+    }
+  }, [selectedTask]);
 
   const loadTasksForSearch = useCallback(async () => {
     setLoadingTasks(true);
@@ -165,12 +174,19 @@ export function TimeSheetModal({ task, initialDate, onClose, onSaved }: TimeShee
       console.error('Error checking existing timesheet:', err);
     } finally {
       setLoading(false);
+      if (!initialLoadPerformed.current) {
+        initialLoadPerformed.current = true;
+        setInitialLoading(false);
+      }
     }
   }, [selectedTask]);
 
   // Check on initial load and when date changes
   useEffect(() => {
     if (selectedTask) {
+      if (!initialLoadPerformed.current) {
+        setInitialLoading(true);
+      }
       checkExistingTimeSheet(date);
     }
   }, [date, checkExistingTimeSheet, selectedTask]);
@@ -306,7 +322,15 @@ export function TimeSheetModal({ task, initialDate, onClose, onSaved }: TimeShee
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-gray-900 rounded-lg border border-gray-700 w-full max-w-lg shadow-xl overflow-hidden">
+      <div className="relative bg-gray-900 rounded-lg border border-gray-700 w-full max-w-lg shadow-xl overflow-hidden">
+        {initialLoading && selectedTask && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60">
+            <div className="flex flex-col items-center gap-3 rounded-2xl bg-gray-900/95 border border-gray-700 px-6 py-5">
+              <div className="h-10 w-10 rounded-full border-4 border-white/20 border-t-white animate-spin" />
+              <span className="text-sm text-gray-200">Cargando registro de horas...</span>
+            </div>
+          </div>
+        )}
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
           <div className="flex items-center gap-2">

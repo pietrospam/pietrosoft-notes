@@ -228,7 +228,7 @@ export function NotesList() {
   }, [panelWidth]);
 
   useEffect(() => {
-    const handleResizeMove = (e: MouseEvent) => {
+    const handleResizeMove = (e: globalThis.MouseEvent) => {
       if (!isResizing.current) return;
       const delta = e.clientX - startX.current;
       const newWidth = Math.max(200, Math.min(600, startWidth.current + delta));
@@ -253,7 +253,7 @@ export function NotesList() {
 
   // Close dropdown when clicking outside
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
+    const handleClickOutside = (e: globalThis.MouseEvent) => {
       if (createDropdownRef.current && !createDropdownRef.current.contains(e.target as Node)) {
         setShowCreateDropdown(false);
       }
