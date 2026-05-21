@@ -1,11 +1,16 @@
 #!/bin/bash
-set -e
+set -euo pipefail
+
+fatal() {
+  echo "❌ $1" >&2
+  exit 1
+}
 
 # Configuration
 PROD_HOST="root@192.168.100.113"
 REMOTE_HOST="${DEPLOY_HOST:-$PROD_HOST}"
 REMOTE_PATH="/opt/pietrosoft-notes"
-LOCAL_PATH="$(dirname "$0")/.."
+LOCAL_PATH="$(cd "$(dirname "$0")/.." && pwd)"
 REMOTE_IP="${REMOTE_HOST#*@}"
 CONTROL_SOCKET="/tmp/pietrosoft-notes-${REMOTE_IP}.sock"
 SSH_OPTS=(-o ControlMaster=auto -o ControlPersist=10m -o ControlPath="$CONTROL_SOCKET")
@@ -39,39 +44,83 @@ cleanup_ssh() {
 }
 trap cleanup_ssh EXIT
 
-# Step 0: Clean up Docker resources on remote server
-echo "🧹 Cleaning up Docker resources..."
-ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "docker system prune -af --volumes 2>/dev/null || true"
-ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "docker builder prune -af 2>/dev/null || true"
+# Step 0: Determine environment file and sync code to remote server before backup
+if [ "$REMOTE_HOST" = "$PROD_HOST" ]; then
+  ENV_FILE=""
+  if [ -f "$LOCAL_PATH/.env.production" ]; then
+    ENV_FILE="$LOCAL_PATH/.env.production"
+  elif [ -f "$LOCAL_PATH/.env" ]; then
+    ENV_FILE="$LOCAL_PATH/.env"
+  else
+    fatal "No environment file found in $LOCAL_PATH. Expected .env.production or .env. Deploy must be run from the repo root with one of these files present."
+  fi
+
+  echo "📝 Using env file: $ENV_FILE"
+fi
 
 # Step 1: Clean up remote env files before syncing so excluded env files do not persist on the server.
 echo "📄 Removing stale env files from remote server..."
 ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && rm -f .env.local .env.test .env.production .env"
 
-# Step 1.2: Sync files to remote server (excluding node_modules, .next, etc)
+# Step 2: Sync files to remote server (excluding node_modules, .next, etc)
 echo "📦 Syncing files to remote server..."
 # Exclude .env files from deploy to avoid accidentally shipping local/test env settings.
 rsync -avz --delete --delete-excluded -e "ssh ${SSH_OPTS[*]}" \
   --exclude 'node_modules' \
   --exclude '.next' \
   --exclude '.git' \
+  --exclude 'backups' \
   --exclude 'data/attachments/*' \
   --exclude '*.log' \
   --exclude '.env*' \
   "$LOCAL_PATH/" "$REMOTE_HOST:$REMOTE_PATH/"
 
-# Step 1.3: Copy the target environment file explicitly
+# Step 3: Copy the target environment file explicitly
 if [ "$REMOTE_HOST" = "$PROD_HOST" ]; then
   echo "📄 Copying production env file to remote server..."
-  scp -o ControlMaster=no -o ControlPath="$CONTROL_SOCKET" -o ControlPersist=10m .env.production "$REMOTE_HOST:$REMOTE_PATH/.env"
+  scp -o ControlMaster=no -o ControlPath="$CONTROL_SOCKET" -o ControlPersist=10m "$ENV_FILE" "$REMOTE_HOST:$REMOTE_PATH/.env"
 else
   echo "📄 Copying test env file to remote server..."
-  scp -o ControlMaster=no -o ControlPath="$CONTROL_SOCKET" -o ControlPersist=10m .env.test "$REMOTE_HOST:$REMOTE_PATH/.env"
+  scp -o ControlMaster=no -o ControlPath="$CONTROL_SOCKET" -o ControlPersist=10m "$LOCAL_PATH/.env.test" "$REMOTE_HOST:$REMOTE_PATH/.env"
 fi
 
-# Step 2: Rebuild and restart Docker containers on remote server
-echo "🔧 Building and restarting Docker containers..."
-ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && docker compose down && APP_ENV=$APP_ENV docker compose build --no-cache && APP_ENV=$APP_ENV docker compose up -d"
+# Step 4: Build app image on remote server before backup generation
+if [ "$REMOTE_HOST" = "$PROD_HOST" ]; then
+  echo "🔧 Building remote app image for backup generation..."
+  ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && APP_ENV=$APP_ENV docker compose build app"
+
+  echo "� Ensuring backups directory is writable by the app user..."
+  ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && mkdir -p backups && chown -R 1000:1000 backups"
+
+  echo "�📦 Creating a remote backup before deploy..."
+  backup_response=$(ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && docker compose run --rm app sh -c 'cat > /tmp/create-backup.js && NODE_PATH=/app/node_modules node /tmp/create-backup.js'" < "$LOCAL_PATH/scripts/create-backup.js")
+
+  echo "$backup_response" | grep -q '"success":true' || {
+    echo "❌ Remote backup failed. Aborting deploy."
+    echo "Response: $backup_response"
+    exit 1
+  }
+
+  backup_filename=$(printf '%s' "$backup_response" | grep -o '"filename":[[:space:]]*"[^"]*"' | sed -E 's/.*"filename":[[:space:]]*"([^"]*)".*/\1/')
+  if [ -z "$backup_filename" ]; then
+    fatal "Failed to parse backup filename. Aborting deploy. Response: $backup_response"
+  fi
+
+  echo "📝 Remote backup filename: $backup_filename"
+  mkdir -p "$LOCAL_PATH/backups"
+  echo "⬇️ Downloading backup $backup_filename to local backups/..."
+  scp -o ControlMaster=no -o ControlPath="$CONTROL_SOCKET" -o ControlPersist=10m "$REMOTE_HOST:$REMOTE_PATH/backups/$backup_filename" "$LOCAL_PATH/backups/" || fatal "Failed to download backup file. Aborting deploy."
+  echo "✅ Backup downloaded to $LOCAL_PATH/backups/$backup_filename"
+fi
+
+# Step 5: Clean up Docker resources on remote server
+echo "🧹 Cleaning up Docker resources..."
+ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "docker system prune -af --volumes 2>/dev/null || true"
+ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "docker builder prune -af 2>/dev/null || true"
+
+# Step 6: Restart Docker containers on remote server
+echo "🔧 Restarting Docker containers..."
+ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && docker compose down && APP_ENV=$APP_ENV docker compose up -d"
 
 # Step 3: Wait for containers and show logs
 echo "⏳ Waiting for app to start..."

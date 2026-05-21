@@ -6,6 +6,7 @@ import AdmZip from 'adm-zip';
 export const dynamic = 'force-dynamic';
 
 const DATA_DIR = process.env.DATA_DIR || './data';
+const BACKUP_DIR = process.env.BACKUP_DIR || './backups';
 
 export async function POST(request: NextRequest) {
   try {
@@ -95,6 +96,33 @@ export async function POST(request: NextRequest) {
       await fs.mkdir(dataPath, { recursive: true });
       
       for (const entry of entries) {
+        if (entry.entryName.startsWith('config/')) {
+          const fileName = entry.entryName.replace(/^config\//, '');
+          if (entry.isDirectory) {
+            continue;
+          }
+
+          const fileData = entry.getData();
+          if (fileName === 'telegram-config.json') {
+            const telegramConfigPath = path.join(process.env.WORKSPACE_PATH || dataPath, 'telegram-config.json');
+            await fs.mkdir(path.dirname(telegramConfigPath), { recursive: true });
+            await fs.writeFile(telegramConfigPath, fileData);
+            continue;
+          }
+
+          if (fileName === 'backup-settings.json') {
+            const resolvedBackupDir = path.resolve(BACKUP_DIR);
+            await fs.mkdir(resolvedBackupDir, { recursive: true });
+            await fs.writeFile(path.join(resolvedBackupDir, 'backup-settings.json'), fileData);
+            continue;
+          }
+
+          const configPath = path.join(process.env.WORKSPACE_PATH || dataPath, fileName);
+          await fs.mkdir(path.dirname(configPath), { recursive: true });
+          await fs.writeFile(configPath, fileData);
+          continue;
+        }
+
         const entryPath = path.join(dataPath, entry.entryName);
         
         if (entry.isDirectory) {

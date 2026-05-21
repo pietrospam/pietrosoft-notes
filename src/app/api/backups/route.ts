@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
+import { promises as fs, createWriteStream } from 'fs';
 import path from 'path';
 import JSZip from 'jszip';
 import archiver from 'archiver';
@@ -337,10 +337,8 @@ export async function POST(request: NextRequest) {
     archive.append(JSON.stringify(billingRunItems, null, 2), { name: 'db/billingRunItems.json' });
     
     // Add data directory if exists
-    const dataDir = process.env.DATA_DIR || './data';
-    const telegramConfigPath = process.env.WORKSPACE_PATH
-      ? path.join(process.env.WORKSPACE_PATH, 'telegram-config.json')
-      : path.join(dataDir, 'telegram-config.json');
+    const dataDir = process.env.WORKSPACE_PATH || process.env.DATA_DIR || './data';
+    const telegramConfigPath = path.join(dataDir, 'telegram-config.json');
     try {
       await fs.access(dataDir);
       
@@ -381,20 +379,29 @@ export async function POST(request: NextRequest) {
     } catch {
       // Settings file doesn't exist - that's fine
     }
-    
+
+    const output = createWriteStream(filePath);
+    archive.pipe(output);
+
+    const finishPromise = new Promise<void>((resolve, reject) => {
+      output.on('close', resolve);
+      output.on('error', reject);
+      archive.on('error', reject);
+    });
+
     await archive.finalize();
-    const zipBuffer = await finishPromise;
-    
-    // Write to file
-    await fs.writeFile(filePath, zipBuffer);
-    
+    await finishPromise;
+
+    const fileStat = await fs.stat(filePath);
+    const sizeBytes = fileStat.size;
+
     // Apply retention policy
     await applyRetentionPolicy();
 
     // Send Telegram notification (async, don't block response)
     notifyBackupSuccess({
       filename,
-      sizeBytes: zipBuffer.length,
+      sizeBytes,
       type: 'manual',
       filePath,
     }).catch(err => console.error('Telegram notification failed:', err));
@@ -402,7 +409,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       filename,
-      sizeBytes: zipBuffer.length,
+      sizeBytes,
       stats: manifest.stats,
     });
   } catch (error) {

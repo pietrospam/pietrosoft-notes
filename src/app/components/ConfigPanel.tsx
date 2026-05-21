@@ -102,8 +102,11 @@ function ServerBackupsSection() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ description: 'Manual backup' }),
       });
-      if (!res.ok) throw new Error('Failed to create backup');
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        const errorMessage = data?.error || 'Failed to create backup';
+        throw new Error(errorMessage);
+      }
       setSuccessMessage(`Backup creado: ${data.filename}`);
       fetchBackups();
     } catch (err) {
@@ -171,8 +174,31 @@ function ServerBackupsSection() {
     }
   };
 
-  const handleDownload = (filename: string) => {
-    window.open(`/api/backups/${encodeURIComponent(filename)}`, '_blank');
+  const handleDownload = async (filename: string) => {
+    setError(null);
+    try {
+      const res = await fetch(`/api/backups/${encodeURIComponent(filename)}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || 'Failed to download backup');
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const disposition = res.headers.get('Content-Disposition');
+      const match = disposition?.match(/filename="(.+)"/);
+      const downloadName = match?.[1] || filename;
+      a.href = url;
+      a.download = downloadName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo descargar el backup');
+      console.error('Download error:', err);
+    }
   };
 
   const handleSaveSettings = async () => {

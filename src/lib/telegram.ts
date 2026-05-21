@@ -6,9 +6,8 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 
-const CONFIG_PATH = process.env.WORKSPACE_PATH 
-  ? path.join(process.env.WORKSPACE_PATH, 'telegram-config.json')
-  : './data/telegram-config.json';
+const DATA_ROOT = process.env.WORKSPACE_PATH || process.env.DATA_DIR || './data';
+const CONFIG_PATH = path.join(DATA_ROOT, 'telegram-config.json');
 
 export interface TelegramConfig {
   enabled: boolean;

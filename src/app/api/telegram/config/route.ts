@@ -24,8 +24,9 @@ export async function GET() {
       sendFile: config.sendFile,
     });
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     console.error('Error getting Telegram config:', error);
-    return NextResponse.json({ error: 'Failed to get config' }, { status: 500 });
+    return NextResponse.json({ error: `Failed to get config: ${message}` }, { status: 500 });
   }
 }
 
@@ -33,6 +34,9 @@ export async function GET() {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+    }
     
     // Only update provided fields
     const updates: Record<string, unknown> = {};
@@ -59,7 +63,8 @@ export async function PUT(request: NextRequest) {
       sendFile: newConfig.sendFile,
     });
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     console.error('Error updating Telegram config:', error);
-    return NextResponse.json({ error: 'Failed to update config' }, { status: 500 });
+    return NextResponse.json({ error: `Failed to update config: ${message}` }, { status: 500 });
   }
 }

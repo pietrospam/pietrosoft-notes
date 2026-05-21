@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
+import { promises as fs, createWriteStream } from 'fs';
 import path from 'path';
 import { notifyBackupSuccess, notifyBackupError } from '@/lib/telegram';
 
@@ -228,7 +228,8 @@ export async function POST() {
     archive.append(JSON.stringify(attachmentsWithData, null, 2), { name: 'db/attachments.json' });
 
     // Add data directory if exists (telegram config, etc)
-    const dataDir = process.env.DATA_DIR || './data';
+    const dataDir = process.env.WORKSPACE_PATH || process.env.DATA_DIR || './data';
+    const telegramConfigPath = path.join(dataDir, 'telegram-config.json');
     try {
       const addDirectory = async (dirPath: string, archivePath: string): Promise<void> => {
         const entries = await fs.readdir(dirPath, { withFileTypes: true });
@@ -251,6 +252,14 @@ export async function POST() {
       // Data directory doesn't exist - that's fine
     }
 
+    // Add Telegram configuration if exists
+    try {
+      const telegramConfigContent = await fs.readFile(telegramConfigPath);
+      archive.append(telegramConfigContent, { name: 'config/telegram-config.json' });
+    } catch {
+      // Telegram config file doesn't exist - that's fine
+    }
+
     // Add backup settings
     const backupSettingsPath = path.join(BACKUP_DIR, 'backup-settings.json');
     try {
@@ -260,11 +269,20 @@ export async function POST() {
       // Settings file doesn't exist - that's fine
     }
 
-    await archive.finalize();
-    const zipBuffer = await finishPromise;
+    const output = createWriteStream(filePath);
+    archive.pipe(output);
 
-    // Write to file
-    await fs.writeFile(filePath, zipBuffer);
+    const finishPromise = new Promise<void>((resolve, reject) => {
+      output.on('close', resolve);
+      output.on('error', reject);
+      archive.on('error', reject);
+    });
+
+    await archive.finalize();
+    await finishPromise;
+
+    const fileStat = await fs.stat(filePath);
+    const sizeBytes = fileStat.size;
 
     // Update last auto backup time
     settings.lastAutoBackup = new Date().toISOString();
@@ -276,7 +294,7 @@ export async function POST() {
     // Send Telegram notification (async, don't block response)
     notifyBackupSuccess({
       filename,
-      sizeBytes: zipBuffer.length,
+      sizeBytes,
       type: 'auto',
       filePath,
     }).catch(err => console.error('Telegram notification failed:', err));
@@ -284,7 +302,7 @@ export async function POST() {
     return NextResponse.json({
       success: true,
       filename,
-      sizeBytes: zipBuffer.length,
+      sizeBytes,
       stats: manifest.stats,
       type: 'auto',
     });
