@@ -36,7 +36,7 @@ FROM base AS runner
 WORKDIR /app
 
 # Install OpenSSL 3.x for Prisma (matches linux-musl-openssl-3.0.x binary target)
-RUN apk add --no-cache libc6-compat openssl
+RUN apk add --no-cache libc6-compat openssl su-exec
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -69,7 +69,7 @@ RUN mkdir -p /data/attachments /backups && chown -R node:node /data /backups
 # Create npm cache directory for prisma migrations (node home is /home/node)
 RUN mkdir -p /home/node/.npm && chown -R node:node /home/node
 
-USER node
+USER root
 
 EXPOSE 3000
 

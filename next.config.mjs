@@ -26,6 +26,11 @@ const fixServerRuntimePlugin = {
 
 const nextConfig = {
   output: useStandaloneOutput ? 'standalone' : undefined,
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '500mb',
+    },
+  },
   webpack(config, { isServer }) {
     if (isServer) {
       config.plugins.push(fixServerRuntimePlugin);

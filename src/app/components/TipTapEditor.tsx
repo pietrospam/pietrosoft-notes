@@ -48,6 +48,7 @@ import {
   Redo,
   ImagePlus,
   Eraser,
+  Paperclip,
 } from 'lucide-react';
 import { copyHtmlWithEmbeddedImages } from '@/lib/clipboard';
 import { Toast } from './Toast';
@@ -101,6 +102,7 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
   const editorWrapperRef = useRef<HTMLDivElement>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showFloatingToolbar, setShowFloatingToolbar] = useState(false);
@@ -157,7 +159,15 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
       });
 
       if (!response.ok) {
-        throw new Error('Upload failed');
+        let errorMessage = 'Upload failed';
+        try {
+          const errorJson = await response.json();
+          errorMessage = errorJson.error || errorMessage;
+        } catch {
+          // response is not JSON (e.g. nginx error page), use status code
+          errorMessage = `Upload failed (${response.status})`;
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -247,27 +257,27 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
         const files = event.dataTransfer?.files;
         if (!files?.length) return false;
 
-        const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
-        if (imageFiles.length === 0) return false;
-
         event.preventDefault();
-        
-        imageFiles.forEach(file => {
-          if (noteIdRef.current) {
-            uploadImage(file).then(url => {
-              if (url) {
-                const { state, dispatch } = view;
+
+        Array.from(files).forEach(file => {
+          uploadImage(file).then(url => {
+            if (url) {
+              const { state, dispatch } = view;
+              const pos = view.posAtCoords({ left: event.clientX, top: event.clientY });
+              const insertPos = pos ? pos.pos : state.selection.from;
+              if (file.type.startsWith('image/')) {
                 const node = state.schema.nodes.image.create({ src: url });
-                const pos = view.posAtCoords({ left: event.clientX, top: event.clientY });
-                if (pos) {
-                  const tr = state.tr.insert(pos.pos, node);
-                  dispatch(tr);
-                }
+                dispatch(state.tr.insert(insertPos, node));
+              } else {
+                const linkNode = state.schema.text(file.name, [
+                  state.schema.marks.link.create({ href: url }),
+                ]);
+                dispatch(state.tr.insert(insertPos, linkNode));
               }
-            });
-          }
+            }
+          });
         });
-        
+
         return true;
       },
       handleKeyDown: (view, event) => {
@@ -639,6 +649,9 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
                 <ToolbarButton onClick={() => fileInputRef.current?.click()}>
                   <ImagePlus size={16} />
                 </ToolbarButton>
+                <ToolbarButton onClick={() => docInputRef.current?.click()}>
+                  <Paperclip size={16} />
+                </ToolbarButton>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -652,7 +665,28 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
                         editor.chain().focus().setImage({ src: url }).run();
                       }
                     }
-                    // Reset input so same file can be selected again
+                    e.target.value = '';
+                  }}
+                />
+                <input
+                  ref={docInputRef}
+                  type="file"
+                  accept="*/*"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const url = await uploadImage(file);
+                      if (url) {
+                        if (file.type.startsWith('image/')) {
+                          editor.chain().focus().setImage({ src: url }).run();
+                        } else {
+                          editor.chain().focus().insertContent(
+                            `<a href="${url}">${file.name}</a>`
+                          ).run();
+                        }
+                      }
+                    }
                     e.target.value = '';
                   }}
                 />
@@ -747,9 +781,14 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
               <TableIcon size={16} />
             </ToolbarButton>
             {noteId && (
-              <ToolbarButton onClick={() => fileInputRef.current?.click()}>
-                <ImagePlus size={16} />
-              </ToolbarButton>
+              <>
+                <ToolbarButton onClick={() => fileInputRef.current?.click()}>
+                  <ImagePlus size={16} />
+                </ToolbarButton>
+                <ToolbarButton onClick={() => docInputRef.current?.click()}>
+                  <Paperclip size={16} />
+                </ToolbarButton>
+              </>
             )}
             <ToolbarButton onClick={() => editor.chain().focus().undo().run()}>
               <Undo size={16} />

@@ -18,8 +18,14 @@ export async function POST(request: Request, { params }: { params: { id: string 
   if (!author || content === undefined) {
     return NextResponse.json({ error: 'author and content required' }, { status: 400 });
   }
-  const comment = await createTaskComment({ taskId, author, content });
-  return NextResponse.json(comment);
+  try {
+    const comment = await createTaskComment({ taskId, author, content });
+    return NextResponse.json(comment);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Error creating comment:', error);
+    return NextResponse.json({ error: `Failed to create comment: ${message}` }, { status: 500 });
+  }
 }
 
 // PUT to update comment (system comments cannot be updated)

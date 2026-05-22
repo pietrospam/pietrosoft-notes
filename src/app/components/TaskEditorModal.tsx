@@ -530,10 +530,11 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
   };
 
   const handleSave = async () => {
-    // Also save any pending comment
-    await commentsRef.current?.savePendingComment();
-    
-    if (Object.keys(pendingChangesRef.current).length === 0 && taskId) return;
+    // For existing tasks with no note changes, just save the pending comment and return
+    if (Object.keys(pendingChangesRef.current).length === 0 && taskId) {
+      await commentsRef.current?.savePendingComment();
+      return;
+    }
     
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
@@ -542,7 +543,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
     setSaving(true);
     try {
       if (!taskId && !isCreatedRef.current) {
-        // Create new task
+        // Create new task FIRST, then save pending comment
         const dataToSend = { ...task, ...pendingChangesRef.current };
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { id: _tempId, ...taskWithoutId } = dataToSend;
@@ -559,6 +560,8 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
           isCreatedRef.current = true;
           setIsDirty(false);
           setToast({ message: 'Tarea creada exitosamente' });
+          // Save pending comment AFTER note exists in DB
+          await commentsRef.current?.savePendingComment();
           await refreshNotes();
           // Select the new note and close the create form
           setSelectedNoteId(savedTask.id);
@@ -578,7 +581,8 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
           setToast({ message: 'Error al crear la tarea' });
         }
       } else {
-        // Update existing task
+        // Update existing task - save comment first (taskId is guaranteed to exist here)
+        await commentsRef.current?.savePendingComment();
         const targetId = taskId || task.id;
         const res = await fetch(`/api/notes/${targetId}`, {
           method: 'PUT',

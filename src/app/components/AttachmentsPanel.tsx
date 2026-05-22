@@ -68,7 +68,14 @@ export function AttachmentsPanel({
       });
 
       if (!response.ok) {
-        throw new Error('Upload failed');
+        let errorMessage = 'Upload failed';
+        try {
+          const errorJson = await response.json();
+          errorMessage = errorJson.error || errorMessage;
+        } catch {
+          errorMessage = `Upload failed (${response.status})`;
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -82,7 +89,8 @@ export function AttachmentsPanel({
       });
     } catch (error) {
       console.error('Failed to upload:', error);
-      alert('Error al subir el archivo');
+      const message = error instanceof Error ? error.message : 'Error al subir el archivo';
+      alert(message);
     } finally {
       setUploading(false);
     }
