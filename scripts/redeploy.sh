@@ -69,7 +69,7 @@ rsync -avz --delete --delete-excluded -e "ssh ${SSH_OPTS[*]}" \
   --exclude 'node_modules' \
   --exclude '.next' \
   --exclude '.git' \
-  --exclude 'backups' \
+  --exclude '/backups' \
   --exclude 'data/attachments/*' \
   --exclude '*.log' \
   --exclude '.env*' \

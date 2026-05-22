@@ -132,14 +132,6 @@ export async function POST() {
 
     // Create ZIP archive
     const archive = archiver('zip', { zlib: { level: 9 } });
-    const chunks: Buffer[] = [];
-
-    archive.on('data', (chunk) => chunks.push(chunk));
-
-    const finishPromise = new Promise<Buffer>((resolve, reject) => {
-      archive.on('end', () => resolve(Buffer.concat(chunks)));
-      archive.on('error', reject);
-    });
 
     // Export database tables
     const [clients, projects, notes, attachments, activityLogs, timesheets, taskComments, billingMethods, billingRuns, billingRunItems, todoNotificationsSent] = await Promise.all([
