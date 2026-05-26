@@ -148,6 +148,7 @@ export interface TaskNote extends NoteBase, TaskFields {
 
 export interface ConnectionFields {
   clientId?: UUID;
+  projectId?: UUID;
   url?: string;
   username?: string;
   password?: string; // Stored plainly in prototype
