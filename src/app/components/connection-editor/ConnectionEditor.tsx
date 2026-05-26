@@ -16,7 +16,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Save, Loader2, Pencil, Check, ExternalLink, Star, Archive, ArchiveRestore,
-  Trash2, Paperclip, Copy, ChevronDown, Plus, Eye, EyeOff, X,
+  Trash2, Paperclip, Copy, ChevronDown, Plus, Eye, EyeOff,
 } from 'lucide-react';
 import { TipTapEditor, type TipTapEditorHandle } from '../TipTapEditor';
 import { AttachmentsModal } from '../AttachmentsModal';

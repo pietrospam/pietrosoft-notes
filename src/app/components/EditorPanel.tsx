@@ -82,6 +82,7 @@ export function EditorPanel() {
       }
       // For new notes, keep isDirty true so save button is enabled
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedNoteId, selectedNote, setLastSaved, setIsDirty]);
 
   // Auto-select title text when creating a new note (or focus body if clipboard has ticket)

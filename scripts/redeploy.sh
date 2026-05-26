@@ -120,6 +120,10 @@ ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "docker builder prune -af 2>/dev/null || tru
 
 # Step 6: Restart Docker containers on remote server
 echo "🔧 Restarting Docker containers..."
+if [ "$REMOTE_HOST" != "$PROD_HOST" ]; then
+  echo "🔧 Building remote app image..."
+  ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && APP_ENV=$APP_ENV docker compose build app"
+fi
 ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && docker compose down && APP_ENV=$APP_ENV docker compose up -d"
 
 # Step 3: Wait for containers and show logs

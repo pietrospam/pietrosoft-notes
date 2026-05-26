@@ -6,7 +6,6 @@ import { TopBar, Sidebar, NotesList, ConfigPanel, TimeSheetView, UnsavedChangesM
 import { BillingEditorModal } from './components/BillingEditorModal';
 import { TaskEditorModal } from './components/TaskEditorModal';
 import { NoteEditorModal } from './components/NoteEditorModal';
-import { ConnectionEditorModal } from './components/ConnectionEditorModal';
 import { ConnectionEditor } from './components/connection-editor/ConnectionEditor';
 
 function InlineEditorPanel() {
