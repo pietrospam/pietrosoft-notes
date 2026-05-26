@@ -5,12 +5,9 @@ import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
-import HardBreak from '@tiptap/extension-hard-break';
-import TiptapUnderline from '@tiptap/extension-underline';
 import { TextStyle } from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
 import { Highlight } from '@tiptap/extension-highlight';
-import Strike from '@tiptap/extension-strike';
 
 const COLOR_PALETTE = [
   '#000000', '#202020', '#404040', '#606060', '#808080', '#a0a0a0', '#c0c0c0', '#ffffff',
@@ -190,12 +187,10 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
         heading: {
           levels: [1, 2, 3],
         },
+        link: false, // Using custom Link below with openOnClick:false and custom classes
       }),
-      HardBreak,
       TextStyle,
       Color,
-      TiptapUnderline,
-      Strike,
       Highlight,
       Table.configure({
         resizable: true,

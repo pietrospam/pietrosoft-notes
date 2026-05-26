@@ -7,6 +7,7 @@ import { BillingEditorModal } from './components/BillingEditorModal';
 import { TaskEditorModal } from './components/TaskEditorModal';
 import { NoteEditorModal } from './components/NoteEditorModal';
 import { ConnectionEditorModal } from './components/ConnectionEditorModal';
+import { ConnectionEditor } from './components/connection-editor/ConnectionEditor';
 
 function InlineEditorPanel() {
   const { 
@@ -67,10 +68,9 @@ function InlineEditorPanel() {
       );
     case 'connection':
       return (
-        <ConnectionEditorModal
+        <ConnectionEditor
           key={selectedNote.id}
           noteId={selectedNote.id}
-          inline={true}
           onClose={() => {}}
           onSaved={() => refreshNotes()}
           onExpandToPopup={handleExpandToPopup}

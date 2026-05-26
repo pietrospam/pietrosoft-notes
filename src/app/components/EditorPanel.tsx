@@ -24,6 +24,7 @@ export function EditorPanel() {
     setLastSaved,
     isDirty,
     setIsDirty,
+    setPendingChanges,
     autoSaveEnabled,
     showUnsavedModal,
     discardAndExecute,
@@ -73,6 +74,7 @@ export function EditorPanel() {
         setLastSaved(new Date(selectedNote.updatedAt));
         // Reset dirty state and pending changes when switching to existing notes
         pendingChangesRef.current = {};
+        setPendingChanges({});
         setIsDirty(false);
       } else if (isTemp) {
         // New notes start with content tracking enabled
@@ -159,12 +161,13 @@ export function EditorPanel() {
         setIsSaving(true);
         await updateNote(selectedNote.id, pendingChangesRef.current);
         pendingChangesRef.current = {};
+        setPendingChanges({});
         setIsSaving(false);
         setLastSaved(new Date());
         setIsDirty(false);
       }
     }, 2000); // 2 second delay for auto-save
-  }, [autoSaveEnabled, selectedNote, isNewNote, updateNote, setIsSaving, setLastSaved, setIsDirty]);
+  }, [autoSaveEnabled, selectedNote, isNewNote, updateNote, setIsSaving, setLastSaved, setIsDirty, setPendingChanges]);
 
   // Track changes and update local state for immediate UI feedback
   const trackChange = useCallback((data: Partial<Note>) => {
@@ -172,8 +175,10 @@ export function EditorPanel() {
     // Update local note for immediate UI response
     setLocalNote(prev => prev ? { ...prev, ...data } as Note : null);
     setIsDirty(true);
+    // Sync to AppContext so Ctrl+S (saveCurrentNote) can flush these changes
+    setPendingChanges(pendingChangesRef.current);
     scheduleAutoSave();
-  }, [setIsDirty, scheduleAutoSave]);
+  }, [setIsDirty, setPendingChanges, scheduleAutoSave]);
 
   // Manual save
   const handleSave = async () => {
@@ -208,6 +213,7 @@ export function EditorPanel() {
       if (Object.keys(pendingChangesRef.current).length > 0) {
         await updateNote(selectedNote.id, pendingChangesRef.current);
         pendingChangesRef.current = {};
+        setPendingChanges({});
         setIsSaving(false);
         setLastSaved(new Date());
         setIsDirty(false);

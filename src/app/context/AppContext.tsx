@@ -269,6 +269,20 @@ export function AppProvider({ children }: AppProviderProps) {
   // Ref to track pending changes for save
   const pendingChangesRef = useRef<Partial<Note>>({});
 
+  // Stable callbacks to avoid re-triggering useEffect deps in consumers (e.g., BaseEditorModal loadNote)
+  const setPendingChanges = useCallback((changes: Partial<Note>) => {
+    pendingChangesRef.current = changes;
+  }, []);
+  const setIsDirty = useCallback((dirty: boolean) => {
+    setState(s => ({ ...s, isDirty: dirty }));
+  }, []);
+  const setIsSaving = useCallback((saving: boolean) => {
+    setState(s => ({ ...s, isSaving: saving }));
+  }, []);
+  const setLastSaved = useCallback((date: Date | null) => {
+    setState(s => ({ ...s, lastSaved: date }));
+  }, []);
+
   // Fetch clients from API
   const refreshClients = useCallback(async () => {
     try {
@@ -940,10 +954,10 @@ export function AppProvider({ children }: AppProviderProps) {
     },
     setTaskFilters: (filters) => setState(s => ({ ...s, taskFilters: filters })),
     setTimeSheetFilters: (filters) => setState(s => ({ ...s, timeSheetFilters: filters })),
-    setIsSaving: (saving) => setState(s => ({ ...s, isSaving: saving })),
-    setLastSaved: (date) => setState(s => ({ ...s, lastSaved: date })),
-    setIsDirty: (dirty) => setState(s => ({ ...s, isDirty: dirty })),
-    setPendingChanges: (changes) => { pendingChangesRef.current = changes; },
+    setIsSaving,
+    setLastSaved,
+    setIsDirty,
+    setPendingChanges,
     setIsNewNote: (isNew) => setState(s => ({ ...s, isNewNote: isNew })),
     toggleAutoSave,
     setCopyWithImagesOnCopy,

@@ -68,6 +68,11 @@ export function BaseEditorModal({
   const isCreatedRef = useRef(false); // Track if note was created
   // Track if editor content has been initialized (to ignore TipTap's initial onChange)
   const contentInitializedRef = useRef(!noteId); // New notes start initialized
+  // Stable refs for callbacks used in loadNote effect (avoids effect re-running on callback identity changes)
+  const onFieldsChangeRef = useRef(onFieldsChange);
+  onFieldsChangeRef.current = onFieldsChange;
+  const setIsDirtyRef = useRef(setIsDirty);
+  setIsDirtyRef.current = setIsDirty;
 
   // Persist note and return new ID (for attachments/images before first save)
   const persistNote = useCallback(async (): Promise<string | null> => {
@@ -171,8 +176,8 @@ export function BaseEditorModal({
             setNote(data);
             setTitle(data.title);
             // Sync fields with loaded data (for Connection, Note editors)
-            onFieldsChange?.(data);
-            setIsDirty(false);
+            onFieldsChangeRef.current?.(data);
+            setIsDirtyRef.current(false);
             
             // Wait for TipTap to initialize before enabling change tracking
             setTimeout(() => {
@@ -198,7 +203,7 @@ export function BaseEditorModal({
         titleInputRef.current?.select();
       }, 100);
     }
-  }, [noteId, onFieldsChange, openAttachmentsOnOpen, setIsDirty]);
+  }, [noteId, openAttachmentsOnOpen]); // onFieldsChange and setIsDirty accessed via refs to prevent re-triggering on identity changes
 
   // Sync attachments from global context (for when files are dropped via GlobalDropZone)
   useEffect(() => {
