@@ -234,7 +234,7 @@ export async function createBillingRun(data: {
   pdfFilename?: string;
   status: string;
   invoiceState?: string;
-  errorText?: string;
+  errorText?: string | null;
   noteId?: string;
   locked?: boolean;
   items?: Array<{ name: string; quantity: number; unitCost: number; total: number; description?: string }>;
@@ -302,7 +302,7 @@ export async function updateBillingRun(id: string, data: {
   locked?: boolean;
   periodStart?: Date;
   periodEnd?: Date;
-  errorText?: string;
+  errorText?: string | null;
 }): Promise<BillingRun> {
   const updateData: Record<string, unknown> = { updatedAt: new Date() };
   if (data.requestJson !== undefined) updateData.requestJson = data.requestJson;

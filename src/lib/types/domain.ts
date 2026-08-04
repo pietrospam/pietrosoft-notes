@@ -342,7 +342,7 @@ export type UpdateBillingMethodInput = Partial<CreateBillingMethodInput>;
 
 export type BillingRunStatus = 'pending' | 'success' | 'failed';
 
-export type BillingInvoiceState = 'borrador' | 'validada' | 'enviada';
+export type BillingInvoiceState = 'borrador' | 'validada' | 'enviada' | 'pagada';
 
 export interface BillingRunItem {
   id: UUID;

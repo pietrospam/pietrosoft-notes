@@ -102,10 +102,13 @@ export function BillingScreen() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          runId: run.id,
           clientParentId: run.clientParentId,
           year: run.year,
           month: run.month,
           methodId: run.methodId,
+          periodStart: run.periodStart,
+          periodEnd: run.periodEnd,
           requestJsonOverride: run.requestJson,
         }),
       });
@@ -145,6 +148,37 @@ export function BillingScreen() {
       } else {
         const body = await res.json();
         setToast({ message: body.error || 'Error al actualizar factura', type: 'error' });
+      }
+    } catch {
+      setToast({ message: 'Error de conexión', type: 'error' });
+    }
+  };
+
+  const getInvoiceState = (run: BillingRun): BillingRun['invoiceState'] => {
+    if (run.invoiceState === 'validada' || run.invoiceState === 'enviada' || run.invoiceState === 'pagada') {
+      return run.invoiceState;
+    }
+    if (run.sentToClient) return 'enviada';
+    if (run.validated) return 'validada';
+    return 'borrador';
+  };
+
+  const advanceInvoiceState = async (run: BillingRun) => {
+    const states: BillingRun['invoiceState'][] = ['borrador', 'validada', 'enviada', 'pagada'];
+    const currentState = getInvoiceState(run);
+    const nextState = states[(states.indexOf(currentState) + 1) % states.length];
+    try {
+      const res = await fetch(`/api/billing/runs/${run.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoiceState: nextState }),
+      });
+      if (res.ok) {
+        setToast({ message: `Estado cambiado a ${nextState}`, type: 'success' });
+        fetchRuns();
+      } else {
+        const body = await res.json();
+        setToast({ message: body.error || 'Error al cambiar estado', type: 'error' });
       }
     } catch {
       setToast({ message: 'Error de conexión', type: 'error' });
@@ -309,11 +343,32 @@ export function BillingScreen() {
                           {getInvoiceJsonDate(run) && (
                             <span className="text-gray-300 text-xs">· {getInvoiceJsonDate(run)}</span>
                           )}
-                          {run.validated ? (
-                            <span className="px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-600 text-xs text-emerald-300">Validada</span>
-                          ) : (
-                            <span className="px-2 py-0.5 rounded-full bg-yellow-950 border border-yellow-600 text-xs text-yellow-300">Borrador</span>
-                          )}
+                          {(() => {
+                            const state = getInvoiceState(run);
+                            const stateStyles = {
+                              borrador: 'bg-yellow-950 border-yellow-600 text-yellow-300 hover:bg-yellow-900',
+                              validada: 'bg-emerald-950 border-emerald-600 text-emerald-300 hover:bg-emerald-900',
+                              enviada: 'bg-blue-950 border-blue-600 text-blue-300 hover:bg-blue-900',
+                              pagada: 'bg-purple-950 border-purple-600 text-purple-300 hover:bg-purple-900',
+                            }[state];
+                            const stateLabels = {
+                              borrador: 'Borrador',
+                              validada: 'Validada',
+                              enviada: 'Enviada',
+                              pagada: 'Pagada',
+                            };
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => advanceInvoiceState(run)}
+                                disabled={run.locked}
+                                className={`px-2 py-0.5 rounded-full border text-xs ${stateStyles} disabled:opacity-50 disabled:cursor-not-allowed`}
+                                title={run.locked ? 'Registro bloqueado' : 'Click para avanzar el estado'}
+                              >
+                                {stateLabels[state]}
+                              </button>
+                            );
+                          })()}
                           <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-xs text-slate-300">{run.methodName}</span>
                         </div>
                         <div className="text-xs text-slate-300 mt-1 leading-snug flex flex-wrap items-center gap-2">

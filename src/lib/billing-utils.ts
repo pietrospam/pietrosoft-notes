@@ -45,10 +45,12 @@ export function normalizeBillingItems(items: unknown) {
         : typeof record.quantity === 'string'
           ? Number(record.quantity)
           : 0;
-      const unit_cost = typeof record.unit_cost === 'number'
-        ? record.unit_cost
-        : typeof record.unit_cost === 'string'
-          ? Number(record.unit_cost)
+      // Accept both the API format and the database/domain format.
+      const rawUnitCost = record.unit_cost ?? record.unitCost;
+      const unit_cost = typeof rawUnitCost === 'number'
+        ? rawUnitCost
+        : typeof rawUnitCost === 'string'
+          ? Number(rawUnitCost)
           : 0;
       const cleanedQuantity = Number.isNaN(quantity) ? 0 : quantity;
       const cleanedUnitCost = Number.isNaN(unit_cost) ? 0 : unit_cost;
@@ -63,6 +65,19 @@ export function normalizeBillingItems(items: unknown) {
     .filter((item): item is { name: string; quantity: number; unit_cost: number; total: number } =>
       item !== null && (item.name !== '' || item.quantity > 0 || item.unit_cost > 0)
     );
+}
+
+export function stripExchangeRateUsd(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(stripExchangeRateUsd);
+  }
+  if (!value || typeof value !== 'object') return value;
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => key !== 'exchangeRateUsd')
+      .map(([key, entry]) => [key, stripExchangeRateUsd(entry)])
+  );
 }
 
 export function buildPayloadFromTemplate(

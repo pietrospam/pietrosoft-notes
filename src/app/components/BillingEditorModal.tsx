@@ -251,7 +251,6 @@ export function BillingEditorModal({
       })),
     };
     if (currency) payload.currency = currency;
-    if (exchangeRateUsd !== undefined) payload.exchangeRateUsd = exchangeRateUsd;
     return payload;
   }, [clientParentId, selectedYear, selectedMonth, methodId, invoiceNumber, periodStart, periodEnd, preview, items, currency, exchangeRateUsd]);
 
@@ -273,7 +272,6 @@ export function BillingEditorModal({
       : buildRequestPayload();
 
     if (currency) payload.currency = currency;
-    if (exchangeRateUsd !== undefined) payload.exchangeRateUsd = exchangeRateUsd;
     return payload;
   }, [selectedMethod, preview, invoiceNumber, invoiceDate, currency, exchangeRateUsd, items, buildRequestPayload]);
 
