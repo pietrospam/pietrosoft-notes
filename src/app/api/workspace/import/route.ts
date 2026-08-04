@@ -1,33 +1,88 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { promises as fs } from 'fs';
+import os from 'os';
 import path from 'path';
+import { createWriteStream } from 'fs';
+import { Readable } from 'stream';
 import AdmZip from 'adm-zip';
+import Busboy from 'busboy';
 
 export const dynamic = 'force-dynamic';
 
 const DATA_DIR = process.env.DATA_DIR || './data';
 const BACKUP_DIR = process.env.BACKUP_DIR || './backups';
+const MAX_IMPORT_BYTES = 5 * 1024 * 1024 * 1024;
+
+async function writeMultipartUploadToTempFile(request: NextRequest) {
+  const tempPath = path.join(os.tmpdir(), `workspace-import-${Date.now()}-${Math.random().toString(36).slice(2)}.zip`);
+  const contentType = request.headers.get('content-type');
+  if (!contentType) throw new Error('Missing multipart content type');
+
+  await new Promise<void>((resolve, reject) => {
+    const parser = Busboy({
+      headers: { 'content-type': contentType },
+      limits: { fileSize: MAX_IMPORT_BYTES },
+    });
+    let foundFile = false;
+    let output: ReturnType<typeof createWriteStream> | null = null;
+    let parserFinished = false;
+    let outputFinished = false;
+    const complete = () => {
+      if (parserFinished && outputFinished) resolve();
+    };
+
+    parser.on('file', (fieldname, stream) => {
+      if (fieldname !== 'file' || foundFile) {
+        stream.resume();
+        return;
+      }
+      foundFile = true;
+      output = createWriteStream(tempPath);
+      stream.on('limit', () => reject(new Error(`Backup file is too large (maximum ${MAX_IMPORT_BYTES / (1024 * 1024)} MB)`)));
+      stream.on('error', reject);
+      output.on('error', reject);
+      output.on('close', () => {
+        outputFinished = true;
+        complete();
+      });
+      stream.pipe(output);
+    });
+    parser.on('error', reject);
+    parser.on('finish', () => {
+      if (!foundFile) reject(new Error('No file provided'));
+      else {
+        parserFinished = true;
+        complete();
+      }
+    });
+
+    const body = request.body;
+    if (!body) {
+      reject(new Error('Empty request body'));
+      return;
+    }
+    Readable.fromWeb(body as unknown as import('stream/web').ReadableStream).pipe(parser);
+  }).catch(async error => {
+    await fs.rm(tempPath, { force: true }).catch(() => undefined);
+    throw error;
+  });
+
+  return tempPath;
+}
 
 export async function POST(request: NextRequest) {
+  let tempZipPath: string | null = null;
   try {
-    const formData = await request.formData();
-    const file = formData.get('file') as File | null;
-
-    if (!file) {
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+    if (!request.headers.get('content-type')?.startsWith('multipart/form-data')) {
+      return NextResponse.json({ error: 'Expected multipart form data' }, { status: 400 });
     }
 
-    if (!file.name.endsWith('.zip')) {
-      return NextResponse.json({ error: 'File must be a .zip archive' }, { status: 400 });
-    }
+    tempZipPath = await writeMultipartUploadToTempFile(request);
 
-    // Read zip file
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    
-    const zip = new AdmZip(buffer);
+    // Keep the upload on disk so AdmZip does not require a second full copy in memory.
+    const zip = new AdmZip(tempZipPath);
     const entries = zip.getEntries();
-    console.log('Import ZIP entries:', entries.map(e => e.entryName));
+    console.log('Import ZIP entries:', entries.length, entries.slice(0, 20).map(e => e.entryName));
 
     if (entries.length === 0) {
       return NextResponse.json({ error: 'ZIP file is empty' }, { status: 400 });
@@ -65,7 +120,6 @@ export async function POST(request: NextRequest) {
       const code = (err as { code?: string }).code;
       if (code === 'EACCES' || code === 'EPERM') {
         // cannot write to configured directory, fallback to temp
-        const os = await import('os');
         const fallback = path.join(os.tmpdir(), 'pietrosoft-data');
         console.warn(`Permission denied for DATA_DIR ${dataPath}, using fallback ${fallback}`);
         dataPath = fallback;
@@ -319,22 +373,11 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Import error:', error);
-    // also log entries for context
-    try {
-      const zip = await (async () => {
-        const formData = await request.formData();
-        const file = formData.get('file') as File | null;
-        if (file) {
-          const buf = Buffer.from(await file.arrayBuffer());
-          return new AdmZip(buf);
-        }
-        return null;
-      })();
-      if (zip) console.error('Entries at failure:', zip.getEntries().map(e => e.entryName));
-    } catch {
-      // ignore
-    }
     // return error message for debugging
     return NextResponse.json({ error: 'Import failed', details: String(error) }, { status: 500 });
+  } finally {
+    if (tempZipPath) {
+      await fs.rm(tempZipPath, { force: true }).catch(() => undefined);
+    }
   }
 }
