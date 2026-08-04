@@ -15,6 +15,15 @@ import { TaskTodosBanner } from './TaskTodosBanner';
 import { useApp } from '../context/AppContext';
 import type { TaskNote, Client, Project, TaskStatus, TaskPriority } from '@/lib/types';
 
+interface DuplicateTaskMatch {
+  id: string;
+  title: string;
+  clientId: string | null;
+  projectId: string | null;
+  ticketPhaseCode: string | null;
+  archivedAt: string | null;
+}
+
 const STATUSES: { value: TaskStatus; label: string; color: string }[] = [
   { value: 'NONE', label: 'None', color: 'bg-gray-500' },
   { value: 'PENDING', label: 'Pending', color: 'bg-yellow-500' },
@@ -40,7 +49,7 @@ interface TaskEditorModalProps {
 }
 
 export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defaultClientId }: TaskEditorModalProps) {
-  const { refreshNotes, refreshClients, toggleFavorite, autoSaveEnabled, setIsDirty: setGlobalIsDirty, setPendingChanges: setGlobalPendingChanges, updateNote, deleteNote, setSelectedNoteId, isNotesListCollapsed, setNotesListCollapsed, filteredNotes } = useApp();
+  const { refreshNotes, refreshClients, toggleFavorite, autoSaveEnabled, setIsDirty: setGlobalIsDirty, setPendingChanges: setGlobalPendingChanges, updateNote, deleteNote, setSelectedNoteId, setSelectedClientId: setGlobalSelectedClientId, setActiveTab, setArchivedFilter, openEditorModal, isNotesListCollapsed, setNotesListCollapsed, filteredNotes } = useApp();
   const [showAttachmentsModal, setShowAttachmentsModal] = useState(false);
   const isCreatedRef = useRef(false);
   useEffect(() => {
@@ -77,6 +86,7 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
   const [isMaximized, setIsMaximized] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(!taskId); // Auto-edit title for new notes
   const [toast, setToast] = useState<{ message: string; action?: { label: string; onClick: () => void } } | null>(null);
+  const [duplicateConflict, setDuplicateConflict] = useState<{ tasks: DuplicateTaskMatch[] } | null>(null);
   const [showTimeSheetModal, setShowTimeSheetModal] = useState(false);
   const [showActivityLog, setShowActivityLog] = useState(false); // REQ-010: Activity log modal
   const [showCoderHintsModal, setShowCoderHintsModal] = useState(false);
@@ -573,15 +583,19 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
           onClose();
           onSaved?.();
         } else if (res.status === 409) {
-          const body = (await res.json().catch(() => ({}))) as { existingId?: string; error?: string };
-          const existingId = body.existingId;
-          setToast({ message: body.error || 'Ya existe una tarea con ese ticket/fase', action: existingId ? {
-            label: 'Abrir existente',
-            onClick: () => {
-              setSelectedNoteId(existingId);
-              onClose();
-            },
-          } : undefined });
+          const body = (await res.json().catch(() => ({}))) as { existingId?: string; error?: string; existingTasks?: DuplicateTaskMatch[] };
+          const existingTasks = body.existingTasks?.length
+            ? body.existingTasks
+            : body.existingId
+              ? [{ id: body.existingId, title: 'Tarea existente', clientId: null, projectId: null, ticketPhaseCode: null, archivedAt: null }]
+              : [];
+          if (existingTasks.length > 0) {
+            setDuplicateConflict({
+              tasks: existingTasks,
+            });
+          } else {
+            setToast({ message: body.error || 'Ya existe una tarea con ese ticket/fase' });
+          }
         } else {
           setToast({ message: 'Error al crear la tarea' });
         }
@@ -604,15 +618,19 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
           await refreshNotes();
           onSaved?.();
         } else if (res.status === 409) {
-          const body = (await res.json().catch(() => ({}))) as { existingId?: string; error?: string };
-          const existingId = body.existingId;
-          setToast({ message: body.error || 'Ya existe una tarea con ese ticket/fase', action: existingId ? {
-            label: 'Abrir existente',
-            onClick: () => {
-              setSelectedNoteId(existingId);
-              onClose();
-            },
-          } : undefined });
+          const body = (await res.json().catch(() => ({}))) as { existingId?: string; error?: string; existingTasks?: DuplicateTaskMatch[] };
+          const existingTasks = body.existingTasks?.length
+            ? body.existingTasks
+            : body.existingId
+              ? [{ id: body.existingId, title: 'Tarea existente', clientId: null, projectId: null, ticketPhaseCode: null, archivedAt: null }]
+              : [];
+          if (existingTasks.length > 0) {
+            setDuplicateConflict({
+              tasks: existingTasks,
+            });
+          } else {
+            setToast({ message: body.error || 'Ya existe una tarea con ese ticket/fase' });
+          }
         } else {
           setToast({ message: 'Error al guardar' });
         }
@@ -658,8 +676,80 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
   // Inline mode content
   const currentUser = 'usuario'; // TODO: replace with real user id
 
+  const openExistingTask = (existingId: string) => {
+    if (!duplicateConflict) return;
+
+    setDuplicateConflict(null);
+    onClose();
+    setActiveTab('bitacora');
+    setArchivedFilter(true);
+    setGlobalSelectedClientId(null);
+    openEditorModal('task', existingId);
+  };
+
   const renderContent = () => (
     <>
+      {duplicateConflict && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-lg rounded-xl border border-red-500/60 bg-gray-900 p-6 shadow-2xl shadow-red-950/40">
+            <div className="mb-3 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-red-400">Tarea duplicada</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDuplicateConflict(null)}
+                className="text-gray-400 hover:text-white"
+                aria-label="Cerrar aviso"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <p className="mt-3 text-sm text-gray-300">
+              Encontramos {duplicateConflict.tasks.length === 1 ? 'esta tarea' : 'estas tareas'} con el mismo ticket/fase. Seleccioná cuál querés abrir, incluso si está archivada.
+            </p>
+            <div className="mt-4 max-h-56 space-y-2 overflow-y-auto">
+              {duplicateConflict.tasks.map((match) => {
+                const projectName = projects.find((project) => project.id === match.projectId)?.name;
+                const clientName = clients.find((client) => client.id === match.clientId)?.name;
+                return (
+                  <div key={match.id} className="flex items-center justify-between gap-3 rounded-lg border border-gray-700 bg-gray-800/70 px-3 py-3">
+                    <div className="min-w-0 space-y-1">
+                      <p className="truncate text-sm font-medium text-white">{match.title}</p>
+                      <div className="grid grid-cols-1 gap-x-4 gap-y-0.5 text-xs text-gray-400 sm:grid-cols-2">
+                        <span><strong className="text-gray-300">ID:</strong> {match.id}</span>
+                        <span><strong className="text-gray-300">Ticket/Fase:</strong> {match.ticketPhaseCode || '-'}</span>
+                        <span><strong className="text-gray-300">Cliente:</strong> {clientName || 'Sin cliente'}</span>
+                        <span><strong className="text-gray-300">Proyecto:</strong> {projectName || 'Sin proyecto'}</span>
+                      </div>
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${match.archivedAt ? 'bg-amber-500/20 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'}`}>
+                        {match.archivedAt ? 'Archivada' : 'Activa'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openExistingTask(match.id)}
+                      className="shrink-0 rounded bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-500"
+                    >
+                      Abrir
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDuplicateConflict(null)}
+                className="rounded-lg px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* REQ-021: TODO Banner - shows when task has pending TODOs */}
       {(taskId || isCreatedRef.current) && (
         <TaskTodosBanner 

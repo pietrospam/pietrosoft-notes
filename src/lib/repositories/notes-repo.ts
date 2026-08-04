@@ -279,19 +279,54 @@ export async function createNote<T extends Note>(input: CreateNoteInput<T>): Pro
 // Update Note
 // ============================================================================
 
-export async function findTaskByTicketAndProject(ticketPhaseCode: string, projectId?: string | null): Promise<Note | null> {
-  if (!ticketPhaseCode) return null;
+export async function findTasksByTicket(ticketPhaseCode: string): Promise<Note[]> {
+  const normalizedTicket = ticketPhaseCode.trim();
+  if (!normalizedTicket) return [];
 
-  const existing = await prisma.note.findFirst({
+  const existing = await prisma.note.findMany({
     where: {
       type: PrismaNoteType.TASK,
-      taskTicketPhaseCode: ticketPhaseCode,
-      projectId: projectId || null,
+      taskTicketPhaseCode: normalizedTicket,
     },
     include: { attachmentFiles: true },
   });
 
-  return existing ? toNote(existing) : null;
+  return existing.map(toNote);
+}
+
+export async function findTasksByTicketAndProject(ticketPhaseCode: string, projectId?: string | null): Promise<Note[]> {
+  const normalizedTicket = ticketPhaseCode.trim();
+  if (!normalizedTicket) return [];
+
+  const existing = await prisma.note.findMany({
+    where: {
+      type: PrismaNoteType.TASK,
+      taskTicketPhaseCode: normalizedTicket,
+      projectId: projectId?.trim() || null,
+    },
+    include: { attachmentFiles: true },
+  });
+
+  return existing.map(toNote);
+}
+
+// General tasks use a global ticket/fase namespace. Other projects have their
+// own namespace, so the project participates in duplicate detection.
+export async function findTaskDuplicates(ticketPhaseCode: string, projectId?: string | null): Promise<Note[]> {
+  const normalizedProjectId = projectId?.trim() || null;
+
+  if (normalizedProjectId) {
+    const project = await prisma.project.findUnique({
+      where: { id: normalizedProjectId },
+      select: { name: true },
+    });
+
+    if (project?.name.trim().toLowerCase() === 'general') {
+      return findTasksByTicket(ticketPhaseCode);
+    }
+  }
+
+  return findTasksByTicketAndProject(ticketPhaseCode, normalizedProjectId);
 }
 
 export async function hideNoteFromRecents(id: string): Promise<Note | null> {

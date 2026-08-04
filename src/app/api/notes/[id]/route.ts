@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getNote, updateNote, deleteNote, findTaskByTicketAndProject } from '@/lib/repositories/notes-repo';
+import { getNote, updateNote, deleteNote, findTaskDuplicates } from '@/lib/repositories/notes-repo';
 import { 
   createActivityLogs, 
   createPlaceholderTimesheet,
@@ -47,20 +47,33 @@ export async function PUT(request: Request, { params }: RouteParams) {
     // REQ-010: Get old note for comparison (for task activity logging)
     const oldNote = await getNote(params.id);
     
-    // REQ: Prevent duplicate task ticket-phase within same project on update
+    // General uses a global ticket/fase namespace; other projects include the project.
     const existingTask = oldNote;
     if (existingTask?.type === 'task' && ('ticketPhaseCode' in body || 'projectId' in body)) {
-      const candidateTicket = (body as Partial<TaskNote>).ticketPhaseCode || (existingTask as TaskNote).ticketPhaseCode;
-      const candidateProject = (body as Partial<TaskNote>).projectId || (existingTask as TaskNote).projectId || null;
+      const candidateTicket = 'ticketPhaseCode' in body
+        ? (body as Partial<TaskNote>).ticketPhaseCode || ''
+        : (existingTask as TaskNote).ticketPhaseCode;
+      const candidateProject = 'projectId' in body
+        ? (body as Partial<TaskNote>).projectId || null
+        : (existingTask as TaskNote).projectId || null;
 
       if (candidateTicket) {
-        const collision = await findTaskByTicketAndProject(candidateTicket, candidateProject);
-        if (collision && collision.id !== params.id) {
+        const collisions = (await findTaskDuplicates(candidateTicket, candidateProject))
+          .filter((collision) => collision.id !== params.id);
+        if (collisions.length > 0) {
           return NextResponse.json(
             {
               error: 'Task with this ticket/phase already exists',
-              existingId: collision.id,
-              existingTitle: collision.title,
+              existingId: collisions[0].id,
+              existingTitle: collisions[0].title,
+              existingTasks: collisions.map((collision) => ({
+                id: collision.id,
+                title: collision.title,
+                clientId: (collision as Note & { clientId?: string }).clientId || null,
+                projectId: (collision as TaskNote).projectId || null,
+                ticketPhaseCode: (collision as TaskNote).ticketPhaseCode || null,
+                archivedAt: collision.archivedAt || null,
+              })),
             },
             { status: 409 }
           );

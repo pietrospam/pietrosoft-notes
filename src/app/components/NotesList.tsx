@@ -843,6 +843,13 @@ export function NotesList() {
           defaultClientId={selectedClientId && selectedClientId !== 'none' ? selectedClientId : undefined}
         />
       )}
+      {editorModal.isOpen && editorModal.mode === 'edit' && editorModal.noteType === 'task' && editorModal.noteId && (
+        <TaskEditorModal
+          taskId={editorModal.noteId}
+          onClose={closeEditorModal}
+          onSaved={() => refreshNotes()}
+        />
+      )}
       {editorModal.isOpen && editorModal.mode === 'create' && editorModal.noteType === 'general' && (
         <NoteEditorModal
           noteId={undefined}

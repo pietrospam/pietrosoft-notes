@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { listNotes, createNote, findTaskByTicketAndProject } from '@/lib/repositories/notes-repo';
+import { listNotes, createNote, findTaskDuplicates } from '@/lib/repositories/notes-repo';
 import { 
   createActivityLog, 
   createPlaceholderTimesheet,
@@ -47,17 +47,25 @@ export async function POST(request: Request) {
       );
     }
 
-    // REQ: Prevent duplicate task ticket-phase within same project
+    // General uses a global ticket/fase namespace; other projects include the project.
     if (body.type === 'task') {
       const taskBody = body as CreateNoteInput<TaskNote>;
       if (taskBody.ticketPhaseCode) {
-        const collision = await findTaskByTicketAndProject(taskBody.ticketPhaseCode, taskBody.projectId || null);
-        if (collision) {
+        const collisions = await findTaskDuplicates(taskBody.ticketPhaseCode, taskBody.projectId || null);
+        if (collisions.length > 0) {
           return NextResponse.json(
             {
               error: 'Task with this ticket/phase already exists',
-              existingId: collision.id,
-              existingTitle: collision.title,
+              existingId: collisions[0].id,
+              existingTitle: collisions[0].title,
+              existingTasks: collisions.map((collision) => ({
+                id: collision.id,
+                title: collision.title,
+                clientId: (collision as Note & { clientId?: string }).clientId || null,
+                projectId: (collision as TaskNote).projectId || null,
+                ticketPhaseCode: (collision as TaskNote).ticketPhaseCode || null,
+                archivedAt: collision.archivedAt || null,
+              })),
             },
             { status: 409 }
           );
