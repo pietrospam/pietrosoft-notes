@@ -232,6 +232,24 @@ export function TelegramConfig() {
     setTestMessage('');
     
     try {
+      // The test endpoint reads the persisted config, so persist a newly entered
+      // chat ID before testing it instead of testing stale server state.
+      if (originalConfig && config.chatId.trim() !== originalConfig.chatId.trim()) {
+        const saveResponse = await fetch('/api/telegram/config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chatId: config.chatId.trim() }),
+        });
+        const savedConfig = await saveResponse.json().catch(() => null);
+        if (!saveResponse.ok || !savedConfig) {
+          setTestResult('error');
+          setTestMessage(savedConfig?.error || 'No se pudo guardar el Chat ID');
+          return;
+        }
+        setConfig(savedConfig);
+        setOriginalConfig(savedConfig);
+      }
+
       const res = await fetch('/api/telegram/test', { method: 'POST' });
       const data = await res.json();
       
