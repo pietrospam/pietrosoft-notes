@@ -26,6 +26,7 @@ export interface TimeSheetFilters {
 
 interface AppState {
   currentView: ViewType;
+  showArchived: boolean;
   selectedNoteId: string | null;
   selectedClientId: string | null; // null = all, 'none' = without client
   activeTypeFilters: NoteType[]; // Active type toggles
@@ -72,6 +73,7 @@ interface AppState {
 
 interface AppContextValue extends AppState {
   setCurrentView: (view: ViewType) => void;
+  setArchivedFilter: (enabled: boolean) => void;
   setTodosFilterTaskId: (taskId: string | null) => void; // REQ-021: Filter TODOs view by task
   setSelectedNoteId: (id: string | null) => void;
   setSelectedClientId: (id: string | null) => void;
@@ -165,6 +167,7 @@ interface AppProviderProps {
 export function AppProvider({ children }: AppProviderProps) {
   const [state, setState] = useState<AppState>({
     currentView: 'all',
+    showArchived: false,
     selectedNoteId: null,
     selectedClientId: null,
     activeTypeFilters: ['task', 'general'], // Default for bitacora tab (excludes connections)
@@ -304,7 +307,7 @@ export function AppProvider({ children }: AppProviderProps) {
   const refreshNotes = useCallback(async () => {
     try {
       setState(s => ({ ...s, isLoading: true }));
-      const response = await fetch('/api/notes');
+      const response = await fetch('/api/notes?includeArchived=true');
       if (response.ok) {
         const notes: Note[] = await response.json();
         setState(s => ({ ...s, notes, isLoading: false }));
@@ -464,10 +467,17 @@ export function AppProvider({ children }: AppProviderProps) {
     }));
 
     try {
+      // JSON.stringify drops undefined fields, so explicitly send null when
+      // clearing archivedAt during an unarchive operation.
+      const requestData: Record<string, unknown> = { ...data };
+      if ('archivedAt' in data && data.archivedAt === undefined) {
+        requestData.archivedAt = null;
+      }
+
       const response = await fetch(`/api/notes/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify(requestData),
       });
 
       if (response.ok) {
@@ -573,7 +583,7 @@ export function AppProvider({ children }: AppProviderProps) {
       
       if (response.ok) {
         // Refresh notes to get consistent state
-        const notesRes = await fetch('/api/notes');
+        const notesRes = await fetch('/api/notes?includeArchived=true');
         if (notesRes.ok) {
           const notes = await notesRes.json();
           setState(s => ({ ...s, notes }));
@@ -623,7 +633,7 @@ export function AppProvider({ children }: AppProviderProps) {
         return true;
       } else {
         // Revert by refreshing notes
-        const notesRes = await fetch('/api/notes');
+        const notesRes = await fetch('/api/notes?includeArchived=true');
         if (notesRes.ok) {
           const notes = await notesRes.json();
           setState(s => ({ ...s, notes }));
@@ -633,7 +643,7 @@ export function AppProvider({ children }: AppProviderProps) {
     } catch (error) {
       console.error('Failed to reorder favorites:', error);
       // Revert by refreshing notes
-      const notesRes = await fetch('/api/notes');
+      const notesRes = await fetch('/api/notes?includeArchived=true');
       if (notesRes.ok) {
         const notes = await notesRes.json();
         setState(s => ({ ...s, notes }));
@@ -751,7 +761,7 @@ export function AppProvider({ children }: AppProviderProps) {
       try {
         const lastUpdate = lastUpdateRef.current;
         if (!lastUpdate) return;
-        const res = await fetch(`/api/notes?since=${encodeURIComponent(lastUpdate)}`);
+        const res = await fetch(`/api/notes?includeArchived=true&since=${encodeURIComponent(lastUpdate)}`);
         if (!res.ok) return;
         const newNotes: Note[] = await res.json();
         if (newNotes.length > 0) {
@@ -819,11 +829,11 @@ export function AppProvider({ children }: AppProviderProps) {
   
   const filteredNotes = state.notes.filter(note => {
     
+    // Archived is a cross-cutting filter that applies to every notes view.
+    if (state.showArchived ? !note.archivedAt : note.archivedAt) return false;
+
     // When searching, ignore all filters except archived (search across everything)
     if (state.searchQuery) {
-      // Still exclude archived unless in archived or recents view
-      if (note.archivedAt && state.currentView !== 'archived' && state.currentView !== 'recents') return false;
-
       // Apply recents time window even when searching
       if (state.currentView === 'recents') {
         const cutoff = Date.now() - state.recentHours * 3600 * 1000;
@@ -859,28 +869,10 @@ export function AppProvider({ children }: AppProviderProps) {
       return true;
     }
 
-    // Archived view shows only archived notes (but still applies type filters)
-    if (state.currentView === 'archived') {
-      if (!note.archivedAt) return false;
-      // Apply type filters in archived view too (for conexiones tab)
-      if (state.activeTypeFilters.length > 0 && !state.activeTypeFilters.includes(note.type)) {
-        return false;
-      }
-      return true;
-    }
-    
-    // REQ-006: Favorites view shows only favorites (non-archived)
+    // REQ-006: Favorites view shows only favorites.
     if (state.currentView === 'favorites') {
-      if (!note.isFavorite || note.archivedAt) return false;
-      // Apply type filters in favorites view too (for conexiones tab)
-      if (state.activeTypeFilters.length > 0 && !state.activeTypeFilters.includes(note.type)) {
-        return false;
-      }
-      return true;
+      if (!note.isFavorite) return false;
     }
-    
-    // Other views exclude archived notes by default
-    if (note.archivedAt) return false;
     
     // Filter by active type filters (empty = no filter, show all)
     if (state.activeTypeFilters.length > 0 && !state.activeTypeFilters.includes(note.type)) {
@@ -932,6 +924,12 @@ export function AppProvider({ children }: AppProviderProps) {
       selectedNoteId: null,
       isNewNote: false,
       billingEditorRun: view === 'billingEditor' ? s.billingEditorRun : null,
+    })),
+    setArchivedFilter: (enabled) => setState(s => ({
+      ...s,
+      showArchived: enabled,
+      selectedNoteId: null,
+      isNewNote: false,
     })),
     setTodosFilterTaskId: (taskId) => setState(s => ({ ...s, todosFilterTaskId: taskId })), // REQ-021
     setSelectedNoteId: (id) => setState(s => ({ ...s, selectedNoteId: id, isNewNote: id?.startsWith('temp-') ?? false })),

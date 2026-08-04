@@ -173,8 +173,13 @@ export function TaskEditorModal({ taskId, onClose, onSaved, inline = false, defa
     const wasArchived = !!(task as TaskNote & { archivedAt?: string }).archivedAt;
     const newArchivedAt = wasArchived ? undefined : new Date().toISOString();
     
-    await updateNote(targetId, { archivedAt: newArchivedAt });
-    setTask(prev => ({ ...prev, archivedAt: newArchivedAt } as TaskNote));
+    const updatedTask = await updateNote(targetId, { archivedAt: newArchivedAt });
+    if (!updatedTask) {
+      setToast({ message: 'No se pudo actualizar el archivo de la tarea' });
+      return;
+    }
+
+    setTask(prev => ({ ...prev, archivedAt: updatedTask.archivedAt } as TaskNote));
     
     setToast({ message: wasArchived ? 'Tarea restaurada' : 'Tarea archivada' });
     onSaved?.();

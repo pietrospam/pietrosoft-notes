@@ -247,8 +247,8 @@ export function ConnectionEditor({ noteId, onClose, onSaved, onExpandToPopup }: 
   // ── Archive ───────────────────────────────────────────────────────────
   const handleArchive = async () => {
     const wasArchived = !!archivedAt;
-    const newVal = wasArchived ? undefined : new Date().toISOString();
-    setArchivedAt(newVal);
+    const newVal = wasArchived ? null : new Date().toISOString();
+    setArchivedAt(newVal || undefined);
     await fetch(`/api/notes/${noteId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },

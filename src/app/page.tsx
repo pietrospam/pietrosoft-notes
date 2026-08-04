@@ -7,6 +7,7 @@ import { BillingEditorModal } from './components/BillingEditorModal';
 import { TaskEditorModal } from './components/TaskEditorModal';
 import { NoteEditorModal } from './components/NoteEditorModal';
 import { ConnectionEditor } from './components/connection-editor/ConnectionEditor';
+import { Archive } from 'lucide-react';
 
 function InlineEditorPanel() {
   const { 
@@ -216,7 +217,7 @@ function MainContent() {
 
 // pull the visibility state inside a component that is a child of the provider
 function AppLayout() {
-  const { isSidebarVisible, saveCurrentNote } = useApp();
+  const { isSidebarVisible, saveCurrentNote, showArchived, confirmNavigation, setArchivedFilter } = useApp();
   const [toast, setToast] = useState<{ message: string } | null>(null);
 
   // keyboard shortcut for save
@@ -254,6 +255,24 @@ function AppLayout() {
   return (
     <div className="h-screen flex flex-col bg-gray-950 text-white overflow-hidden">
       <TopBar />
+      {showArchived && (
+        <div
+          role="status"
+          className="flex items-center justify-between gap-3 bg-amber-500 px-4 py-2 text-sm font-bold text-gray-950 shadow-lg shadow-amber-500/20"
+        >
+          <div className="flex items-center gap-2">
+            <Archive size={18} />
+            <span>VISTA DE ARCHIVADOS: mostrando solamente elementos archivados</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => confirmNavigation(() => setArchivedFilter(false))}
+            className="rounded border border-gray-950/40 px-2 py-1 text-xs font-semibold hover:bg-amber-300 transition-colors"
+          >
+            Salir de archivados
+          </button>
+        </div>
+      )}
       <div className="flex-1 flex overflow-hidden relative">
         {isSidebarVisible && <Sidebar />}
         <MainContent />
