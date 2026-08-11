@@ -63,11 +63,12 @@ El `docker-compose.yml` define los siguientes servicios:
 - `app`
   - Construye la aplicación desde `Dockerfile`
   - Expone `3001:3000`
-  - Monta `./data` y `./backups`
+  - Monta `./data` y un directorio persistente de backups del host
   - Usa variables de entorno:
     - `DATABASE_URL=postgresql://postgres:postgres@postgres:5432/pietrosoft_notes`
     - `WORKSPACE_PATH=/data`
     - `BACKUP_DIR=/backups`
+    - `BACKUP_HOST_DIR=/opt/bitacora-backups` en servidor
     - `NODE_ENV=production`
 - `postgres`
   - Imagen `postgres:16-alpine`
@@ -101,7 +102,7 @@ Para acceder a PostgreSQL desde Adminer en los servidores:
 
 La aplicación tiene endpoints para exportar backups y restaurarlos.
 
-- Backups se almacenan en `backups/`.
+- Backups se almacenan en `/opt/bitacora-backups` en el host del servidor y se montan dentro del contenedor como `/backups`.
 - El proceso de restore debe incluir la tabla `taskComments` junto con el resto de la base de datos.
 
 ## Observaciones importantes

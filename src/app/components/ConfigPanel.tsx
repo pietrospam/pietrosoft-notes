@@ -30,6 +30,7 @@ interface BackupMetadata {
 
 interface BackupSettings {
   retentionCount: number;
+  maxAgeDays: number;
   autoBackupEnabled: boolean;
   autoBackupFrequency: 'daily' | 'weekly' | 'monthly';
   autoBackupTime: string;
@@ -54,6 +55,7 @@ function ServerBackupsSection() {
   const hasSettingsChanges = useCallback(() => {
     if (!settings || !originalSettings) return false;
     return settings.retentionCount !== originalSettings.retentionCount ||
+      settings.maxAgeDays !== originalSettings.maxAgeDays ||
       settings.autoBackupEnabled !== originalSettings.autoBackupEnabled ||
       settings.autoBackupFrequency !== originalSettings.autoBackupFrequency ||
       settings.autoBackupTime !== originalSettings.autoBackupTime;
@@ -324,22 +326,42 @@ function ServerBackupsSection() {
               <Timer size={14} className="inline mr-1" />
               Retención de Backups
             </label>
-            <div className="flex items-center gap-3">
-              <select
-                value={settings.retentionCount}
-                onChange={(e) => updateSettings({ retentionCount: parseInt(e.target.value) })}
-                className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
-              >
-                <option value={0}>Ilimitado</option>
-                <option value={5}>Últimos 5 backups</option>
-                <option value={10}>Últimos 10 backups</option>
-                <option value={20}>Últimos 20 backups</option>
-                <option value={30}>Últimos 30 backups</option>
-                <option value={50}>Últimos 50 backups</option>
-              </select>
-              <span className="text-xs text-gray-500">
-                (Los backups protegidos no se eliminan)
-              </span>
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <select
+                  value={settings.retentionCount}
+                  onChange={(e) => updateSettings({ retentionCount: parseInt(e.target.value) })}
+                  className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                >
+                  <option value={0}>Ilimitado</option>
+                  <option value={5}>Últimos 5 backups</option>
+                  <option value={10}>Últimos 10 backups</option>
+                  <option value={20}>Últimos 20 backups</option>
+                  <option value={30}>Últimos 30 backups</option>
+                  <option value={50}>Últimos 50 backups</option>
+                </select>
+                <span className="text-xs text-gray-500">
+                  (Los backups protegidos no se eliminan)
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <select
+                  value={settings.maxAgeDays}
+                  onChange={(e) => updateSettings({ maxAgeDays: parseInt(e.target.value) })}
+                  className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                >
+                  <option value={0}>Sin límite por edad</option>
+                  <option value={7}>Más de 7 días</option>
+                  <option value={15}>Más de 15 días</option>
+                  <option value={30}>Más de 30 días</option>
+                  <option value={60}>Más de 60 días</option>
+                  <option value={90}>Más de 90 días</option>
+                </select>
+                <span className="text-xs text-gray-500">
+                  Borra backups no protegidos que superen esa antigüedad
+                </span>
+              </div>
             </div>
           </div>
 

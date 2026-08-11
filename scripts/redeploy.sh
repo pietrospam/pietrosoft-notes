@@ -10,6 +10,7 @@ fatal() {
 PROD_HOST="root@192.168.100.113"
 REMOTE_HOST="${DEPLOY_HOST:-$PROD_HOST}"
 REMOTE_PATH="/opt/pietrosoft-notes"
+BACKUP_HOST_DIR="/opt/bitacora-backups"
 LOCAL_PATH="$(cd "$(dirname "$0")/.." && pwd)"
 REMOTE_IP="${REMOTE_HOST#*@}"
 CONTROL_SOCKET="/tmp/pietrosoft-notes-${REMOTE_IP}.sock"
@@ -85,12 +86,12 @@ else
 fi
 
 # Step 4: Build app image on remote server before backup generation
+echo "� Ensuring backups directory is writable by the app user..."
+ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "mkdir -p $BACKUP_HOST_DIR && chown -R 1000:1000 $BACKUP_HOST_DIR"
+
 if [ "$REMOTE_HOST" = "$PROD_HOST" ]; then
   echo "🔧 Building remote app image for backup generation..."
   ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && APP_ENV=$APP_ENV docker compose build app"
-
-  echo "� Ensuring backups directory is writable by the app user..."
-  ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && mkdir -p backups && chown -R 1000:1000 backups"
 
   echo "�📦 Creating a remote backup before deploy..."
   backup_response=$(ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && docker compose run --rm app sh -c 'cat > /tmp/create-backup.js && NODE_PATH=/app/node_modules node /tmp/create-backup.js'" < "$LOCAL_PATH/scripts/create-backup.js")
@@ -109,7 +110,7 @@ if [ "$REMOTE_HOST" = "$PROD_HOST" ]; then
   echo "📝 Remote backup filename: $backup_filename"
   mkdir -p "$LOCAL_PATH/backups"
   echo "⬇️ Downloading backup $backup_filename to local backups/..."
-  scp -o ControlMaster=no -o ControlPath="$CONTROL_SOCKET" -o ControlPersist=10m "$REMOTE_HOST:$REMOTE_PATH/backups/$backup_filename" "$LOCAL_PATH/backups/" || fatal "Failed to download backup file. Aborting deploy."
+  scp -o ControlMaster=no -o ControlPath="$CONTROL_SOCKET" -o ControlPersist=10m "$REMOTE_HOST:$BACKUP_HOST_DIR/$backup_filename" "$LOCAL_PATH/backups/" || fatal "Failed to download backup file. Aborting deploy."
   echo "✅ Backup downloaded to $LOCAL_PATH/backups/$backup_filename"
 fi
 

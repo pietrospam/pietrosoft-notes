@@ -53,6 +53,11 @@ interface BackupMetadata {
   stats?: BackupManifest['stats'];
 }
 
+interface BackupSettingsSummary {
+  retentionCount: number;
+  maxAgeDays: number;
+}
+
 // Helper: Read manifest from ZIP without extracting
 async function readBackupManifest(zipPath: string): Promise<Partial<BackupManifest> | null> {
   try {
@@ -84,14 +89,17 @@ function extractDateFromFilename(filename: string): string {
 }
 
 // Helper: Read backup settings
-async function readBackupSettings(): Promise<{ retentionCount: number }> {
+async function readBackupSettings(): Promise<BackupSettingsSummary> {
   const settingsPath = path.join(BACKUP_DIR, 'backup-settings.json');
   try {
     const content = await fs.readFile(settingsPath, 'utf-8');
     const settings = JSON.parse(content);
-    return { retentionCount: settings.retentionCount || 0 };
+    return {
+      retentionCount: settings.retentionCount || 0,
+      maxAgeDays: settings.maxAgeDays || 0,
+    };
   } catch {
-    return { retentionCount: 0 }; // 0 = unlimited
+    return { retentionCount: 0, maxAgeDays: 0 }; // 0 = unlimited
   }
 }
 
@@ -99,10 +107,6 @@ async function readBackupSettings(): Promise<{ retentionCount: number }> {
 async function applyRetentionPolicy(): Promise<void> {
   try {
     const settings = await readBackupSettings();
-    if (settings.retentionCount <= 0) {
-      return; // Unlimited retention
-    }
-    
     const files = await fs.readdir(BACKUP_DIR);
     const zipFiles = files.filter(f => f.endsWith('.zip'));
     
@@ -123,11 +127,43 @@ async function applyRetentionPolicy(): Promise<void> {
     backupsWithInfo.sort((a, b) => 
       new Date(b.date).getTime() - new Date(a.date).getTime()
     );
-    
+
+    const now = Date.now();
+    const maxAgeMs = settings.maxAgeDays > 0 ? settings.maxAgeDays * 24 * 60 * 60 * 1000 : 0;
+    const deletedFilenames = new Set<string>();
+
+    // Delete backups that are older than the configured age limit first.
+    if (maxAgeMs > 0) {
+      for (const backup of backupsWithInfo) {
+        if (backup.protected) {
+          continue;
+        }
+
+        const backupAgeMs = now - new Date(backup.date).getTime();
+        if (backupAgeMs > maxAgeMs) {
+          const filePath = path.join(BACKUP_DIR, backup.filename);
+          try {
+            await fs.unlink(filePath);
+            deletedFilenames.add(backup.filename);
+            console.log(`Retention policy: Deleted aged backup ${backup.filename}`);
+          } catch (err) {
+            console.warn(`Failed to delete aged backup ${backup.filename}:`, err);
+          }
+        }
+      }
+    }
+
+    if (settings.retentionCount <= 0) {
+      return; // Unlimited count retention, age cleanup already applied
+    }
+
     // Keep track of non-protected backups
     let nonProtectedCount = 0;
-    
+
     for (const backup of backupsWithInfo) {
+      if (deletedFilenames.has(backup.filename)) {
+        continue;
+      }
       if (backup.protected) {
         continue; // Never delete protected backups
       }

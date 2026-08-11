@@ -2,7 +2,13 @@ import type { BillingPreview } from './types';
 
 export function formatDate(date: Date): string {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+  return `${months[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()}`;
+}
+
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date.getTime());
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
 }
 
 function escapeRegExp(value: string): string {
@@ -84,22 +90,39 @@ export function buildPayloadFromTemplate(
   template: Record<string, unknown>,
   preview: BillingPreview,
   invoiceNumber: string,
-  invoiceDate: Date
+  invoiceDate: Date,
+  currency: string,
+  paymentTermDays: number,
+  dueDateOverride?: string
 ): Record<string, unknown> {
   const payload = JSON.parse(JSON.stringify(template));
+  const dueDate = dueDateOverride !== undefined
+    ? dueDateOverride
+    : paymentTermDays > 0
+      ? formatDate(addDays(invoiceDate, paymentTermDays))
+      : '';
 
   const replacements: Record<string, string> = {
     '{{invoiceNumber}}': invoiceNumber,
     '{{date}}': formatDate(invoiceDate),
+    '{{dueDate}}': dueDate,
     '{{month}}': String(preview.month),
     '{{year}}': String(preview.year),
     '{{clientName}}': preview.clientName,
     '{{totalHours}}': String(preview.totalHours),
     '{{periodStart}}': preview.periodStart,
     '{{periodEnd}}': preview.periodEnd,
+    '{{currency}}': currency,
+    '{{paymentTermDays}}': String(paymentTermDays),
   };
 
   replaceInObject(payload, replacements);
+
+  if (dueDate) {
+    (payload as Record<string, unknown>).due_date = dueDate;
+  } else if ('due_date' in payload) {
+    delete (payload as Record<string, unknown>).due_date;
+  }
 
   if (Array.isArray(payload.items) && payload.items.length > 0) {
     const itemTemplate = payload.items[0];
@@ -127,16 +150,25 @@ export function buildPayloadFromTemplate(
 export function buildDefaultPayload(
   preview: BillingPreview,
   invoiceNumber: string,
-  invoiceDate: Date
+  invoiceDate: Date,
+  currency: string,
+  paymentTermDays: number,
+  dueDateOverride?: string
 ): Record<string, unknown> {
+  const dueDate = dueDateOverride !== undefined
+    ? dueDateOverride
+    : paymentTermDays > 0
+      ? formatDate(addDays(invoiceDate, paymentTermDays))
+      : undefined;
   return {
     number: invoiceNumber,
     date: formatDate(invoiceDate),
     header: 'INVOICE',
     from: '',
     to: preview.clientName,
-    currency: 'EUR',
+    currency,
     balance_title: 'Amount to Pay',
+    ...(dueDate ? { due_date: dueDate } : {}),
     items: [
       {
         name: 'Desarrollo de Software',
@@ -154,11 +186,14 @@ export function buildExternalPayload(
   preview: BillingPreview,
   invoiceNumber: string,
   invoiceDate: Date,
-  billingItems: Array<{ name: string; quantity: number; unit_cost: number; total: number; description?: string }> = []
+  currency: string,
+  paymentTermDays: number,
+  billingItems: Array<{ name: string; quantity: number; unit_cost: number; total: number; description?: string }> = [],
+  dueDateOverride?: string
 ): Record<string, unknown> {
   const payload = methodPayloadTemplate
-    ? buildPayloadFromTemplate(methodPayloadTemplate, preview, invoiceNumber, invoiceDate)
-    : buildDefaultPayload(preview, invoiceNumber, invoiceDate);
+    ? buildPayloadFromTemplate(methodPayloadTemplate, preview, invoiceNumber, invoiceDate, currency, paymentTermDays, dueDateOverride)
+    : buildDefaultPayload(preview, invoiceNumber, invoiceDate, currency, paymentTermDays, dueDateOverride);
 
   if (billingItems.length > 0) {
     payload.items = billingItems.map((item) => {

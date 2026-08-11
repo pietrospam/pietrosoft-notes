@@ -22,6 +22,7 @@ function getArgentinaTime(): { hours: number; minutes: number } {
 
 interface BackupSettings {
   retentionCount: number;
+  maxAgeDays: number;
   autoBackupEnabled: boolean;
   autoBackupFrequency: 'daily' | 'weekly' | 'monthly';
   autoBackupTime: string;
@@ -281,7 +282,7 @@ export async function POST() {
     await writeSettings(settings);
 
     // Apply retention policy
-    await applyRetentionPolicy(settings.retentionCount);
+    await applyRetentionPolicy(settings);
 
     // Send Telegram notification (async, don't block response)
     notifyBackupSuccess({
@@ -339,9 +340,7 @@ export async function GET() {
 }
 
 // Helper: Apply retention policy
-async function applyRetentionPolicy(retentionCount: number): Promise<void> {
-  if (retentionCount <= 0) return;
-
+async function applyRetentionPolicy(settings: BackupSettings): Promise<void> {
   try {
     const JSZip = (await import('jszip')).default;
     const files = await fs.readdir(BACKUP_DIR);
@@ -385,12 +384,37 @@ async function applyRetentionPolicy(retentionCount: number): Promise<void> {
       new Date(b.date).getTime() - new Date(a.date).getTime()
     );
 
+    const now = Date.now();
+    const maxAgeMs = settings.maxAgeDays > 0 ? settings.maxAgeDays * 24 * 60 * 60 * 1000 : 0;
+    const deletedFilenames = new Set<string>();
+
+    if (maxAgeMs > 0) {
+      for (const backup of backupsWithInfo) {
+        if (backup.protected) continue;
+
+        const backupAgeMs = now - new Date(backup.date).getTime();
+        if (backupAgeMs > maxAgeMs) {
+          const filePath = path.join(BACKUP_DIR, backup.filename);
+          try {
+            await fs.unlink(filePath);
+            deletedFilenames.add(backup.filename);
+            console.log(`Retention: Deleted aged backup ${backup.filename}`);
+          } catch (err) {
+            console.warn(`Failed to delete aged backup ${backup.filename}:`, err);
+          }
+        }
+      }
+    }
+
+    if (settings.retentionCount <= 0) return;
+
     let nonProtectedCount = 0;
     for (const backup of backupsWithInfo) {
+      if (deletedFilenames.has(backup.filename)) continue;
       if (backup.protected) continue;
       nonProtectedCount++;
 
-      if (nonProtectedCount > retentionCount) {
+      if (nonProtectedCount > settings.retentionCount) {
         const filePath = path.join(BACKUP_DIR, backup.filename);
         try {
           await fs.unlink(filePath);

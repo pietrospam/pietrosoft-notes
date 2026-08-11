@@ -83,6 +83,7 @@ interface TipTapEditorProps {
   onAttachmentAdded?: () => void; // Called when an image/attachment is added (for refreshing comments)
   readOnly?: boolean; // disable editing and hide toolbar
   compact?: boolean; // reduce height for inline comment inputs
+  bare?: boolean; // remove editor chrome for dense embedding
   copyWithImagesOnCopy?: boolean; // If enabled, intercept Ctrl+C and embed images
   showStaticToolbar?: boolean; // Show the sticky toolbar at the top of the editor
 }
@@ -93,7 +94,7 @@ export interface TipTapEditorHandle {
   getText: () => string;
 }
 
-export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(function TipTapEditor({ content, onChange, placeholder = 'Start writing...', noteId, onPersistNote, onAttachmentAdded, readOnly = false, compact = false, copyWithImagesOnCopy, showStaticToolbar = true }, ref) {
+export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(function TipTapEditor({ content, onChange, placeholder = 'Start writing...', noteId, onPersistNote, onAttachmentAdded, readOnly = false, compact = false, bare = false, copyWithImagesOnCopy, showStaticToolbar = true }, ref) {
   const { copyWithImagesOnCopy: globalCopyWithImagesOnCopy } = useApp();
   const effectiveCopyWithImagesOnCopy = copyWithImagesOnCopy ?? globalCopyWithImagesOnCopy;
   const onChangeRef = useRef(onChange);
@@ -218,7 +219,11 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
     editorProps: {
       attributes: {
         class: readOnly 
-          ? 'prose prose-invert prose-sm prose-compact max-w-none' 
+          ? bare
+            ? 'text-[10px] leading-tight text-gray-400 [&_p]:!m-0 [&_p]:!mb-0.5 [&_p]:!leading-tight [&_p]:text-[10px] [&_a]:text-[10px] [&_a]:text-blue-300 [&_a]:underline'
+            : compact
+            ? 'prose prose-invert prose-sm prose-compact max-w-none'
+            : 'prose prose-invert prose-sm max-w-none'
           : compact
             ? 'prose prose-invert prose-sm max-w-none focus:outline-none min-h-[60px]'
             : 'prose prose-invert prose-sm max-w-none focus:outline-none min-h-[200px]',
@@ -516,6 +521,17 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
     return <div className="animate-pulse bg-gray-800 h-48 rounded" />;
   }
 
+  if (bare) {
+    return (
+      <div
+        ref={editorWrapperRef}
+        className="relative"
+      >
+        <EditorContent editor={editor} />
+      </div>
+    );
+  }
+
   return (
     <div
       ref={editorWrapperRef}
@@ -691,7 +707,7 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
         </div>
       )}
 
-      <div className="bg-slate-950 px-3 py-3">
+      <div className={readOnly && compact ? 'bg-slate-950 px-2 py-2' : 'bg-slate-950 px-3 py-3'}>
         <EditorContent editor={editor} />
       </div>
 

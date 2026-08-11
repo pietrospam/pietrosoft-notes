@@ -8,6 +8,7 @@ const BACKUP_DIR = process.env.BACKUP_DIR || './backups';
 
 interface BackupSettings {
   retentionCount: number;        // Max number of backups to keep (0 = unlimited)
+  maxAgeDays: number;            // Max age in days for non-protected backups (0 = unlimited)
   autoBackupEnabled: boolean;    // Whether auto-backup is enabled
   autoBackupFrequency: 'daily' | 'weekly' | 'monthly';  // Frequency of auto-backups
   autoBackupTime: string;        // Time of day for auto-backup (HH:MM format)
@@ -16,6 +17,7 @@ interface BackupSettings {
 
 const DEFAULT_SETTINGS: BackupSettings = {
   retentionCount: 10,
+  maxAgeDays: 0,
   autoBackupEnabled: false,
   autoBackupFrequency: 'daily',
   autoBackupTime: '03:00',
@@ -68,6 +70,9 @@ export async function PUT(request: NextRequest) {
       retentionCount: typeof body.retentionCount === 'number' 
         ? Math.max(0, Math.floor(body.retentionCount)) 
         : currentSettings.retentionCount,
+      maxAgeDays: typeof body.maxAgeDays === 'number'
+        ? Math.max(0, Math.floor(body.maxAgeDays))
+        : currentSettings.maxAgeDays ?? DEFAULT_SETTINGS.maxAgeDays,
       autoBackupEnabled: typeof body.autoBackupEnabled === 'boolean'
         ? body.autoBackupEnabled
         : currentSettings.autoBackupEnabled,

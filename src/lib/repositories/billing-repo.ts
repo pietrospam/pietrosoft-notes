@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import prisma from '../db';
 import type {
   BillingMethod,
@@ -12,21 +13,25 @@ import type {
 // Billing Methods Repository
 // ============================================================================
 
-function toBillingMethod(row: {
+type BillingMethodDbRow = {
   id: string;
   name: string;
   endpointUrl: string;
   authType: string;
-  authConfig: unknown;
-  payloadTemplate: unknown;
+  authConfig: Prisma.JsonValue | null;
+  payloadTemplate: Prisma.JsonValue | null;
   nextInvoiceNumber: number;
   invoicePrefix: string | null;
+  currency: string;
+  paymentTermDays: number;
   clientParentId: string | null;
   active: boolean;
   createdAt: Date;
   updatedAt: Date;
-  client?: { name: string } | null;
-}): BillingMethod {
+  client_name?: string | null;
+};
+
+function toBillingMethod(row: BillingMethodDbRow): BillingMethod {
   return {
     id: row.id,
     name: row.name,
@@ -36,71 +41,155 @@ function toBillingMethod(row: {
     payloadTemplate: (row.payloadTemplate as BillingMethod['payloadTemplate']) ?? undefined,
     nextInvoiceNumber: row.nextInvoiceNumber,
     invoicePrefix: row.invoicePrefix ?? undefined,
+    currency: row.currency,
+    paymentTermDays: row.paymentTermDays,
     clientParentId: row.clientParentId ?? '',
     active: row.active,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
-    clientName: row.client?.name ?? undefined,
+    clientName: row.client_name ?? undefined,
   };
 }
 
 export async function getAllBillingMethods(filters?: { clientParentId?: string }): Promise<BillingMethod[]> {
-  const where: Record<string, unknown> = { active: true };
-  if (filters?.clientParentId) where.clientParentId = filters.clientParentId;
-
-  const rows = await prisma.billingMethod.findMany({
-    where,
-    include: { client: { select: { name: true } } },
-    orderBy: { name: 'asc' },
-  });
+  const rows = await prisma.$queryRaw<BillingMethodDbRow[]>(Prisma.sql`
+    SELECT
+      bm.id,
+      bm.name,
+      bm.endpoint_url AS "endpointUrl",
+      bm.auth_type AS "authType",
+      bm.auth_config AS "authConfig",
+      bm.payload_template AS "payloadTemplate",
+      bm.next_invoice_number AS "nextInvoiceNumber",
+      bm.invoice_prefix AS "invoicePrefix",
+      bm.currency,
+      bm.payment_term_days AS "paymentTermDays",
+      bm.client_parent_id AS "clientParentId",
+      bm.active,
+      bm.created_at AS "createdAt",
+      bm.updated_at AS "updatedAt",
+      c.name AS client_name
+    FROM billing_methods bm
+    LEFT JOIN clients c ON c.id = bm.client_parent_id
+    WHERE bm.active = true
+    ${filters?.clientParentId ? Prisma.sql`AND bm.client_parent_id = ${filters.clientParentId}` : Prisma.empty}
+    ORDER BY bm.name ASC
+  `);
   return rows.map(toBillingMethod);
 }
 
 export async function getBillingMethodById(id: string): Promise<BillingMethod | null> {
-  const row = await prisma.billingMethod.findUnique({ where: { id } });
-  return row ? toBillingMethod(row) : null;
+  const rows = await prisma.$queryRaw<BillingMethodDbRow[]>(Prisma.sql`
+    SELECT
+      bm.id,
+      bm.name,
+      bm.endpoint_url AS "endpointUrl",
+      bm.auth_type AS "authType",
+      bm.auth_config AS "authConfig",
+      bm.payload_template AS "payloadTemplate",
+      bm.next_invoice_number AS "nextInvoiceNumber",
+      bm.invoice_prefix AS "invoicePrefix",
+      bm.currency,
+      bm.payment_term_days AS "paymentTermDays",
+      bm.client_parent_id AS "clientParentId",
+      bm.active,
+      bm.created_at AS "createdAt",
+      bm.updated_at AS "updatedAt",
+      c.name AS client_name
+    FROM billing_methods bm
+    LEFT JOIN clients c ON c.id = bm.client_parent_id
+    WHERE bm.id = ${id}
+    LIMIT 1
+  `);
+  return rows[0] ? toBillingMethod(rows[0]) : null;
 }
 
 export async function createBillingMethod(input: CreateBillingMethodInput): Promise<BillingMethod> {
-  const row = await prisma.billingMethod.create({
-    data: {
-      name: input.name,
-      endpointUrl: input.endpointUrl,
-      authType: input.authType || 'none',
-      authConfig: input.authConfig ? (input.authConfig as object) : undefined,
-      payloadTemplate: input.payloadTemplate ? (input.payloadTemplate as object) : undefined,
-      nextInvoiceNumber: input.nextInvoiceNumber ?? 1,
-      invoicePrefix: input.invoicePrefix ?? null,
-      clientParentId: input.clientParentId,
-      active: input.active ?? true,
-    },
-    include: { client: { select: { name: true } } },
-  });
-  return toBillingMethod(row);
+  const [row] = await prisma.$queryRaw<BillingMethodDbRow[]>(Prisma.sql`
+    INSERT INTO billing_methods (
+      name,
+      endpoint_url,
+      auth_type,
+      auth_config,
+      payload_template,
+      next_invoice_number,
+      invoice_prefix,
+      currency,
+      payment_term_days,
+      client_parent_id,
+      active,
+      created_at,
+      updated_at
+    ) VALUES (
+      ${input.name},
+      ${input.endpointUrl},
+      ${input.authType || 'none'},
+      ${input.authConfig ? JSON.stringify(input.authConfig) : null}::jsonb,
+      ${input.payloadTemplate ? JSON.stringify(input.payloadTemplate) : null}::jsonb,
+      ${input.nextInvoiceNumber ?? 1},
+      ${input.invoicePrefix ?? null},
+      ${input.currency ?? 'EUR'},
+      ${input.paymentTermDays ?? 0},
+      ${input.clientParentId},
+      ${input.active ?? true},
+      now(),
+      now()
+    )
+    RETURNING
+      id,
+      name,
+      endpoint_url AS "endpointUrl",
+      auth_type AS "authType",
+      auth_config AS "authConfig",
+      payload_template AS "payloadTemplate",
+      next_invoice_number AS "nextInvoiceNumber",
+      invoice_prefix AS "invoicePrefix",
+      currency,
+      payment_term_days AS "paymentTermDays",
+      client_parent_id AS "clientParentId",
+      active,
+      created_at AS "createdAt",
+      updated_at AS "updatedAt"
+  `);
+  const created = row ? await getBillingMethodById(row.id) : null;
+  if (!created) {
+    throw new Error('Failed to create billing method');
+  }
+  return created;
 }
 
 export async function updateBillingMethod(id: string, input: UpdateBillingMethodInput): Promise<BillingMethod> {
-  const data: Record<string, unknown> = { updatedAt: new Date() };
-  if (input.name !== undefined) data.name = input.name;
-  if (input.endpointUrl !== undefined) data.endpointUrl = input.endpointUrl;
-  if (input.authType !== undefined) data.authType = input.authType;
-  if (input.authConfig !== undefined) data.authConfig = input.authConfig as object;
-  if (input.payloadTemplate !== undefined) data.payloadTemplate = input.payloadTemplate as object;
-  if (input.nextInvoiceNumber !== undefined) data.nextInvoiceNumber = input.nextInvoiceNumber;
-  if (input.invoicePrefix !== undefined) data.invoicePrefix = input.invoicePrefix;
-  if (input.clientParentId !== undefined) data.clientParentId = input.clientParentId;
-  if (input.active !== undefined) data.active = input.active;
-
-  const row = await prisma.billingMethod.update({ where: { id }, data, include: { client: { select: { name: true } } } });
-  return toBillingMethod(row);
+  await prisma.$executeRaw(Prisma.sql`
+    UPDATE billing_methods
+    SET
+      name = COALESCE(${input.name}, name),
+      endpoint_url = COALESCE(${input.endpointUrl}, endpoint_url),
+      auth_type = COALESCE(${input.authType}, auth_type),
+      auth_config = COALESCE(${input.authConfig !== undefined ? JSON.stringify(input.authConfig) : null}::jsonb, auth_config),
+      payload_template = COALESCE(${input.payloadTemplate !== undefined ? JSON.stringify(input.payloadTemplate) : null}::jsonb, payload_template),
+      next_invoice_number = COALESCE(${input.nextInvoiceNumber ?? null}, next_invoice_number),
+      invoice_prefix = COALESCE(${input.invoicePrefix ?? null}, invoice_prefix),
+      currency = COALESCE(${input.currency ?? null}, currency),
+      payment_term_days = COALESCE(${input.paymentTermDays ?? null}, payment_term_days),
+      client_parent_id = COALESCE(${input.clientParentId ?? null}, client_parent_id),
+      active = COALESCE(${input.active ?? null}, active),
+      updated_at = now()
+    WHERE id = ${id}
+  `);
+  const updated = await getBillingMethodById(id);
+  if (!updated) {
+    throw new Error('Failed to update billing method');
+  }
+  return updated;
 }
 
 export async function deleteBillingMethod(id: string): Promise<void> {
   // Soft-delete: mark inactive
-  await prisma.billingMethod.update({
-    where: { id },
-    data: { active: false, updatedAt: new Date() },
-  });
+  await prisma.$executeRaw(Prisma.sql`
+    UPDATE billing_methods
+    SET active = false, updated_at = now()
+    WHERE id = ${id}
+  `);
 }
 
 // ============================================================================
@@ -359,7 +448,9 @@ export async function getBillingRunPdf(id: string): Promise<{ data: Buffer; file
       invoiceNumber: true,
       year: true,
       month: true,
+      invoiceState: true,
       validated: true,
+      sentToClient: true,
       clientParentId: true,
       pdfFilename: true,
     },
@@ -377,7 +468,9 @@ export async function getBillingRunPdf(id: string): Promise<{ data: Buffer; file
     row.year,
     row.month,
     row.invoiceNumber ?? '00000000',
-    row.validated
+    row.invoiceState,
+    row.validated,
+    row.sentToClient
   );
   return {
     data: Buffer.from(row.pdfData),
@@ -385,13 +478,23 @@ export async function getBillingRunPdf(id: string): Promise<{ data: Buffer; file
   };
 }
 
-function buildBillingPdfFilename(clientName: string, year: number, month: number, invoiceNumber: string, validated: boolean): string {
+function buildBillingPdfFilename(
+  clientName: string,
+  year: number,
+  month: number,
+  invoiceNumber: string,
+  invoiceState?: string | null,
+  validated?: boolean,
+  sentToClient?: boolean
+): string {
   const cleanClient = clientName
     .trim()
     .replace(/\s+/g, '_')
     .replace(/[^A-Za-z0-9_-]/g, '');
   const monthStr = String(month).padStart(2, '0');
-  const prefix = validated ? '' : 'TEST_';
+  const finalizedStates = new Set(['validada', 'enviada', 'pagada']);
+  const isFinal = finalizedStates.has(invoiceState || '') || validated || sentToClient;
+  const prefix = isFinal ? '' : 'TEST_';
   return `${prefix}${cleanClient}_${year}_${monthStr}_${invoiceNumber}.pdf`;
 }
 
@@ -530,6 +633,27 @@ export async function getNextInvoiceNumber(methodId: string): Promise<string> {
   // The value BEFORE increment is nextInvoiceNumber - 1
   const num = method.nextInvoiceNumber - 1;
   return String(num).padStart(8, '0');
+}
+
+export async function getNextInvoiceNumberFromRuns(methodId: string): Promise<string> {
+  const method = await prisma.billingMethod.findUnique({
+    where: { id: methodId },
+    select: { invoicePrefix: true },
+  });
+  if (!method) {
+    throw new Error('Billing method not found');
+  }
+
+  const rows = await prisma.$queryRaw<{ maxNumber: number }[]>(Prisma.sql`
+    SELECT
+      COALESCE(MAX(NULLIF(regexp_replace(invoice_number, '\\D', '', 'g'), '')::int), 0) AS "maxNumber"
+    FROM billing_runs
+    WHERE method_id = ${methodId}
+  `);
+
+  const maxNumber = rows[0]?.maxNumber ?? 0;
+  const nextNumber = maxNumber + 1;
+  return `${method.invoicePrefix || ''}${String(nextNumber).padStart(8, '0')}`;
 }
 
 export async function peekNextInvoiceNumber(methodId: string): Promise<string> {

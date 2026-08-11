@@ -44,6 +44,40 @@ const parseTimelineDate = (value: string): string | null => {
   return Number.isNaN(new Date(iso).getTime()) ? null : iso;
 };
 
+const parseIsoDate = (value?: string): Date | null => {
+  if (!value) return null;
+  const [year, month, day] = value.split('-');
+  if (!year || !month || !day) return null;
+  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), 0, 0, 0, 0));
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const formatIsoDate = (date: Date) => date.toISOString().slice(0, 10);
+
+const formatInvoiceTitle = (invoiceNumber: string) => {
+  const match = invoiceNumber.match(/^([^0-9]*)([0-9]+)$/);
+  if (!match) {
+    return `Factura ${invoiceNumber}`;
+  }
+  const [, prefix, numberParts] = match;
+  return `Factura ${prefix}${String(numberParts).padStart(8, '0')}`;
+};
+
+const parseAnyDateToIso = (value?: unknown): string | undefined => {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return formatIsoDate(new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0)));
+};
+
+const addDaysIso = (date: Date, days: number) => {
+  const next = new Date(date.getTime());
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+};
+
+const lastDayOfMonthIso = (year: number, month: number) => formatIsoDate(new Date(Date.UTC(year, month, 0, 0, 0, 0, 0)));
+
 const DEFAULT_BILLING_DATE = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1);
 const DEFAULT_PERIOD_START = new Date(Date.UTC(DEFAULT_BILLING_DATE.getFullYear(), DEFAULT_BILLING_DATE.getMonth(), 1)).toISOString().slice(0, 10);
 const DEFAULT_PERIOD_END = new Date(Date.UTC(DEFAULT_BILLING_DATE.getFullYear(), DEFAULT_BILLING_DATE.getMonth() + 1, 0)).toISOString().slice(0, 10);
@@ -68,6 +102,10 @@ export function BillingEditorModal({
   const [invoiceNumber, setInvoiceNumber] = useState(billingRun?.invoiceNumber || '');
   const [invoiceNumberDirty, setInvoiceNumberDirty] = useState(false);
   const [invoiceTitleDirty, setInvoiceTitleDirty] = useState(false);
+  const [invoiceDateIso, setInvoiceDateIso] = useState(lastDayOfMonthIso(DEFAULT_BILLING_DATE.getFullYear(), DEFAULT_BILLING_DATE.getMonth() + 1));
+  const [invoiceDateDirty, setInvoiceDateDirty] = useState(false);
+  const [dueDateIso, setDueDateIso] = useState('');
+  const [dueDateDirty, setDueDateDirty] = useState(false);
   const [selectedYear, setSelectedYear] = useState(billingRun?.year ?? DEFAULT_BILLING_DATE.getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(billingRun?.month ?? DEFAULT_BILLING_DATE.getMonth() + 1);
   const [periodStart, setPeriodStart] = useState(billingRun?.periodStart || defaultPeriodStart);
@@ -77,10 +115,12 @@ export function BillingEditorModal({
   const [currency, setCurrency] = useState(billingRun?.currency || 'EUR');
   const [exchangeRateUsd, setExchangeRateUsd] = useState<number | undefined>(billingRun?.exchangeRateUsd ?? (billingRun?.currency === 'EUR' ? undefined : 1));
   const [items, setItems] = useState<BillingItemDraft[]>([]);
-  const invoiceDate = useMemo(
-    () => new Date(Date.UTC(selectedYear, selectedMonth, 0, 0, 0, 0, 0)),
-    [selectedYear, selectedMonth]
-  );
+  const invoiceDate = useMemo(() => {
+    const parsed = parseIsoDate(invoiceDateIso);
+    if (parsed) return parsed;
+    return new Date(Date.UTC(selectedYear, selectedMonth, 0, 0, 0, 0, 0));
+  }, [invoiceDateIso, selectedYear, selectedMonth]);
+
   const selectedMethod = useMemo(
     () => methods.find((method) => method.id === methodId),
     [methods, methodId]
@@ -88,6 +128,10 @@ export function BillingEditorModal({
   const [saving, setSaving] = useState(false);
   const [hoursExpanded, setHoursExpanded] = useState(false);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
+  const computedDueDateIso = useMemo(() => {
+    if (!selectedMethod || selectedMethod.paymentTermDays <= 0) return '';
+    return formatIsoDate(addDaysIso(invoiceDate, selectedMethod.paymentTermDays));
+  }, [selectedMethod, invoiceDate]);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [showRequestJson, setShowRequestJson] = useState(false);
   const [requestJsonDraft, setRequestJsonDraft] = useState('');
@@ -96,17 +140,6 @@ export function BillingEditorModal({
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const billingClients = clients.filter((client) => !client.disabled && !client.parentClientId);
-
-  const resetPeriodFromMonth = useCallback((year: number, month: number) => {
-    const start = new Date(Date.UTC(year, month - 1, 1));
-    const end = new Date(Date.UTC(year, month, 0));
-    const startIso = start.toISOString().slice(0, 10);
-    const endIso = end.toISOString().slice(0, 10);
-    setPeriodStart(startIso);
-    setPeriodEnd(endIso);
-    setPeriodStartInput(formatTimelineDate(startIso));
-    setPeriodEndInput(formatTimelineDate(endIso));
-  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -128,6 +161,16 @@ export function BillingEditorModal({
       setRequestJsonDirty(false);
       setShowRequestJson(false);
       setJsonError(null);
+
+      const existingInvoiceDate = parseAnyDateToIso(
+        billingRun.requestJson?.invoiceDate ?? billingRun.requestJson?.date ?? billingRun.requestJson?.fecha
+      );
+      setInvoiceDateIso(existingInvoiceDate || lastDayOfMonthIso(billingRun.year, billingRun.month));
+      setInvoiceDateDirty(Boolean(existingInvoiceDate));
+
+      const existingDueDate = parseAnyDateToIso(billingRun.requestJson?.due_date ?? billingRun.requestJson?.dueDate);
+      setDueDateIso(existingDueDate ?? '');
+      setDueDateDirty(Boolean(existingDueDate));
     } else {
       setClientParentId(clientId);
       setMethodId('');
@@ -135,6 +178,10 @@ export function BillingEditorModal({
       setInvoiceNumber('');
       setInvoiceNumberDirty(false);
       setInvoiceTitleDirty(false);
+      setInvoiceDateIso(lastDayOfMonthIso(DEFAULT_BILLING_DATE.getFullYear(), DEFAULT_BILLING_DATE.getMonth() + 1));
+      setInvoiceDateDirty(false);
+      setDueDateIso('');
+      setDueDateDirty(false);
       setSelectedYear(DEFAULT_BILLING_DATE.getFullYear());
       setSelectedMonth(DEFAULT_BILLING_DATE.getMonth() + 1);
       setPeriodStart(defaultPeriodStart);
@@ -154,8 +201,56 @@ export function BillingEditorModal({
 
   useEffect(() => {
     if (!open) return;
-    resetPeriodFromMonth(selectedYear, selectedMonth);
-  }, [open, selectedYear, selectedMonth, resetPeriodFromMonth]);
+    const nextCurrency = selectedMethod?.currency || 'EUR';
+    setCurrency(nextCurrency);
+    if (nextCurrency === 'EUR') {
+      if (!billingRun) {
+        setExchangeRateUsd(undefined);
+      }
+    } else if (exchangeRateUsd === undefined) {
+      setExchangeRateUsd(1);
+    }
+  }, [open, selectedMethod, billingRun, exchangeRateUsd]);
+
+  useEffect(() => {
+    if (!open || invoiceDateDirty) return;
+    setInvoiceDateIso(lastDayOfMonthIso(selectedYear, selectedMonth));
+  }, [open, selectedYear, selectedMonth, invoiceDateDirty]);
+
+  useEffect(() => {
+    if (!open || dueDateDirty) return;
+    setDueDateIso(computedDueDateIso);
+  }, [open, computedDueDateIso, dueDateDirty]);
+
+  useEffect(() => {
+    if (!open || billingRun || !methodId || invoiceNumberDirty) return;
+
+    const fetchNextInvoiceNumber = async () => {
+      try {
+        const res = await fetch(`/api/billing/methods/${methodId}/next-number`);
+        if (!res.ok) {
+          const errorBody = await res.json().catch(() => null);
+          console.error('Error fetching next invoice number:', errorBody);
+          return;
+        }
+        const data = await res.json();
+        if (typeof data.nextInvoiceNumber === 'string') {
+          setInvoiceNumber(data.nextInvoiceNumber);
+        }
+      } catch (err) {
+        console.error('Error fetching next invoice number:', err);
+      }
+    };
+
+    fetchNextInvoiceNumber();
+  }, [open, billingRun, methodId, invoiceNumberDirty]);
+
+  useEffect(() => {
+    if (!open || invoiceTitleDirty || !invoiceNumber) return;
+    if (!invoiceTitle || invoiceTitle.startsWith('Factura')) {
+      setInvoiceTitle(formatInvoiceTitle(invoiceNumber));
+    }
+  }, [open, invoiceNumber, invoiceTitleDirty, invoiceTitle]);
 
   const fetchMethods = useCallback(async () => {
     if (!clientParentId) return;
@@ -233,6 +328,7 @@ export function BillingEditorModal({
   }, [billingRun, preview]);
 
   const buildRequestPayload = useCallback(() => {
+    const effectiveCurrency = selectedMethod?.currency || currency || 'EUR';
     const payload: Record<string, unknown> = {
       clientParentId,
       year: selectedYear,
@@ -250,30 +346,35 @@ export function BillingEditorModal({
         description: item.description,
       })),
     };
-    if (currency) payload.currency = currency;
+    if (effectiveCurrency) payload.currency = effectiveCurrency;
     return payload;
-  }, [clientParentId, selectedYear, selectedMonth, methodId, invoiceNumber, periodStart, periodEnd, preview, items, currency, exchangeRateUsd]);
+  }, [clientParentId, selectedYear, selectedMonth, methodId, invoiceNumber, periodStart, periodEnd, preview, items, currency, selectedMethod]);
 
   const buildExternalRequestPayload = useCallback(() => {
+    const effectiveCurrency = selectedMethod?.currency || currency || 'EUR';
+    const paymentTermDays = selectedMethod?.paymentTermDays || 0;
     const payload = selectedMethod && preview
       ? buildExternalPayload(
           selectedMethod.payloadTemplate ?? undefined,
           preview,
           invoiceNumber,
           invoiceDate,
+          effectiveCurrency,
+          paymentTermDays,
           items.map((item) => ({
             name: item.name,
             quantity: item.quantity,
             unit_cost: item.unitCost,
             total: item.total,
             description: item.description,
-          }))
+          })),
+          dueDateDirty ? dueDateIso : undefined
         )
       : buildRequestPayload();
 
-    if (currency) payload.currency = currency;
+    if (effectiveCurrency) payload.currency = effectiveCurrency;
     return payload;
-  }, [selectedMethod, preview, invoiceNumber, invoiceDate, currency, exchangeRateUsd, items, buildRequestPayload]);
+  }, [selectedMethod, preview, invoiceNumber, invoiceDate, currency, exchangeRateUsd, dueDateDirty, items, buildRequestPayload, dueDateIso]);
 
   const getEffectiveRequestPayload = () => {
     if (requestJsonDirty) {
@@ -299,6 +400,13 @@ export function BillingEditorModal({
     setRequestJsonDraft(JSON.stringify(initialPayload, null, 2));
     setJsonError(null);
   }, [open, requestJsonDirty, billingRun, buildExternalRequestPayload]);
+
+  useEffect(() => {
+    if (!open || requestJsonDirty) return;
+    if (!invoiceDateDirty && !dueDateDirty) return;
+    const updatedPayload = buildExternalRequestPayload();
+    setRequestJsonDraft(JSON.stringify(updatedPayload, null, 2));
+  }, [open, requestJsonDirty, invoiceDateDirty, dueDateDirty, buildExternalRequestPayload]);
 
   useEffect(() => {
     if (!open || billingRun) return;
@@ -409,8 +517,8 @@ export function BillingEditorModal({
 
       const endpoint = '/api/billing/runs';
       const payload = billingRun
-        ? { ...body, runId: billingRun.id, sentToClient: true }
-        : { ...body, sentToClient: true };
+        ? { ...body, runId: billingRun.id }
+        : { ...body };
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -524,17 +632,11 @@ export function BillingEditorModal({
             <div>
               <label className="block text-xs text-gray-500 mb-1">Periodo desde</label>
               <input
-                type="text"
-                placeholder="dd/mm/YYYY"
-                value={periodStartInput}
-                onChange={(e) => setPeriodStartInput(e.target.value)}
-                onBlur={() => {
-                  const parsed = parseTimelineDate(periodStartInput);
-                  if (parsed) {
-                    setPeriodStart(parsed);
-                  } else {
-                    setPeriodStartInput(formatTimelineDate(periodStart));
-                  }
+                type="date"
+                value={periodStart}
+                onChange={(e) => {
+                  setPeriodStart(e.target.value);
+                  setPeriodStartInput(formatTimelineDate(e.target.value));
                 }}
                 className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white"
               />
@@ -542,17 +644,11 @@ export function BillingEditorModal({
             <div>
               <label className="block text-xs text-gray-500 mb-1">Periodo hasta</label>
               <input
-                type="text"
-                placeholder="dd/mm/YYYY"
-                value={periodEndInput}
-                onChange={(e) => setPeriodEndInput(e.target.value)}
-                onBlur={() => {
-                  const parsed = parseTimelineDate(periodEndInput);
-                  if (parsed) {
-                    setPeriodEnd(parsed);
-                  } else {
-                    setPeriodEndInput(formatTimelineDate(periodEnd));
-                  }
+                type="date"
+                value={periodEnd}
+                onChange={(e) => {
+                  setPeriodEnd(e.target.value);
+                  setPeriodEndInput(formatTimelineDate(e.target.value));
                 }}
                 className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white"
               />
@@ -581,7 +677,7 @@ export function BillingEditorModal({
                   setInvoiceTitle(e.target.value);
                   setInvoiceTitleDirty(true);
                 }}
-                placeholder={invoiceNumber ? `Factura ${invoiceNumber}` : `Factura ${selectedYear}-${String(selectedMonth).padStart(2, '0')}`}
+                placeholder={invoiceNumber ? formatInvoiceTitle(invoiceNumber) : `Factura ${selectedYear}-${String(selectedMonth).padStart(2, '0')}`}
                 className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white"
               />
             </div>
@@ -589,24 +685,37 @@ export function BillingEditorModal({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Moneda</label>
-              <select
-                value={currency}
+              <label className="block text-xs text-gray-500 mb-1">Fecha de factura</label>
+              <input
+                type="date"
+                value={invoiceDateIso}
                 onChange={(e) => {
-                  const nextCurrency = e.target.value;
-                  setCurrency(nextCurrency);
-                  if (nextCurrency !== 'EUR') {
-                    setExchangeRateUsd(1);
-                  } else if (exchangeRateUsd === undefined) {
-                    setExchangeRateUsd(undefined);
-                  }
+                  setInvoiceDateIso(e.target.value);
+                  setInvoiceDateDirty(true);
                 }}
                 className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white"
-              >
-                <option value="EUR">EUR</option>
-                <option value="USD">USD</option>
-                <option value="ARS">ARS</option>
-              </select>
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Fecha de vencimiento</label>
+              <input
+                type="date"
+                value={dueDateIso}
+                onChange={(e) => {
+                  setDueDateIso(e.target.value);
+                  setDueDateDirty(true);
+                }}
+                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Moneda del método</label>
+              <div className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white">
+                {selectedMethod?.currency || currency || 'EUR'}
+              </div>
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">Relación tipo de cambio USD</label>
@@ -702,9 +811,9 @@ export function BillingEditorModal({
                 <Plus size={14} /> Agregar item
               </button>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-0 divide-y divide-gray-800">
               {items.map((item) => (
-                <div key={item.id} className="grid grid-cols-12 gap-2 items-end bg-gray-900 rounded-lg p-3 border border-gray-800">
+                <div key={item.id} className="grid grid-cols-12 gap-2 items-end py-2">
                   <div className="col-span-5">
                     <input
                       type="text"
@@ -716,9 +825,8 @@ export function BillingEditorModal({
                   </div>
                   <div className="col-span-2">
                     <input
-                      type="number"
-                      min="0"
-                      step="0.1"
+                      type="text"
+                      inputMode="decimal"
                       value={item.quantity}
                       onChange={(e) => updateItem(item.id, 'quantity', e.target.value)}
                       className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-2 text-sm text-white"

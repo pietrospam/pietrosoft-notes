@@ -9,7 +9,7 @@ import {
   updateBillingRun,
 } from '@/lib/repositories/billing-repo';
 import type { BillingAuthConfig, BillingAuthType } from '@/lib/types';
-import { buildExternalPayload, normalizeBillingItems, stripExchangeRateUsd } from '@/lib/billing-utils';
+import { buildExternalPayload, formatDate, normalizeBillingItems, stripExchangeRateUsd } from '@/lib/billing-utils';
 import { prisma } from '@/lib/db';
 
 // GET /api/billing/runs - List billing runs (optionally filtered)
@@ -49,7 +49,6 @@ export async function POST(request: Request) {
       saveAsDraft,
       invoiceTitle: invoiceTitleOverride,
       invoiceNumber: invoiceNumberOverride,
-      currency: currencyOverride,
       exchangeRateUsd,
     } = body;
 
@@ -144,6 +143,8 @@ export async function POST(request: Request) {
       || await peekNextInvoiceNumber(methodId);
     const invoiceDate = new Date(Date.UTC(year, month, 0, 0, 0, 0, 0));
     const payloadInvoiceNumber = invoiceNumber;
+    const methodCurrency = method.currency || 'EUR';
+    const paymentTermDays = method.paymentTermDays || 0;
 
     // Build request payload from method configuration + preview data
     let requestPayload: Record<string, unknown>;
@@ -151,12 +152,31 @@ export async function POST(request: Request) {
     if (requestJsonOverride) {
       requestPayload = stripExchangeRateUsd(requestJsonOverride) as Record<string, unknown>;
     } else {
-      requestPayload = buildExternalPayload(method.payloadTemplate ?? undefined, preview, payloadInvoiceNumber, invoiceDate, billingItems);
+      requestPayload = buildExternalPayload(
+        method.payloadTemplate ?? undefined,
+        preview,
+        payloadInvoiceNumber,
+        invoiceDate,
+        methodCurrency,
+        paymentTermDays,
+        billingItems
+      );
       requestPayload = stripExchangeRateUsd(requestPayload) as Record<string, unknown>;
     }
 
-    if (currencyOverride) {
-      requestPayload.currency = currencyOverride;
+    requestPayload.currency = methodCurrency;
+    const hasExplicitDueDate = Object.prototype.hasOwnProperty.call(requestPayload, 'due_date');
+    if (paymentTermDays > 0 && !hasExplicitDueDate) {
+      requestPayload.due_date = formatDate(new Date(Date.UTC(
+        invoiceDate.getUTCFullYear(),
+        invoiceDate.getUTCMonth(),
+        invoiceDate.getUTCDate() + paymentTermDays
+      )));
+    } else if (!hasExplicitDueDate) {
+      delete requestPayload.due_date;
+    }
+    if (hasExplicitDueDate && (requestPayload.due_date === '' || requestPayload.due_date === null)) {
+      delete requestPayload.due_date;
     }
 
     // Build auth headers
@@ -224,9 +244,7 @@ export async function POST(request: Request) {
 
     // Calculate total amount if rate info is available in template
     const totalAmount = calculateTotalAmount(requestPayload);
-    const invoiceState = saveAsDraft
-      ? (body.invoiceState as string) ?? 'borrador'
-      : (status === 'success' ? 'enviada' : 'validada');
+    const invoiceState = (body.invoiceState as string) ?? 'borrador';
 
     const billingData = {
       clientParentId,
@@ -237,7 +255,7 @@ export async function POST(request: Request) {
       invoiceNumber,
       totalHours: preview.totalHours,
       totalAmount,
-      currency: (requestPayload.currency as string) || undefined,
+      currency: methodCurrency,
       exchangeRateUsd: exchangeRateUsd !== undefined ? Number(exchangeRateUsd) : undefined,
       requestJson: requestPayload,
       responseStatus,

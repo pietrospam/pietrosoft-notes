@@ -330,6 +330,8 @@ export interface BillingMethod {
   payloadTemplate?: Record<string, unknown>; // Template JSON for invoice payload
   nextInvoiceNumber: number; // Per-method invoice counter
   invoicePrefix?: string; // Optional prefix e.g. "FAC-"
+  currency: string; // Currency code defined by the billing method
+  paymentTermDays: number; // Due date in days from invoice date; 0 disables due_date
   clientParentId: string;
   active: boolean;
   createdAt: string;
