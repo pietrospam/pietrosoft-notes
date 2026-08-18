@@ -21,12 +21,15 @@ interface MethodFormState {
   payloadTemplate: string; // JSON string for editing
   nextInvoiceNumber: number;
   invoicePrefix: string;
+  currency: string;
+  paymentTermDays: number;
   clientParentId: string;
 }
 
 const DEFAULT_METHOD_TEMPLATE = `{
   "number": "{{invoiceNumber}}",
   "date": "{{date}}",
+  "due_date": "{{dueDate}}",
   "header": "INVOICE",
   "from": "PABLO DANIEL PIETROPAOLO\\n20-32010630-4\\n\\n Ing. Informática\\n\\nAristóbulo del valle 1092 \\nCastelar (1712), Buenos Aires \\nArgentina",
   "to": "Qualita Solutions & Consulting \\n CIF: B-63.870.729 \\n Av. de les Corts Catalanes, 9-11 Oficina 11 C - Edif. SC Trade III 08173 Sant Cugat del Vallès",
@@ -54,6 +57,8 @@ const emptyForm: MethodFormState = {
   payloadTemplate: '',
   nextInvoiceNumber: 1,
   invoicePrefix: '',
+  currency: 'EUR',
+  paymentTermDays: 0,
   clientParentId: '',
 };
 
@@ -95,6 +100,8 @@ export function BillingMethodsManager() {
       payloadTemplate: method.payloadTemplate ? JSON.stringify(method.payloadTemplate, null, 2) : '',
       nextInvoiceNumber: method.nextInvoiceNumber ?? 1,
       invoicePrefix: method.invoicePrefix || '',
+      currency: method.currency || 'EUR',
+      paymentTermDays: method.paymentTermDays ?? 0,
       clientParentId: method.clientParentId || '',
     });
   };
@@ -107,6 +114,8 @@ export function BillingMethodsManager() {
       name: DEFAULT_METHOD_NAME,
       endpointUrl: DEFAULT_METHOD_URL,
       payloadTemplate: DEFAULT_METHOD_TEMPLATE,
+      currency: 'EUR',
+      paymentTermDays: 0,
     });
     setError('');
   };
@@ -145,6 +154,8 @@ export function BillingMethodsManager() {
         payloadTemplate,
         nextInvoiceNumber: form.nextInvoiceNumber,
         invoicePrefix: form.invoicePrefix.trim() || undefined,
+        currency: form.currency.trim().toUpperCase() || 'EUR',
+        paymentTermDays: Math.max(0, Math.floor(form.paymentTermDays || 0)),
         clientParentId: form.clientParentId,
       };
 
@@ -201,6 +212,8 @@ export function BillingMethodsManager() {
         payloadTemplate: method.payloadTemplate ?? undefined,
         nextInvoiceNumber: method.nextInvoiceNumber ?? 1,
         invoicePrefix: method.invoicePrefix ?? undefined,
+        currency: method.currency ?? 'EUR',
+        paymentTermDays: method.paymentTermDays ?? 0,
         clientParentId: method.clientParentId || '',
       };
       const res = await fetch('/api/billing/methods', {
@@ -365,7 +378,7 @@ export function BillingMethodsManager() {
 
       {form.authType !== 'none' && renderAuthFields()}
 
-<div>
+      <div>
           <label className="block text-xs text-gray-400 mb-1">Próximo Nro. Factura</label>
           <input
             type="number"
@@ -377,9 +390,34 @@ export function BillingMethodsManager() {
           />
       </div>
 
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Moneda</label>
+          <input
+            type="text"
+            value={form.currency}
+            onChange={(e) => setForm(f => ({ ...f, currency: e.target.value.toUpperCase() }))}
+            className="w-full bg-gray-700 text-white px-3 py-2 rounded text-sm uppercase"
+            placeholder="EUR"
+            maxLength={10}
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Vence en días</label>
+          <input
+            type="number"
+            min={0}
+            value={form.paymentTermDays}
+            onChange={(e) => setForm(f => ({ ...f, paymentTermDays: Math.max(0, parseInt(e.target.value) || 0) }))}
+            className="w-full bg-gray-700 text-white px-3 py-2 rounded text-sm"
+            placeholder="0"
+          />
+        </div>
+      </div>
+
       <div>
         <label className="block text-xs text-gray-400 mb-1">
-          Payload Template (JSON) — usar {'{{invoiceNumber}}'}, {'{{date}}'}, {'{{clientName}}'}, {'{{totalHours}}'}, {'{{hours}}'} como placeholders
+          Payload Template (JSON) — usar {'{{invoiceNumber}}'}, {'{{date}}'}, {'{{dueDate}}'}, {'{{currency}}'}, {'{{clientName}}'}, {'{{totalHours}}'}, {'{{hours}}'} como placeholders
         </label>
         <textarea
           value={form.payloadTemplate}
@@ -458,7 +496,7 @@ export function BillingMethodsManager() {
                     </span>
                   </div>
                   <div className="text-xs text-gray-500 truncate mt-0.5 pl-5">
-                    Cliente Padre: {method.clientName || 'Sin asignar'}
+                    Cliente Padre: {method.clientName || 'Sin asignar'} | Moneda: {method.currency} | Vence: {method.paymentTermDays > 0 ? `${method.paymentTermDays} días` : 'sin vencimiento'}
                   </div>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0 ml-2">

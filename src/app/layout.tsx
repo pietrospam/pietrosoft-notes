@@ -23,12 +23,21 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const isTest = process.env.APP_ENV === 'test';
+
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased${isTest ? ' test-theme' : ''}`}
       >
-        {children}
+        {isTest && (
+          <div className="fixed top-0 left-0 right-0 z-50 bg-emerald-900 text-white text-xs font-bold text-center py-1 tracking-widest uppercase shadow-lg shadow-emerald-500/20">
+            ⚠ ENTORNO DE PRUEBAS — TEST
+          </div>
+        )}
+        <div className={isTest ? 'pt-6' : ''}>
+          {children}
+        </div>
       </body>
     </html>
   );

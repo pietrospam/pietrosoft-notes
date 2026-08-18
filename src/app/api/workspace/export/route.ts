@@ -61,21 +61,37 @@ export async function GET() {
       const attachments = await prisma.attachment.findMany();
       const activityLogs = await prisma.taskActivityLog.findMany();
       const timesheets = await prisma.timesheet.findMany();
-      const taskComments = await prisma.taskComment.findMany();
+      const comments = await prisma.taskComment.findMany();
+      const billingMethods = await prisma.billingMethod.findMany();
+      const billingRuns = await prisma.billingRun.findMany();
+      const billingRunItems = await prisma.billingRunItem.findMany();
+      const taskTodos = await prisma.taskTodo.findMany();
 
       archive.append(JSON.stringify(clients), { name: 'db/clients.json' });
       archive.append(JSON.stringify(projects), { name: 'db/projects.json' });
       archive.append(JSON.stringify(notes), { name: 'db/notes.json' });
       archive.append(JSON.stringify(timesheets), { name: 'db/timesheets.json' });
-      archive.append(JSON.stringify(taskComments), { name: 'db/taskComments.json' });
+      archive.append(JSON.stringify(comments), { name: 'db/comments.json' });
 
       // encode attachment data to base64 to make JSON-safe
-      const attachmentsWithData = attachments.map(a => ({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const attachmentsWithData = (attachments as any[]).map((a: { data: Buffer; [key: string]: unknown }) => ({
         ...a,
         data: a.data.toString('base64'),
       }));
       archive.append(JSON.stringify(attachmentsWithData), { name: 'db/attachments.json' });
       archive.append(JSON.stringify(activityLogs), { name: 'db/activityLogs.json' });
+
+      // encode pdfData (Bytes?) to base64 to make JSON-safe
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const billingRunsEncoded = (billingRuns as any[]).map((r: { pdfData: Buffer | null; [key: string]: unknown }) => ({
+        ...r,
+        pdfData: r.pdfData ? r.pdfData.toString('base64') : null,
+      }));
+      archive.append(JSON.stringify(billingMethods), { name: 'db/billingMethods.json' });
+      archive.append(JSON.stringify(billingRunsEncoded), { name: 'db/billingRuns.json' });
+      archive.append(JSON.stringify(billingRunItems), { name: 'db/billingRunItems.json' });
+      archive.append(JSON.stringify(taskTodos), { name: 'db/taskTodos.json' });
     } catch (err) {
       console.warn('Failed to include database export:', err);
     }

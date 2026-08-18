@@ -38,6 +38,7 @@ export function AttachmentsPanel({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
+  const sortedAttachments = [...attachments].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [viewingAttachment, setViewingAttachment] = useState<AttachmentMeta | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -67,7 +68,14 @@ export function AttachmentsPanel({
       });
 
       if (!response.ok) {
-        throw new Error('Upload failed');
+        let errorMessage = 'Upload failed';
+        try {
+          const errorJson = await response.json();
+          errorMessage = errorJson.error || errorMessage;
+        } catch {
+          errorMessage = `Upload failed (${response.status})`;
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -81,7 +89,8 @@ export function AttachmentsPanel({
       });
     } catch (error) {
       console.error('Failed to upload:', error);
-      alert('Error al subir el archivo');
+      const message = error instanceof Error ? error.message : 'Error al subir el archivo';
+      alert(message);
     } finally {
       setUploading(false);
     }
@@ -238,7 +247,7 @@ export function AttachmentsPanel({
         </div>
       )}
 
-      {attachments.length === 0 ? (
+      {sortedAttachments.length === 0 ? (
         <div className={`text-center py-4 border-2 border-dashed rounded-lg ${isDragOver ? 'border-blue-500 bg-blue-900/10' : 'border-gray-700'}`}>
           {isDragOver ? (
             <p className="text-xs text-blue-400">Suelta los archivos aquí</p>
@@ -248,7 +257,7 @@ export function AttachmentsPanel({
         </div>
       ) : (
         <div className="space-y-2">
-          {attachments.map((attachment) => {
+          {sortedAttachments.map((attachment) => {
             const { icon: FileIcon, color: iconColor } = getFileTypeInfo(attachment.originalName, attachment.mimeType);
             const canPreview = isPreviewable(attachment.originalName, attachment.mimeType);
             const isDeleting = deletingId === attachment.id;
@@ -354,7 +363,7 @@ export function AttachmentsPanel({
       {viewingAttachment && (
         <AttachmentViewer
           attachment={viewingAttachment}
-          allAttachments={attachments}
+          allAttachments={sortedAttachments}
           onClose={() => setViewingAttachment(null)}
           onNavigate={(att) => setViewingAttachment(att)}
         />

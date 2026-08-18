@@ -36,7 +36,7 @@ FROM base AS runner
 WORKDIR /app
 
 # Install OpenSSL 3.x for Prisma (matches linux-musl-openssl-3.0.x binary target)
-RUN apk add --no-cache libc6-compat openssl
+RUN apk add --no-cache libc6-compat openssl su-exec
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -55,23 +55,21 @@ RUN chown node:node .next
 COPY --from=builder --chown=node:node /app/.next/standalone ./
 COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 
-# Copy Prisma files for migrations
+# Copy Prisma files for migrations and runtime dependencies required by auxiliary scripts
 COPY --from=builder --chown=node:node /app/prisma ./prisma
-COPY --from=builder --chown=node:node /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder --chown=node:node /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder --chown=node:node /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 
 # Copy startup script
 COPY --from=builder /app/scripts/start.sh ./start.sh
 RUN chmod +x ./start.sh
 
-# Create data directory for workspace storage
-RUN mkdir -p /data/attachments && chown -R node:node /data
+# Create data and backup directories for workspace storage
+RUN mkdir -p /data/attachments /backups && chown -R node:node /data /backups
 
 # Create npm cache directory for prisma migrations (node home is /home/node)
 RUN mkdir -p /home/node/.npm && chown -R node:node /home/node
 
-USER node
+USER root
 
 EXPOSE 3000
 

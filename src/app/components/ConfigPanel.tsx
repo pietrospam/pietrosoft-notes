@@ -30,6 +30,7 @@ interface BackupMetadata {
 
 interface BackupSettings {
   retentionCount: number;
+  maxAgeDays: number;
   autoBackupEnabled: boolean;
   autoBackupFrequency: 'daily' | 'weekly' | 'monthly';
   autoBackupTime: string;
@@ -54,6 +55,7 @@ function ServerBackupsSection() {
   const hasSettingsChanges = useCallback(() => {
     if (!settings || !originalSettings) return false;
     return settings.retentionCount !== originalSettings.retentionCount ||
+      settings.maxAgeDays !== originalSettings.maxAgeDays ||
       settings.autoBackupEnabled !== originalSettings.autoBackupEnabled ||
       settings.autoBackupFrequency !== originalSettings.autoBackupFrequency ||
       settings.autoBackupTime !== originalSettings.autoBackupTime;
@@ -102,8 +104,11 @@ function ServerBackupsSection() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ description: 'Manual backup' }),
       });
-      if (!res.ok) throw new Error('Failed to create backup');
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        const errorMessage = data?.error || 'Failed to create backup';
+        throw new Error(errorMessage);
+      }
       setSuccessMessage(`Backup creado: ${data.filename}`);
       fetchBackups();
     } catch (err) {
@@ -171,8 +176,31 @@ function ServerBackupsSection() {
     }
   };
 
-  const handleDownload = (filename: string) => {
-    window.open(`/api/backups/${encodeURIComponent(filename)}`, '_blank');
+  const handleDownload = async (filename: string) => {
+    setError(null);
+    try {
+      const res = await fetch(`/api/backups/${encodeURIComponent(filename)}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || 'Failed to download backup');
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const disposition = res.headers.get('Content-Disposition');
+      const match = disposition?.match(/filename="(.+)"/);
+      const downloadName = match?.[1] || filename;
+      a.href = url;
+      a.download = downloadName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo descargar el backup');
+      console.error('Download error:', err);
+    }
   };
 
   const handleSaveSettings = async () => {
@@ -298,22 +326,42 @@ function ServerBackupsSection() {
               <Timer size={14} className="inline mr-1" />
               Retención de Backups
             </label>
-            <div className="flex items-center gap-3">
-              <select
-                value={settings.retentionCount}
-                onChange={(e) => updateSettings({ retentionCount: parseInt(e.target.value) })}
-                className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
-              >
-                <option value={0}>Ilimitado</option>
-                <option value={5}>Últimos 5 backups</option>
-                <option value={10}>Últimos 10 backups</option>
-                <option value={20}>Últimos 20 backups</option>
-                <option value={30}>Últimos 30 backups</option>
-                <option value={50}>Últimos 50 backups</option>
-              </select>
-              <span className="text-xs text-gray-500">
-                (Los backups protegidos no se eliminan)
-              </span>
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <select
+                  value={settings.retentionCount}
+                  onChange={(e) => updateSettings({ retentionCount: parseInt(e.target.value) })}
+                  className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                >
+                  <option value={0}>Ilimitado</option>
+                  <option value={5}>Últimos 5 backups</option>
+                  <option value={10}>Últimos 10 backups</option>
+                  <option value={20}>Últimos 20 backups</option>
+                  <option value={30}>Últimos 30 backups</option>
+                  <option value={50}>Últimos 50 backups</option>
+                </select>
+                <span className="text-xs text-gray-500">
+                  (Los backups protegidos no se eliminan)
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <select
+                  value={settings.maxAgeDays}
+                  onChange={(e) => updateSettings({ maxAgeDays: parseInt(e.target.value) })}
+                  className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                >
+                  <option value={0}>Sin límite por edad</option>
+                  <option value={7}>Más de 7 días</option>
+                  <option value={15}>Más de 15 días</option>
+                  <option value={30}>Más de 30 días</option>
+                  <option value={60}>Más de 60 días</option>
+                  <option value={90}>Más de 90 días</option>
+                </select>
+                <span className="text-xs text-gray-500">
+                  Borra backups no protegidos que superen esa antigüedad
+                </span>
+              </div>
             </div>
           </div>
 
@@ -562,7 +610,7 @@ function BackupManager() {
       console.log('Import response:', result);
 
       if (response.ok) {
-        const msg = `Imported: ${result.imported.notes} notes, ${result.imported.timesheets || 0} timesheets, ${result.imported.clients} clients, ${result.imported.projects} projects, ${result.imported.attachments} attachments, ${result.imported.activityLogs || 0} activity logs`;
+        const msg = `Imported: ${result.imported.notes} notes, ${result.imported.timesheets || 0} timesheets, ${result.imported.clients} clients, ${result.imported.projects} projects, ${result.imported.attachments} attachments, ${result.imported.activityLogs || 0} activity logs, ${result.imported.comments || 0} comments`;
         setImportResult({ success: true, message: msg });
         // show modal asking user to refresh UI
         setInfoMessage(msg + '\nPlease refresh to update the interface.');

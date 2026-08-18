@@ -20,7 +20,9 @@ import {
 export function Sidebar() {
   const { 
     currentView, 
+    showArchived,
     setCurrentView, 
+    setArchivedFilter,
     selectedClientId, 
     setSelectedClientId,
     clients, 
@@ -347,7 +349,7 @@ export function Sidebar() {
             className={`
               w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm
               transition-colors whitespace-nowrap
-              ${selectedClientId === null && currentView !== 'archived' && currentView !== 'config' && currentView !== 'favorites'
+              ${selectedClientId === null && !showArchived && currentView !== 'config' && currentView !== 'favorites'
                 ? 'bg-blue-600 text-white' 
                 : 'text-gray-400 hover:bg-gray-800 hover:text-white'}
             `}
@@ -598,14 +600,14 @@ export function Sidebar() {
       {/* Bottom navigation - REQ-010: Removed TimeSheets button (moved to tabs) */}
       <div className="py-4 border-t border-gray-800">
         <nav className="space-y-1 px-2">
-          {/* Archived - only in Bitácora and Conexiones mode */}
+          {/* Archived filter - only in Bitácora and Conexiones mode */}
           {(activeTab === 'bitacora' || activeTab === 'conexiones') && (
             <button
-              onClick={() => handleNavigate(() => setCurrentView('archived'))}
+              onClick={() => handleNavigate(() => setArchivedFilter(!showArchived))}
               className={`
                 w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm
                 transition-colors whitespace-nowrap
-                ${currentView === 'archived'
+                ${showArchived
                   ? 'bg-blue-600 text-white'
                   : 'text-gray-400 hover:bg-gray-800 hover:text-white'}
               `}
@@ -614,7 +616,7 @@ export function Sidebar() {
               <span className="opacity-0 group-hover:opacity-100 lg:opacity-100 transition-opacity">Archivados</span>
               {archivedCount > 0 && (
                 <span className={`ml-auto text-xs opacity-0 group-hover:opacity-100 lg:opacity-100 transition-opacity ${
-                  currentView === 'archived' ? 'text-blue-200' : 'text-gray-500'
+                  showArchived ? 'text-amber-950' : 'text-gray-500'
                 }`}>
                   {archivedCount}
                 </span>

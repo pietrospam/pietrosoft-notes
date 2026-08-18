@@ -5,12 +5,48 @@
 :root {
   --background: #030712;
   --foreground: #f9fafb;
+  --surface: #111827;
+  --muted: #9ca3af;
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
   font-family: system-ui, -apple-system, sans-serif;
+}
+
+body.test-theme {
+  --background: #030712;
+  --foreground: #f9fafb;
+  --surface: #111827;
+  --muted: #9ca3af;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+body.test-theme .ProseMirror {
+  color: var(--foreground);
+}
+
+body.test-theme .ProseMirror pre {
+  background: #d4e9d6;
+}
+
+body.test-theme .ProseMirror code {
+  background: #c8dfca;
+}
+
+body.test-theme .ProseMirror blockquote {
+  border-left-color: #34d399;
+  color: var(--muted);
+}
+
+body.test-theme *::-webkit-scrollbar-thumb {
+  background-color: #6ee7b7;
+}
+
+body.test-theme * {
+  scrollbar-color: #6ee7b7 transparent;
 }
 
 /* TipTap Editor Styles */
@@ -112,6 +148,58 @@ body {
   color: #93c5fd;
 }
 
+/* Make paragraph spacing tighter in TipTap editors and rendered prose views */
+.ProseMirror p,
+.prose p,
+.prose-invert p,
+.prose-sm p,
+.prose-sm.prose-invert p {
+  margin: 0 0 0.75rem;
+  line-height: 1.55;
+}
+
+.ProseMirror p:last-child,
+.prose p:last-child,
+.prose-invert p:last-child,
+.prose-sm p:last-child,
+.prose-sm.prose-invert p:last-child {
+  margin-bottom: 0;
+}
+
+.ProseMirror ul,
+.ProseMirror ol,
+.prose ul,
+.prose ol,
+.prose-invert ul,
+.prose-invert ol,
+.prose-sm ul,
+.prose-sm ol,
+.prose-sm.prose-invert ul,
+.prose-sm.prose-invert ol {
+  margin: 0.75rem 0;
+}
+
+.ProseMirror li,
+.prose li,
+.prose-invert li,
+.prose-sm li,
+.prose-sm.prose-invert li {
+  margin: 0.25rem 0;
+}
+
+.ProseMirror blockquote,
+.ProseMirror pre,
+.prose blockquote,
+.prose pre,
+.prose-invert blockquote,
+.prose-invert pre,
+.prose-sm blockquote,
+.prose-sm pre,
+.prose-sm.prose-invert blockquote,
+.prose-sm.prose-invert pre {
+  margin: 0.75rem 0;
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
@@ -167,12 +255,19 @@ body {
   scrollbar-color: #374151 transparent;
 }
 
-/* Compact prose for comments - remove excess spacing */
+/* Compact prose for comments - keep consistent paragraph spacing */
 .prose-compact p {
-  margin: 0;
+  margin: 0 0 0.75rem;
+  line-height: 1.55;
+}
+.prose-compact p:last-child {
+  margin-bottom: 0;
 }
 .prose-compact ul,
 .prose-compact ol {
-  margin: 0;
+  margin: 0.75rem 0;
   padding-left: 1rem;
+}
+.prose-compact li {
+  margin: 0.25rem 0;
 }

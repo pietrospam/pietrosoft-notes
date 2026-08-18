@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Users, FolderPlus, Clipboard, FilePlus, Settings, Clock, Link } from 'lucide-react';
+import { Plus, Users, FolderOpen, Clipboard, FilePlus, Settings, Clock, Link } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { NoteType } from '@/lib/types';
 
@@ -74,17 +74,17 @@ export function FloatingActionButton() {
           <div className="border-t border-gray-700 my-1" />
           <button
             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-200 hover:bg-gray-800"
-            onClick={() => handleAction(() => openConfig('clients', true))}
+            onClick={() => handleAction(() => openConfig('clients'))}
           >
             <Users size={16} className="text-gray-400" />
-            Nuevo cliente
+            Clientes
           </button>
           <button
             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-200 hover:bg-gray-800"
-            onClick={() => handleAction(() => openConfig('projects', true))}
+            onClick={() => handleAction(() => openConfig('projects'))}
           >
-            <FolderPlus size={16} className="text-gray-400" />
-            Nuevo proyecto
+            <FolderOpen size={16} className="text-blue-400" />
+            Proyectos
           </button>
           <div className="border-t border-gray-700 my-1" />
           <button

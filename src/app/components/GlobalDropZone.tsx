@@ -29,12 +29,15 @@ export function GlobalDropZone() {
       });
 
       if (!response.ok) {
-        throw new Error('Upload failed');
+        const errorText = await response.text();
+        throw new Error(errorText || 'Upload failed');
       }
 
       return true;
     } catch (error) {
       console.error('Failed to upload:', error);
+      const message = error instanceof Error ? error.message : 'Upload failed';
+      alert(message);
       return false;
     }
   }, []);

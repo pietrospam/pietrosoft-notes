@@ -26,6 +26,7 @@ export interface TimeSheetFilters {
 
 interface AppState {
   currentView: ViewType;
+  showArchived: boolean;
   selectedNoteId: string | null;
   selectedClientId: string | null; // null = all, 'none' = without client
   activeTypeFilters: NoteType[]; // Active type toggles
@@ -72,6 +73,7 @@ interface AppState {
 
 interface AppContextValue extends AppState {
   setCurrentView: (view: ViewType) => void;
+  setArchivedFilter: (enabled: boolean) => void;
   setTodosFilterTaskId: (taskId: string | null) => void; // REQ-021: Filter TODOs view by task
   setSelectedNoteId: (id: string | null) => void;
   setSelectedClientId: (id: string | null) => void;
@@ -165,6 +167,7 @@ interface AppProviderProps {
 export function AppProvider({ children }: AppProviderProps) {
   const [state, setState] = useState<AppState>({
     currentView: 'all',
+    showArchived: false,
     selectedNoteId: null,
     selectedClientId: null,
     activeTypeFilters: ['task', 'general'], // Default for bitacora tab (excludes connections)
@@ -269,24 +272,18 @@ export function AppProvider({ children }: AppProviderProps) {
   // Ref to track pending changes for save
   const pendingChangesRef = useRef<Partial<Note>>({});
 
-  // Audio notification for new/updated notes via mail ingest
-  const playNotificationSound = useCallback(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ctx = new ((window as any).AudioContext || (window as any).webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.value = 880;
-      gain.gain.value = 0.1;
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.12);
-    } catch {
-      // ignore if audio not available
-    }
+  // Stable callbacks to avoid re-triggering useEffect deps in consumers (e.g., BaseEditorModal loadNote)
+  const setPendingChanges = useCallback((changes: Partial<Note>) => {
+    pendingChangesRef.current = changes;
+  }, []);
+  const setIsDirty = useCallback((dirty: boolean) => {
+    setState(s => ({ ...s, isDirty: dirty }));
+  }, []);
+  const setIsSaving = useCallback((saving: boolean) => {
+    setState(s => ({ ...s, isSaving: saving }));
+  }, []);
+  const setLastSaved = useCallback((date: Date | null) => {
+    setState(s => ({ ...s, lastSaved: date }));
   }, []);
 
   // Fetch clients from API
@@ -310,7 +307,7 @@ export function AppProvider({ children }: AppProviderProps) {
   const refreshNotes = useCallback(async () => {
     try {
       setState(s => ({ ...s, isLoading: true }));
-      const response = await fetch('/api/notes');
+      const response = await fetch('/api/notes?includeArchived=true');
       if (response.ok) {
         const notes: Note[] = await response.json();
         setState(s => ({ ...s, notes, isLoading: false }));
@@ -470,10 +467,17 @@ export function AppProvider({ children }: AppProviderProps) {
     }));
 
     try {
+      // JSON.stringify drops undefined fields, so explicitly send null when
+      // clearing archivedAt during an unarchive operation.
+      const requestData: Record<string, unknown> = { ...data };
+      if ('archivedAt' in data && data.archivedAt === undefined) {
+        requestData.archivedAt = null;
+      }
+
       const response = await fetch(`/api/notes/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify(requestData),
       });
 
       if (response.ok) {
@@ -579,7 +583,7 @@ export function AppProvider({ children }: AppProviderProps) {
       
       if (response.ok) {
         // Refresh notes to get consistent state
-        const notesRes = await fetch('/api/notes');
+        const notesRes = await fetch('/api/notes?includeArchived=true');
         if (notesRes.ok) {
           const notes = await notesRes.json();
           setState(s => ({ ...s, notes }));
@@ -629,7 +633,7 @@ export function AppProvider({ children }: AppProviderProps) {
         return true;
       } else {
         // Revert by refreshing notes
-        const notesRes = await fetch('/api/notes');
+        const notesRes = await fetch('/api/notes?includeArchived=true');
         if (notesRes.ok) {
           const notes = await notesRes.json();
           setState(s => ({ ...s, notes }));
@@ -639,7 +643,7 @@ export function AppProvider({ children }: AppProviderProps) {
     } catch (error) {
       console.error('Failed to reorder favorites:', error);
       // Revert by refreshing notes
-      const notesRes = await fetch('/api/notes');
+      const notesRes = await fetch('/api/notes?includeArchived=true');
       if (notesRes.ok) {
         const notes = await notesRes.json();
         setState(s => ({ ...s, notes }));
@@ -757,11 +761,10 @@ export function AppProvider({ children }: AppProviderProps) {
       try {
         const lastUpdate = lastUpdateRef.current;
         if (!lastUpdate) return;
-        const res = await fetch(`/api/notes?since=${encodeURIComponent(lastUpdate)}`);
+        const res = await fetch(`/api/notes?includeArchived=true&since=${encodeURIComponent(lastUpdate)}`);
         if (!res.ok) return;
         const newNotes: Note[] = await res.json();
         if (newNotes.length > 0) {
-          playNotificationSound();
           refreshNotes();
         }
       } catch {
@@ -770,7 +773,7 @@ export function AppProvider({ children }: AppProviderProps) {
     }, 8000);
 
     return () => clearInterval(interval);
-  }, [refreshNotes, playNotificationSound]);
+  }, [refreshNotes]);
 
   // Helper to get client for a note
   const getClientForNote = useCallback((note: Note): Client | null => {
@@ -791,7 +794,7 @@ export function AppProvider({ children }: AppProviderProps) {
     
     
     return null;
-  }, [state.clients, state.projects, state.notes]);
+  }, [state.clients, state.projects]);
 
   // Helper to extract text from TipTap JSON content
   const extractTextFromJson = useCallback((json: object | null): string => {
@@ -826,11 +829,11 @@ export function AppProvider({ children }: AppProviderProps) {
   
   const filteredNotes = state.notes.filter(note => {
     
+    // Archived is a cross-cutting filter that applies to every notes view.
+    if (state.showArchived ? !note.archivedAt : note.archivedAt) return false;
+
     // When searching, ignore all filters except archived (search across everything)
     if (state.searchQuery) {
-      // Still exclude archived unless in archived or recents view
-      if (note.archivedAt && state.currentView !== 'archived' && state.currentView !== 'recents') return false;
-
       // Apply recents time window even when searching
       if (state.currentView === 'recents') {
         const cutoff = Date.now() - state.recentHours * 3600 * 1000;
@@ -866,28 +869,10 @@ export function AppProvider({ children }: AppProviderProps) {
       return true;
     }
 
-    // Archived view shows only archived notes (but still applies type filters)
-    if (state.currentView === 'archived') {
-      if (!note.archivedAt) return false;
-      // Apply type filters in archived view too (for conexiones tab)
-      if (state.activeTypeFilters.length > 0 && !state.activeTypeFilters.includes(note.type)) {
-        return false;
-      }
-      return true;
-    }
-    
-    // REQ-006: Favorites view shows only favorites (non-archived)
+    // REQ-006: Favorites view shows only favorites.
     if (state.currentView === 'favorites') {
-      if (!note.isFavorite || note.archivedAt) return false;
-      // Apply type filters in favorites view too (for conexiones tab)
-      if (state.activeTypeFilters.length > 0 && !state.activeTypeFilters.includes(note.type)) {
-        return false;
-      }
-      return true;
+      if (!note.isFavorite) return false;
     }
-    
-    // Other views exclude archived notes by default
-    if (note.archivedAt) return false;
     
     // Filter by active type filters (empty = no filter, show all)
     if (state.activeTypeFilters.length > 0 && !state.activeTypeFilters.includes(note.type)) {
@@ -940,6 +925,12 @@ export function AppProvider({ children }: AppProviderProps) {
       isNewNote: false,
       billingEditorRun: view === 'billingEditor' ? s.billingEditorRun : null,
     })),
+    setArchivedFilter: (enabled) => setState(s => ({
+      ...s,
+      showArchived: enabled,
+      selectedNoteId: null,
+      isNewNote: false,
+    })),
     setTodosFilterTaskId: (taskId) => setState(s => ({ ...s, todosFilterTaskId: taskId })), // REQ-021
     setSelectedNoteId: (id) => setState(s => ({ ...s, selectedNoteId: id, isNewNote: id?.startsWith('temp-') ?? false })),
     setSelectedClientId: (id) => setState(s => ({ ...s, selectedClientId: id, selectedNoteId: null, isNewNote: false })),
@@ -961,10 +952,10 @@ export function AppProvider({ children }: AppProviderProps) {
     },
     setTaskFilters: (filters) => setState(s => ({ ...s, taskFilters: filters })),
     setTimeSheetFilters: (filters) => setState(s => ({ ...s, timeSheetFilters: filters })),
-    setIsSaving: (saving) => setState(s => ({ ...s, isSaving: saving })),
-    setLastSaved: (date) => setState(s => ({ ...s, lastSaved: date })),
-    setIsDirty: (dirty) => setState(s => ({ ...s, isDirty: dirty })),
-    setPendingChanges: (changes) => { pendingChangesRef.current = changes; },
+    setIsSaving,
+    setLastSaved,
+    setIsDirty,
+    setPendingChanges,
     setIsNewNote: (isNew) => setState(s => ({ ...s, isNewNote: isNew })),
     toggleAutoSave,
     setCopyWithImagesOnCopy,

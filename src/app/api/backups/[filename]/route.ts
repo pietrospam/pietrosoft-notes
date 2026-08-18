@@ -30,11 +30,10 @@ export async function GET(
     
     const fileBuffer = await fs.readFile(filePath);
     
-    return new NextResponse(new Uint8Array(fileBuffer), {
+    return new Response(fileBuffer, {
       headers: {
         'Content-Type': 'application/zip',
         'Content-Disposition': `attachment; filename="${filename}"`,
-        'Content-Length': fileBuffer.length.toString(),
       },
     });
   } catch (error) {

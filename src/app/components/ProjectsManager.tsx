@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
-import { Plus, Pencil, Trash2, Check, X, Eye, EyeOff, ChevronDown } from 'lucide-react';
+import { Plus, Pencil, Trash2, Check, X, Eye, EyeOff, ChevronDown, ChevronRight } from 'lucide-react';
 import { DynamicIcon } from './IconPicker';
 import type { Client, Project } from '@/lib/types';
 
@@ -13,6 +13,7 @@ export function ProjectsManager() {
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [showDisabled, setShowDisabled] = useState(false);
+  const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set());
   
   // Form state
   const [formName, setFormName] = useState('');
@@ -21,7 +22,7 @@ export function ProjectsManager() {
   const [formDescription, setFormDescription] = useState('');
 
   // Fetch data
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setIsLoading(true);
       const [projectsRes, clientsRes] = await Promise.all([
@@ -36,11 +37,11 @@ export function ProjectsManager() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [showDisabled]);
 
   useEffect(() => {
     fetchData();
-  }, [showDisabled]);
+  }, [fetchData]);
 
   const resetForm = () => {
     setFormName('');
@@ -60,10 +61,14 @@ export function ProjectsManager() {
     setIsCreating(false);
   };
 
-  const handleCreate = () => {
-    resetForm();
+  const handleCreate = useCallback(() => {
+    setFormName('');
+    setFormClientId('');
+    setFormCode('');
+    setFormDescription('');
+    setEditingProject(null);
     setIsCreating(true);
-  };
+  }, []);
 
   // respond to global configRequest
   const { configRequest, clearConfigRequest } = useApp();
@@ -143,6 +148,46 @@ export function ProjectsManager() {
   const getClientIcon = (clientId: string) => {
     const client = clients.find(c => c.id === clientId);
     return client?.icon || 'building';
+  };
+
+  const projectsByClient = new Map<string, Project[]>();
+  projects.forEach((project) => {
+    const clientProjects = projectsByClient.get(project.clientId) || [];
+    clientProjects.push(project);
+    projectsByClient.set(project.clientId, clientProjects);
+  });
+
+  const clientGroups = clients
+    .map((client) => ({
+      client,
+      projects: (projectsByClient.get(client.id) || []).sort((a, b) =>
+        a.name.localeCompare(b.name, 'es')
+      ),
+    }))
+    .filter((group) => group.projects.length > 0)
+    .sort((a, b) => a.client.name.localeCompare(b.client.name, 'es'));
+
+  const projectsWithoutClient = projects
+    .filter((project) => !clients.some((client) => client.id === project.clientId))
+    .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+
+  const projectGroups = [
+    ...clientGroups,
+    ...(projectsWithoutClient.length > 0
+      ? [{ client: null, projects: projectsWithoutClient }]
+      : []),
+  ];
+
+  const toggleClient = (clientId: string) => {
+    setExpandedClients((current) => {
+      const next = new Set(current);
+      if (next.has(clientId)) {
+        next.delete(clientId);
+      } else {
+        next.add(clientId);
+      }
+      return next;
+    });
   };
 
   if (isLoading) {
@@ -263,47 +308,77 @@ export function ProjectsManager() {
           </div>
         ) : (
           <div className="divide-y divide-gray-800">
-            {projects.map((project) => (
-              <div
-                key={project.id}
-                className={`flex items-center gap-3 p-3 hover:bg-gray-800/50 transition-colors ${
-                  project.disabled ? 'opacity-50' : ''
-                }`}
-              >
-                <DynamicIcon icon={getClientIcon(project.clientId)} className="text-gray-400" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate">
-                    {project.name}
-                    {project.code && (
-                      <span className="ml-2 text-xs text-gray-500">({project.code})</span>
-                    )}
-                  </p>
-                  <p className="text-xs text-gray-500 truncate">
-                    {getClientName(project.clientId)}
-                    {project.description && ` • ${project.description}`}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => handleEdit(project)}
-                    className="p-1.5 text-gray-500 hover:text-white hover:bg-gray-700 rounded transition-colors"
-                    title="Edit"
-                  >
-                    <Pencil size={16} />
-                  </button>
-                  <button
-                    onClick={() => handleDisable(project)}
-                    className={`p-1.5 hover:bg-gray-700 rounded transition-colors ${
-                      project.disabled 
-                        ? 'text-green-500 hover:text-green-400' 
-                        : 'text-gray-500 hover:text-red-400'
-                    }`}
-                    title={project.disabled ? 'Enable' : 'Disable'}
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              </div>
+            {projectGroups.map((group) => (
+              <section key={group.client?.id || 'without-client'}>
+                <button
+                  type="button"
+                  onClick={() => toggleClient(group.client?.id || 'without-client')}
+                  className="w-full flex items-center gap-2 px-4 py-3 bg-gray-900/60 hover:bg-gray-800/80 transition-colors text-left"
+                  aria-expanded={expandedClients.has(group.client?.id || 'without-client')}
+                >
+                  {expandedClients.has(group.client?.id || 'without-client') ? (
+                    <ChevronDown size={16} className="text-gray-500" />
+                  ) : (
+                    <ChevronRight size={16} className="text-gray-500" />
+                  )}
+                  <DynamicIcon
+                    icon={group.client?.icon || 'building'}
+                    className="text-blue-300"
+                  />
+                  <h3 className="text-sm font-semibold text-white">
+                    {group.client?.name || 'Without client'}
+                  </h3>
+                  <span className="px-1.5 py-0.5 rounded-full bg-gray-800 text-xs text-gray-400">
+                    {group.projects.length}
+                  </span>
+                </button>
+                {expandedClients.has(group.client?.id || 'without-client') && (
+                  <div className="divide-y divide-gray-800/80">
+                    {group.projects.map((project) => (
+                      <div
+                        key={project.id}
+                        className={`flex items-center gap-3 p-3 pl-8 hover:bg-gray-800/50 transition-colors ${
+                          project.disabled ? 'opacity-50' : ''
+                        }`}
+                      >
+                        <DynamicIcon icon={getClientIcon(project.clientId)} className="text-gray-400" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-white truncate">
+                            {project.name}
+                            {project.code && (
+                              <span className="ml-2 text-xs text-gray-500">({project.code})</span>
+                            )}
+                          </p>
+                          <p className="text-xs text-gray-500 truncate">
+                            {getClientName(project.clientId)}
+                            {project.description && ` • ${project.description}`}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => handleEdit(project)}
+                            className="p-1.5 text-gray-500 hover:text-white hover:bg-gray-700 rounded transition-colors"
+                            title="Edit"
+                          >
+                            <Pencil size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleDisable(project)}
+                            className={`p-1.5 hover:bg-gray-700 rounded transition-colors ${
+                              project.disabled
+                                ? 'text-green-500 hover:text-green-400'
+                                : 'text-gray-500 hover:text-red-400'
+                            }`}
+                            title={project.disabled ? 'Enable' : 'Disable'}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
             ))}
           </div>
         )}

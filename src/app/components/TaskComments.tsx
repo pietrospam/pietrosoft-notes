@@ -1,12 +1,40 @@
 'use client';
 
-import { useState, useEffect, useImperativeHandle, forwardRef, useRef } from 'react';
+import { useState, useEffect, useImperativeHandle, forwardRef, useRef, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { TipTapEditor, TipTapEditorHandle } from './TipTapEditor';
 import { Pencil, Trash2, Copy, Loader2 } from 'lucide-react';
 import { Toast } from './Toast';
 import { copyHtmlWithEmbeddedImages } from '@/lib/clipboard';
 import type { TaskComment } from '@/lib/types';
+
+function hasMeaningfulCommentContent(value: unknown): boolean {
+  if (value == null) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (typeof value !== 'object') return false;
+  if (Array.isArray(value)) return value.some(hasMeaningfulCommentContent);
+
+  const node = value as Record<string, unknown>;
+
+  if (typeof node.text === 'string' && node.text.trim().length > 0) return true;
+
+  const nodeType = typeof node.type === 'string' ? node.type : '';
+  if (nodeType === 'image' || nodeType === 'hardBreak') return true;
+
+  return hasMeaningfulCommentContent(node.content);
+}
+
+function getCommentPlainText(value: unknown): string {
+  if (value == null) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value !== 'object') return '';
+  if (Array.isArray(value)) return value.map(getCommentPlainText).join(' ');
+
+  const node = value as Record<string, unknown>;
+  if (typeof node.text === 'string') return node.text;
+
+  return getCommentPlainText(node.content);
+}
 
 export interface TaskCommentsRef {
   savePendingComment: () => Promise<boolean>; // Returns true if a comment was saved
@@ -35,24 +63,27 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
   const [copyingCommentId, setCopyingCommentId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string } | null>(null);
   const commentEditorRefs = useRef<Record<string, TipTapEditorHandle | null>>({});
+  const onCommentsLoadedRef = useRef(onCommentsLoaded);
+  onCommentsLoadedRef.current = onCommentsLoaded;
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`/api/tasks/${taskId}/comments`);
       if (res.ok) {
         const data = await res.json();
-        setComments(data);
-        onCommentsLoaded?.(data.length);
+        const visibleComments = data.filter((comment: TaskComment) => hasMeaningfulCommentContent(comment.content));
+        setComments(visibleComments);
+        onCommentsLoadedRef.current?.(visibleComments.length);
       }
     } finally {
       setLoading(false);
     }
-  };
+  }, [taskId]);
 
   useEffect(() => {
     if (taskId) load();
-  }, [taskId]);
+  }, [taskId, load]);
 
   // Helper to check if content has changed
   const hasContentChanged = () => {
@@ -130,8 +161,13 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
         body: JSON.stringify({ author: currentUser, content: newContent }),
       });
       if (res.ok) {
+        const newComment = await res.json();
+        setComments(prev => {
+          const updated = [...prev, newComment];
+          onCommentsLoaded?.(updated.length);
+          return updated;
+        });
         setNewContent({ type: 'doc', content: [] }); // Reset to empty doc
-        load();
         onAttachmentsChange?.(); // Refresh attachments in case images were pasted
         return true;
       }
@@ -151,8 +187,9 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
         body: JSON.stringify({ id: editing.id, content: editing.content }),
       });
       if (res.ok) {
+        const updatedComment = await res.json();
+        setComments(prev => prev.map(c => c.id === updatedComment.id ? updatedComment : c));
         stopEditing();
-        load();
         onAttachmentsChange?.(); // Refresh attachments in case images were pasted
         return true;
       }
@@ -177,14 +214,19 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
     }
   }));
 
-  const handleCopyComment = async (id: string) => {
-    const editorHandle = commentEditorRefs.current[id];
-    if (!editorHandle) return;
+  const handleCopyComment = async (comment: TaskComment) => {
+    const editorHandle = commentEditorRefs.current[comment.id];
+    const fallbackText = getCommentPlainText(comment.content as object).trim();
+    const copiedWithImages = !!editorHandle;
 
-    setCopyingCommentId(id);
+    setCopyingCommentId(comment.id);
     try {
-      await copyHtmlWithEmbeddedImages(editorHandle.getHTML(), editorHandle.getText());
-      setToast({ message: 'Comentario copiado con imágenes' });
+      if (editorHandle) {
+        await copyHtmlWithEmbeddedImages(editorHandle.getHTML(), editorHandle.getText());
+      } else {
+        await navigator.clipboard.writeText(fallbackText);
+      }
+      setToast({ message: copiedWithImages ? 'Comentario copiado con imágenes' : 'Comentario copiado' });
     } catch (err) {
       console.error('Error copiando comentario:', err);
       setToast({ message: 'Error al copiar comentario' });
@@ -195,71 +237,140 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
 
   const handleDelete = async (id: string) => {
     await fetch(`/api/tasks/${taskId}/comments?id=${id}`, { method: 'DELETE' });
-    load();
+    setComments(prev => {
+      const updated = prev.filter(c => c.id !== id);
+      onCommentsLoaded?.(updated.length);
+      return updated;
+    });
     onSaveTask?.(); // Refresh notes list (updatedAt changed)
   };
 
   return (
-    <div className="mt-4">
-      <h3 className="text-base font-semibold mb-1">Comentarios</h3>
-      {loading && <p>cargando...</p>}
-      {comments.length === 0 && !loading && <p className="text-gray-500">Sin comentarios</p>}
-      <div className="divide-y divide-gray-700 text-xs">
-        {comments.map(c => (
-          <div 
-            key={c.id} 
-            className={`py-0.5 ${editing?.id === c.id ? 'border border-gray-600 rounded-lg p-2 bg-gray-800/50 my-1' : ''}`}
-            onDoubleClick={(event) => {
-              event.stopPropagation();
-              // Only allow editing own comments and avoid resetting the current edit session
-              if (c.author !== currentUser) return;
-              if (editing?.id === c.id) return;
-              startEditing(c.id, c.content as object);
-            }}
-          >
-            <div className="flex justify-end items-center gap-2 text-[10px] text-gray-400 mb-1">
-              <span>{c.createdAt ? new Date(c.createdAt).toLocaleString('es-AR', { hour12: false }) : 'Sin fecha'}</span>
-              <span className="truncate max-w-[120px]">{c.author}</span>
-            </div>
-            {editing?.id === c.id ? (
-              <div
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') {
-                    e.preventDefault();
-                    stopEditing();
-                  } else if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-                    e.preventDefault();
-                    // Only save if content has actually changed
-                    if (hasContentChanged()) {
-                      handleUpdate();
-                    }
-                  }
-                }}
-              >
-                <TipTapEditor
-                  copyWithImagesOnCopy={copyWithImagesOnCopy}
-                  content={editing.content}
-                  onChange={json => setEditing(prev => prev ? { ...prev, content: json } : null)}
-                  placeholder="Escribe tu comentario..."
-                  readOnly={false}
-                  noteId={taskId}
-                  onAttachmentAdded={() => load()}
-                  compact
-                />
-                <div className="flex gap-2 mt-1 justify-end">
-                  <button
-                    onClick={handleUpdate}
-                    className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 rounded text-xs"
-                  >guardar</button>
-                  <button
-                    onClick={() => stopEditing()}
-                    className="px-2 py-0.5 bg-gray-700 hover:bg-gray-600 rounded text-xs"
-                  >cancelar</button>
+    <div className="mt-3">
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-gray-300">Comentarios</h3>
+        {comments.length > 0 && (
+          <span className="text-[10px] text-gray-500">{comments.length}</span>
+        )}
+      </div>
+      {loading && <p className="text-[11px] text-gray-500">cargando...</p>}
+      {comments.length === 0 && !loading && <p className="text-[11px] text-gray-500 italic">Sin comentarios</p>}
+      <div className="space-y-1 text-xs">
+        {comments.map(c => {
+          const isSystemComment = c.author === '🤖 Sistema';
+          const commentText = getCommentPlainText(c.content as object).trim();
+          const commentMeta = `${c.author} • ${c.createdAt ? new Date(c.createdAt).toLocaleString('es-AR', { hour12: false }) : 'Sin fecha'}`;
+
+          return (
+            <div
+              key={c.id}
+              className={`rounded-md border ${isSystemComment ? 'px-1.5 py-1' : 'px-2 py-1.5'} ${editing?.id === c.id ? 'border-gray-600 bg-gray-800/50' : 'border-gray-800 bg-gray-900/30'}`}
+              onDoubleClick={(event) => {
+                event.stopPropagation();
+                // Only allow editing own comments and avoid resetting the current edit session
+                if (c.author !== currentUser) return;
+                if (editing?.id === c.id) return;
+                startEditing(c.id, c.content as object);
+              }}
+            >
+              {isSystemComment ? (
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="min-w-0 flex-1 truncate text-[10px] leading-none italic text-gray-300 opacity-90">
+                    {commentText || 'Sin contenido'}
+                  </span>
+                  <div className="flex items-center gap-1 shrink-0 text-[10px] leading-none text-gray-400">
+                    <span>{commentMeta}</span>
+                    <button
+                      onClick={() => handleCopyComment(c)}
+                      className="p-0.5 hover:text-white"
+                      title="Copiar comentario con imágenes"
+                    >
+                      {copyingCommentId === c.id ? (
+                        <Loader2 size={11} className="animate-spin" />
+                      ) : (
+                        <Copy size={11} />
+                      )}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <>
-                <div className={c.author === currentUser ? 'cursor-pointer' : ''}>
+              ) : editing?.id === c.id ? (
+                <div
+                  className="mt-1"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      e.preventDefault();
+                      stopEditing();
+                    } else if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                      e.preventDefault();
+                      // Only save if content has actually changed
+                      if (hasContentChanged()) {
+                        handleUpdate();
+                      }
+                    }
+                  }}
+                >
+                  <TipTapEditor
+                    copyWithImagesOnCopy={copyWithImagesOnCopy}
+                    content={editing.content}
+                    onChange={json => setEditing(prev => prev ? { ...prev, content: json } : null)}
+                    placeholder="Escribe tu comentario..."
+                    readOnly={false}
+                    noteId={taskId}
+                    onAttachmentAdded={() => load()}
+                    compact
+                  />
+                  <div className="flex gap-2 mt-1 justify-end">
+                    <button
+                      onClick={handleUpdate}
+                      className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 rounded text-[11px]"
+                    >guardar</button>
+                    <button
+                      onClick={() => stopEditing()}
+                      className="px-2 py-0.5 bg-gray-700 hover:bg-gray-600 rounded text-[11px]"
+                    >cancelar</button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex items-center gap-1 text-[10px] leading-none text-gray-400">
+                      <span className={`truncate max-w-[120px] ${isSystemComment ? 'text-gray-300' : ''}`}>{c.author}</span>
+                      <span className="text-gray-600">•</span>
+                      <span>{c.createdAt ? new Date(c.createdAt).toLocaleString('es-AR', { hour12: false }) : 'Sin fecha'}</span>
+                    </div>
+                    <div className="flex items-center gap-1 text-gray-400 shrink-0">
+                      <button
+                        onClick={() => handleCopyComment(c)}
+                        className="p-0.5 hover:text-white"
+                        title="Copiar comentario con imágenes"
+                      >
+                        {copyingCommentId === c.id ? (
+                          <Loader2 size={13} className="animate-spin" />
+                        ) : (
+                          <Copy size={13} />
+                        )}
+                      </button>
+                      {c.author === currentUser && (
+                        <>
+                          <button
+                            onClick={() => startEditing(c.id, c.content as object)}
+                            className="p-0.5 hover:text-white"
+                            title="Editar"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(c.id)}
+                            className="p-0.5 hover:text-white"
+                            title="Eliminar"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className={isSystemComment ? 'mt-0.5 text-[10px] leading-tight text-gray-400 opacity-70 [&_p]:!mb-0.5 [&_p]:!leading-tight [&_p:last-child]:!mb-0' : 'mt-1'}>
                   <TipTapEditor
                     ref={(instance) => {
                       if (instance) commentEditorRefs.current[c.id] = instance;
@@ -268,49 +379,21 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
                     content={c.content as object}
                     onChange={() => {}}
                     readOnly={true}
+                    compact
+                    bare
                   />
                 </div>
-                <div className="flex gap-2 mt-1 text-gray-400 justify-end">
-                  <button
-                    onClick={() => handleCopyComment(c.id)}
-                    className="p-1 hover:text-white"
-                    title="Copiar comentario con imágenes"
-                  >
-                    {copyingCommentId === c.id ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : (
-                      <Copy size={14} />
-                    )}
-                  </button>
-                  {c.author === currentUser && (
-                    <>
-                      <button
-                        onClick={() => startEditing(c.id, c.content as object)}
-                        className="p-1 hover:text-white"
-                        title="Editar"
-                      >
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(c.id)}
-                        className="p-1 hover:text-white"
-                        title="Eliminar"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        ))}
+                </>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* New comment input - hidden when editing an existing comment */}
       {!editing && (
         <div 
-          className="mt-3 border border-gray-600 rounded-lg p-2 bg-gray-800/50"
+          className="mt-2 border border-gray-700 rounded-md px-2 py-1.5 bg-gray-900/35"
           onKeyDown={(e) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 's') {
               e.preventDefault();
@@ -328,15 +411,15 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
             onAttachmentAdded={() => load()}
             compact
           />
-          <div className="flex gap-2 mt-1">
+          <div className="flex gap-2 mt-1 justify-end">
             <button
               onClick={handleAdd}
               disabled={savingComment}
-              className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 rounded text-xs disabled:opacity-50"
+              className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 rounded text-[11px] disabled:opacity-50"
             >guardar</button>
             <button
               onClick={() => setNewContent({ type: 'doc', content: [] })}
-              className="px-2 py-0.5 bg-gray-700 hover:bg-gray-600 rounded text-xs"
+              className="px-2 py-0.5 bg-gray-700 hover:bg-gray-600 rounded text-[11px]"
             >cancelar</button>
           </div>
         </div>

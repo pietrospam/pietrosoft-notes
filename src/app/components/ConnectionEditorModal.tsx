@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type MouseEvent as ReactMouseEvent } from 'react';
 import { ChevronDown, Plus, Copy, Check, Eye, EyeOff, ExternalLink } from 'lucide-react';
 import { BaseEditorModal } from './BaseEditorModal';
 import { QuickCreateModal } from './QuickCreateModal';
@@ -72,22 +72,55 @@ export function ConnectionEditorModal({ noteId, onClose, onSaved, inline = false
     updatedAt: now,
   } as ConnectionNote;
 
-  const handleCopy = async (field: string, value: string) => {
-    try {
-      await navigator.clipboard.writeText(value);
+  const copyTextToClipboard = async (value: string) => {
+    if (!value) return false;
+
+    const shouldUseClipboardApi = typeof window !== 'undefined' && window.isSecureContext && navigator.clipboard && navigator.clipboard.writeText;
+    if (shouldUseClipboardApi) {
+      try {
+        await navigator.clipboard.writeText(value);
+        return true;
+      } catch {
+        // Fallback below
+      }
+    }
+
+    const textarea = document.createElement('textarea');
+    textarea.value = value;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'absolute';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, value.length);
+    const result = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    return result;
+  };
+
+  const handleCopy = async (event: ReactMouseEvent<HTMLButtonElement>, field: string, value: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (!value) return;
+
+    const copiedSuccessfully = await copyTextToClipboard(value);
+    if (copiedSuccessfully) {
       setCopied(field);
       setTimeout(() => setCopied(null), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
+    } else {
+      console.error('Failed to copy:', value);
     }
   };
 
   const CopyButton = ({ field, value }: { field: string; value: string }) => (
     <button
       type="button"
-      onClick={() => handleCopy(field, value)}
-      className="p-1.5 text-gray-500 hover:text-white hover:bg-gray-700 rounded transition-colors"
+      onClick={(e) => handleCopy(e, field, value)}
+      className="relative z-10 pointer-events-auto cursor-pointer p-1.5 text-gray-500 hover:text-white hover:bg-gray-700 rounded transition-colors"
       title="Copiar"
+      aria-label={`Copiar ${field}`}
     >
       {copied === field ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
     </button>

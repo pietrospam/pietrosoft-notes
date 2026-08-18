@@ -3,8 +3,8 @@ import prisma from '@/lib/db';
 import type { AttachmentMeta } from '@/lib/types';
 import { createSystemComment, formatFileSize, formatDate } from '@/lib/system-comments';
 
-// Max file size: 10MB
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+// Max file size: 500MB
+const MAX_FILE_SIZE = 500 * 1024 * 1024;
 
 function sanitizeFilename(filename: string): string {
   return filename
@@ -83,8 +83,9 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
     
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     console.error('Error uploading attachment:', error);
-    return NextResponse.json({ error: 'Failed to upload attachment' }, { status: 500 });
+    return NextResponse.json({ error: `Failed to upload attachment: ${message}` }, { status: 500 });
   }
 }
 

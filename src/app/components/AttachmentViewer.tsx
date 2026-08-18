@@ -94,7 +94,7 @@ export function AttachmentViewer({ attachment, allAttachments, onClose, onNaviga
 
   return (
     <div 
-      className="fixed inset-0 bg-black/90 z-50 flex flex-col"
+      className="fixed inset-0 bg-black/90 z-[10000] flex flex-col"
       onClick={onClose}
     >
       {/* Header */}
@@ -170,6 +170,7 @@ export function AttachmentViewer({ attachment, allAttachments, onClose, onNaviga
 
         {/* Image viewer */}
         {isImageType(attachment.mimeType) && (
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={url}
             alt={attachment.originalName}

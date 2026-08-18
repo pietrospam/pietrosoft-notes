@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Pencil, Trash2, Check, X, Eye, EyeOff } from 'lucide-react';
 import { IconPicker, DynamicIcon } from './IconPicker';
 import { useApp } from '../context/AppContext';
@@ -24,7 +24,7 @@ export function ClientsManager() {
   const [formParentClientId, setFormParentClientId] = useState<string | null>(null);
 
   // Fetch clients
-  const fetchClients = async () => {
+  const fetchClients = useCallback(async () => {
     try {
       setIsLoading(true);
       const res = await fetch(`/api/clients?includeDisabled=${showDisabled}`);
@@ -36,11 +36,11 @@ export function ClientsManager() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [showDisabled]);
 
   useEffect(() => {
     fetchClients();
-  }, [showDisabled]);
+  }, [fetchClients]);
 
   const resetForm = () => {
     setFormName('');
@@ -62,12 +62,16 @@ export function ClientsManager() {
     setIsCreating(false);
   };
 
-  const handleCreate = () => {
-    resetForm();
+  const handleCreate = useCallback(() => {
+    setFormName('');
+    setFormIcon('building');
+    setFormDescription('');
+    setFormColor('');
+    setFormParentClientId(null);
+    setEditingClient(null);
     setIsCreating(true);
-    // Focus name input after state update
     setTimeout(() => nameInputRef.current?.focus(), 0);
-  };
+  }, []);
 
   // If configRequest asks to open clients tab with creation
   const { configRequest, clearConfigRequest } = useApp();

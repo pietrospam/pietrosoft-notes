@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { TipTapEditor } from './TipTapEditor';
 import { X, Save, Plus, Calendar } from 'lucide-react';
 import type { Client } from '@/lib/types';
@@ -36,11 +36,11 @@ export function TodoCreateModal({ isOpen, onClose, onCreated }: TodoCreateModalP
     return `${year}-${month}-${day}T${hours}:${minutes}`;
   };
 
-  const getDefaultDeadline = () => {
+  const getDefaultDeadline = useCallback(() => {
     const nextHour = new Date();
     nextHour.setHours(nextHour.getHours() + 1, 0, 0, 0);
     return formatDatetimeLocal(nextHour);
-  };
+  }, []);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -69,7 +69,7 @@ export function TodoCreateModal({ isOpen, onClose, onCreated }: TodoCreateModalP
     setClientId(null);
     setError(null);
     setTasks([]);
-  }, [isOpen]);
+  }, [isOpen, getDefaultDeadline]);
 
   useEffect(() => {
     if (!isOpen) return;

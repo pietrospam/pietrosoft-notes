@@ -103,10 +103,12 @@ export function TelegramConfig() {
   const loadConfig = async () => {
     try {
       const res = await fetch('/api/telegram/config');
-      if (res.ok) {
-        const data = await res.json();
+      const data = await res.json().catch(() => null);
+      if (res.ok && data) {
         setConfig(data);
         setOriginalConfig(data);
+      } else {
+        console.error('Failed to load Telegram config:', data?.error || res.statusText);
       }
     } catch (error) {
       console.error('Failed to load Telegram config:', error);
@@ -150,17 +152,28 @@ export function TelegramConfig() {
     setSaving(true);
     setSaveSuccess(false);
     try {
-      // Save telegram config if changed
+      // Save telegram config if changed, but never send the masked token back.
       if (originalConfig && !configsEqual(config, originalConfig)) {
+        const telegramPayload = {
+          enabled: config.enabled,
+          chatId: config.chatId,
+          notifyAuto: config.notifyAuto,
+          notifyManual: config.notifyManual,
+          notifyErrors: config.notifyErrors,
+          sendFile: config.sendFile,
+        };
+
         const res = await fetch('/api/telegram/config', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(config),
+          body: JSON.stringify(telegramPayload),
         });
-        if (res.ok) {
-          const data = await res.json();
-          setConfig(data);
-          setOriginalConfig(data);
+        const errorData = await res.json().catch(() => null);
+        if (res.ok && errorData) {
+          setConfig(errorData);
+          setOriginalConfig(errorData);
+        } else {
+          console.error('Failed to save Telegram config:', errorData?.error || res.statusText);
         }
       }
       
@@ -197,12 +210,14 @@ export function TelegramConfig() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ botToken: newToken.trim() }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        setConfig(data);
-        setOriginalConfig(data);
+      const errorData = await res.json().catch(() => null);
+      if (res.ok && errorData) {
+        setConfig(errorData);
+        setOriginalConfig(errorData);
         setEditingToken(false);
         setNewToken('');
+      } else {
+        console.error('Failed to save Telegram token:', errorData?.error || res.statusText);
       }
     } catch (error) {
       console.error('Failed to save token:', error);
@@ -217,6 +232,24 @@ export function TelegramConfig() {
     setTestMessage('');
     
     try {
+      // The test endpoint reads the persisted config, so persist a newly entered
+      // chat ID before testing it instead of testing stale server state.
+      if (originalConfig && config.chatId.trim() !== originalConfig.chatId.trim()) {
+        const saveResponse = await fetch('/api/telegram/config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chatId: config.chatId.trim() }),
+        });
+        const savedConfig = await saveResponse.json().catch(() => null);
+        if (!saveResponse.ok || !savedConfig) {
+          setTestResult('error');
+          setTestMessage(savedConfig?.error || 'No se pudo guardar el Chat ID');
+          return;
+        }
+        setConfig(savedConfig);
+        setOriginalConfig(savedConfig);
+      }
+
       const res = await fetch('/api/telegram/test', { method: 'POST' });
       const data = await res.json();
       

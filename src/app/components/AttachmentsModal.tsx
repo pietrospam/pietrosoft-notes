@@ -41,8 +41,8 @@ export function AttachmentsModal({ noteId, attachments, onChange, onClose, disab
   }, [onChange]);
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-60">
-      <div className="bg-gray-900 rounded-lg w-full max-w-md max-h-[80vh] flex flex-col shadow-2xl">
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[9999]">
+      <div className="bg-gray-900 rounded-lg w-full max-w-4xl max-h-[80vh] flex flex-col shadow-2xl">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
           <h2 className="text-lg font-semibold text-white">Archivos adjuntos</h2>
           <button

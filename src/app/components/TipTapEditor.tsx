@@ -5,11 +5,9 @@ import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
-import TiptapUnderline from '@tiptap/extension-underline';
 import { TextStyle } from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
 import { Highlight } from '@tiptap/extension-highlight';
-import Strike from '@tiptap/extension-strike';
 
 const COLOR_PALETTE = [
   '#000000', '#202020', '#404040', '#606060', '#808080', '#a0a0a0', '#c0c0c0', '#ffffff',
@@ -47,9 +45,34 @@ import {
   Redo,
   ImagePlus,
   Eraser,
+  Paperclip,
 } from 'lucide-react';
 import { copyHtmlWithEmbeddedImages } from '@/lib/clipboard';
 import { Toast } from './Toast';
+
+const ToolbarButton = ({ 
+  onClick, 
+  isActive = false, 
+  children 
+}: { 
+  onClick: (event: ReactMouseEvent<HTMLButtonElement>) => void; 
+  isActive?: boolean; 
+  children: React.ReactNode 
+}) => (
+  <button
+    type="button"
+    onMouseDown={(event) => event.preventDefault()}
+    onClick={onClick}
+    className={`
+      p-1.5 rounded transition-colors
+      ${isActive 
+        ? 'bg-gray-700 text-white' 
+        : 'text-gray-400 hover:bg-gray-800 hover:text-white'}
+    `}
+  >
+    {children}
+  </button>
+);
 
 interface TipTapEditorProps {
   content: object | null;
@@ -60,6 +83,7 @@ interface TipTapEditorProps {
   onAttachmentAdded?: () => void; // Called when an image/attachment is added (for refreshing comments)
   readOnly?: boolean; // disable editing and hide toolbar
   compact?: boolean; // reduce height for inline comment inputs
+  bare?: boolean; // remove editor chrome for dense embedding
   copyWithImagesOnCopy?: boolean; // If enabled, intercept Ctrl+C and embed images
   showStaticToolbar?: boolean; // Show the sticky toolbar at the top of the editor
 }
@@ -70,12 +94,13 @@ export interface TipTapEditorHandle {
   getText: () => string;
 }
 
-export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(function TipTapEditor({ content, onChange, placeholder = 'Start writing...', noteId, onPersistNote, onAttachmentAdded, readOnly = false, compact = false, copyWithImagesOnCopy, showStaticToolbar = true }, ref) {
+export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(function TipTapEditor({ content, onChange, placeholder = 'Start writing...', noteId, onPersistNote, onAttachmentAdded, readOnly = false, compact = false, bare = false, copyWithImagesOnCopy, showStaticToolbar = true }, ref) {
   const { copyWithImagesOnCopy: globalCopyWithImagesOnCopy } = useApp();
   const effectiveCopyWithImagesOnCopy = copyWithImagesOnCopy ?? globalCopyWithImagesOnCopy;
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
   const editorWrapperRef = useRef<HTMLDivElement>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showFloatingToolbar, setShowFloatingToolbar] = useState(false);
@@ -132,7 +157,15 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
       });
 
       if (!response.ok) {
-        throw new Error('Upload failed');
+        let errorMessage = 'Upload failed';
+        try {
+          const errorJson = await response.json();
+          errorMessage = errorJson.error || errorMessage;
+        } catch {
+          // response is not JSON (e.g. nginx error page), use status code
+          errorMessage = `Upload failed (${response.status})`;
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -155,11 +188,10 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
         heading: {
           levels: [1, 2, 3],
         },
+        link: false, // Using custom Link below with openOnClick:false and custom classes
       }),
       TextStyle,
       Color,
-      TiptapUnderline,
-      Strike,
       Highlight,
       Table.configure({
         resizable: true,
@@ -171,6 +203,7 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
         placeholder,
       }),
       Image.configure({
+        inline: true,
         HTMLAttributes: {
           class: 'max-w-full rounded-lg',
         },
@@ -186,7 +219,11 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
     editorProps: {
       attributes: {
         class: readOnly 
-          ? 'prose prose-invert prose-sm prose-compact max-w-none' 
+          ? bare
+            ? 'text-[10px] leading-tight text-gray-400 [&_p]:!m-0 [&_p]:!mb-0.5 [&_p]:!leading-tight [&_p]:text-[10px] [&_a]:text-[10px] [&_a]:text-blue-300 [&_a]:underline'
+            : compact
+            ? 'prose prose-invert prose-sm prose-compact max-w-none'
+            : 'prose prose-invert prose-sm max-w-none'
           : compact
             ? 'prose prose-invert prose-sm max-w-none focus:outline-none min-h-[60px]'
             : 'prose prose-invert prose-sm max-w-none focus:outline-none min-h-[200px]',
@@ -198,14 +235,16 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
         for (const item of Array.from(items)) {
           if (item.type.startsWith('image/')) {
             const file = item.getAsFile();
-            if (file && noteIdRef.current) {
+            if (file) {
               event.preventDefault();
+              event.stopPropagation();
               uploadImage(file).then(url => {
                 if (url && view.state.selection) {
                   const { state, dispatch } = view;
                   const node = state.schema.nodes.image.create({ src: url });
-                  const tr = state.tr.replaceSelectionWith(node);
+                  const tr = state.tr.replaceSelectionWith(node).scrollIntoView();
                   dispatch(tr);
+                  view.focus();
                 }
               });
               return true;
@@ -218,27 +257,27 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
         const files = event.dataTransfer?.files;
         if (!files?.length) return false;
 
-        const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
-        if (imageFiles.length === 0) return false;
-
         event.preventDefault();
-        
-        imageFiles.forEach(file => {
-          if (noteIdRef.current) {
-            uploadImage(file).then(url => {
-              if (url) {
-                const { state, dispatch } = view;
+
+        Array.from(files).forEach(file => {
+          uploadImage(file).then(url => {
+            if (url) {
+              const { state, dispatch } = view;
+              const pos = view.posAtCoords({ left: event.clientX, top: event.clientY });
+              const insertPos = pos ? pos.pos : state.selection.from;
+              if (file.type.startsWith('image/')) {
                 const node = state.schema.nodes.image.create({ src: url });
-                const pos = view.posAtCoords({ left: event.clientX, top: event.clientY });
-                if (pos) {
-                  const tr = state.tr.insert(pos.pos, node);
-                  dispatch(tr);
-                }
+                dispatch(state.tr.insert(insertPos, node));
+              } else {
+                const linkNode = state.schema.text(file.name, [
+                  state.schema.marks.link.create({ href: url }),
+                ]);
+                dispatch(state.tr.insert(insertPos, linkNode));
               }
-            });
-          }
+            }
+          });
         });
-        
+
         return true;
       },
       handleKeyDown: (view, event) => {
@@ -247,7 +286,7 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
         // Shift+Enter -> soft line break
         // Ctrl+Enter / Cmd+Enter -> no special action
         if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-          return true;
+          return false;
         }
 
         if (!effectiveCopyWithImagesOnCopy) return false;
@@ -448,12 +487,15 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
 
   // Update content when it changes externally
   useEffect(() => {
-    if (editor && content) {
-      const currentContent = JSON.stringify(editor.getJSON());
-      const newContent = JSON.stringify(content);
-      if (currentContent !== newContent) {
-        editor.commands.setContent(content);
+    if (!editor || content == null) return;
+
+    const currentContent = JSON.stringify(editor.getJSON());
+    const newContent = JSON.stringify(content);
+    if (currentContent !== newContent) {
+      if (editor.isFocused) {
+        return;
       }
+      editor.commands.setContent(content);
     }
   }, [editor, content]);
 
@@ -479,29 +521,16 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
     return <div className="animate-pulse bg-gray-800 h-48 rounded" />;
   }
 
-  const ToolbarButton = ({ 
-    onClick, 
-    isActive = false, 
-    children 
-  }: { 
-    onClick: (event: ReactMouseEvent<HTMLButtonElement>) => void; 
-    isActive?: boolean; 
-    children: React.ReactNode 
-  }) => (
-    <button
-      type="button"
-      onMouseDown={(event) => event.preventDefault()}
-      onClick={onClick}
-      className={`
-        p-1.5 rounded transition-colors
-        ${isActive 
-          ? 'bg-gray-700 text-white' 
-          : 'text-gray-400 hover:bg-gray-800 hover:text-white'}
-      `}
-    >
-      {children}
-    </button>
-  );
+  if (bare) {
+    return (
+      <div
+        ref={editorWrapperRef}
+        className="relative"
+      >
+        <EditorContent editor={editor} />
+      </div>
+    );
+  }
 
   return (
     <div
@@ -631,6 +660,9 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
                 <ToolbarButton onClick={() => fileInputRef.current?.click()}>
                   <ImagePlus size={16} />
                 </ToolbarButton>
+                <ToolbarButton onClick={() => docInputRef.current?.click()}>
+                  <Paperclip size={16} />
+                </ToolbarButton>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -644,7 +676,28 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
                         editor.chain().focus().setImage({ src: url }).run();
                       }
                     }
-                    // Reset input so same file can be selected again
+                    e.target.value = '';
+                  }}
+                />
+                <input
+                  ref={docInputRef}
+                  type="file"
+                  accept="*/*"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const url = await uploadImage(file);
+                      if (url) {
+                        if (file.type.startsWith('image/')) {
+                          editor.chain().focus().setImage({ src: url }).run();
+                        } else {
+                          editor.chain().focus().insertContent(
+                            `<a href="${url}">${file.name}</a>`
+                          ).run();
+                        }
+                      }
+                    }
                     e.target.value = '';
                   }}
                 />
@@ -654,7 +707,7 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
         </div>
       )}
 
-      <div className="bg-slate-950 px-3 py-3">
+      <div className={readOnly && compact ? 'bg-slate-950 px-2 py-2' : 'bg-slate-950 px-3 py-3'}>
         <EditorContent editor={editor} />
       </div>
 
@@ -739,9 +792,14 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
               <TableIcon size={16} />
             </ToolbarButton>
             {noteId && (
-              <ToolbarButton onClick={() => fileInputRef.current?.click()}>
-                <ImagePlus size={16} />
-              </ToolbarButton>
+              <>
+                <ToolbarButton onClick={() => fileInputRef.current?.click()}>
+                  <ImagePlus size={16} />
+                </ToolbarButton>
+                <ToolbarButton onClick={() => docInputRef.current?.click()}>
+                  <Paperclip size={16} />
+                </ToolbarButton>
+              </>
             )}
             <ToolbarButton onClick={() => editor.chain().focus().undo().run()}>
               <Undo size={16} />

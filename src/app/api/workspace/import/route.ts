@@ -1,32 +1,88 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { promises as fs } from 'fs';
+import os from 'os';
 import path from 'path';
+import { createWriteStream } from 'fs';
+import { Readable } from 'stream';
 import AdmZip from 'adm-zip';
+import Busboy from 'busboy';
 
 export const dynamic = 'force-dynamic';
 
 const DATA_DIR = process.env.DATA_DIR || './data';
+const BACKUP_DIR = process.env.BACKUP_DIR || './backups';
+const MAX_IMPORT_BYTES = 5 * 1024 * 1024 * 1024;
+
+async function writeMultipartUploadToTempFile(request: NextRequest) {
+  const tempPath = path.join(os.tmpdir(), `workspace-import-${Date.now()}-${Math.random().toString(36).slice(2)}.zip`);
+  const contentType = request.headers.get('content-type');
+  if (!contentType) throw new Error('Missing multipart content type');
+
+  await new Promise<void>((resolve, reject) => {
+    const parser = Busboy({
+      headers: { 'content-type': contentType },
+      limits: { fileSize: MAX_IMPORT_BYTES },
+    });
+    let foundFile = false;
+    let output: ReturnType<typeof createWriteStream> | null = null;
+    let parserFinished = false;
+    let outputFinished = false;
+    const complete = () => {
+      if (parserFinished && outputFinished) resolve();
+    };
+
+    parser.on('file', (fieldname, stream) => {
+      if (fieldname !== 'file' || foundFile) {
+        stream.resume();
+        return;
+      }
+      foundFile = true;
+      output = createWriteStream(tempPath);
+      stream.on('limit', () => reject(new Error(`Backup file is too large (maximum ${MAX_IMPORT_BYTES / (1024 * 1024)} MB)`)));
+      stream.on('error', reject);
+      output.on('error', reject);
+      output.on('close', () => {
+        outputFinished = true;
+        complete();
+      });
+      stream.pipe(output);
+    });
+    parser.on('error', reject);
+    parser.on('finish', () => {
+      if (!foundFile) reject(new Error('No file provided'));
+      else {
+        parserFinished = true;
+        complete();
+      }
+    });
+
+    const body = request.body;
+    if (!body) {
+      reject(new Error('Empty request body'));
+      return;
+    }
+    Readable.fromWeb(body as unknown as import('stream/web').ReadableStream).pipe(parser);
+  }).catch(async error => {
+    await fs.rm(tempPath, { force: true }).catch(() => undefined);
+    throw error;
+  });
+
+  return tempPath;
+}
 
 export async function POST(request: NextRequest) {
+  let tempZipPath: string | null = null;
   try {
-    const formData = await request.formData();
-    const file = formData.get('file') as File | null;
-
-    if (!file) {
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+    if (!request.headers.get('content-type')?.startsWith('multipart/form-data')) {
+      return NextResponse.json({ error: 'Expected multipart form data' }, { status: 400 });
     }
 
-    if (!file.name.endsWith('.zip')) {
-      return NextResponse.json({ error: 'File must be a .zip archive' }, { status: 400 });
-    }
+    tempZipPath = await writeMultipartUploadToTempFile(request);
 
-    // Read zip file
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    
-    const zip = new AdmZip(buffer);
+    // Keep the upload on disk so AdmZip does not require a second full copy in memory.
+    const zip = new AdmZip(tempZipPath);
     const entries = zip.getEntries();
-    console.log('Import ZIP entries:', entries.map(e => e.entryName));
+    console.log('Import ZIP entries:', entries.length, entries.slice(0, 20).map(e => e.entryName));
 
     if (entries.length === 0) {
       return NextResponse.json({ error: 'ZIP file is empty' }, { status: 400 });
@@ -64,7 +120,6 @@ export async function POST(request: NextRequest) {
       const code = (err as { code?: string }).code;
       if (code === 'EACCES' || code === 'EPERM') {
         // cannot write to configured directory, fallback to temp
-        const os = await import('os');
         const fallback = path.join(os.tmpdir(), 'pietrosoft-data');
         console.warn(`Permission denied for DATA_DIR ${dataPath}, using fallback ${fallback}`);
         dataPath = fallback;
@@ -95,6 +150,33 @@ export async function POST(request: NextRequest) {
       await fs.mkdir(dataPath, { recursive: true });
       
       for (const entry of entries) {
+        if (entry.entryName.startsWith('config/')) {
+          const fileName = entry.entryName.replace(/^config\//, '');
+          if (entry.isDirectory) {
+            continue;
+          }
+
+          const fileData = entry.getData();
+          if (fileName === 'telegram-config.json') {
+            const telegramConfigPath = path.join(process.env.WORKSPACE_PATH || dataPath, 'telegram-config.json');
+            await fs.mkdir(path.dirname(telegramConfigPath), { recursive: true });
+            await fs.writeFile(telegramConfigPath, fileData);
+            continue;
+          }
+
+          if (fileName === 'backup-settings.json') {
+            const resolvedBackupDir = path.resolve(BACKUP_DIR);
+            await fs.mkdir(resolvedBackupDir, { recursive: true });
+            await fs.writeFile(path.join(resolvedBackupDir, 'backup-settings.json'), fileData);
+            continue;
+          }
+
+          const configPath = path.join(process.env.WORKSPACE_PATH || dataPath, fileName);
+          await fs.mkdir(path.dirname(configPath), { recursive: true });
+          await fs.writeFile(configPath, fileData);
+          continue;
+        }
+
         const entryPath = path.join(dataPath, entry.entryName);
         
         if (entry.isDirectory) {
@@ -121,19 +203,28 @@ export async function POST(request: NextRequest) {
         projects: 0,
         attachments: 0,
         activityLogs: 0,
-        taskComments: 0,
+        comments: 0,
+        billingMethods: 0,
+        billingRuns: 0,
+        billingRunItems: 0,
+        taskTodos: 0,
       };
 
       const dbDir = entries.some(e => e.entryName.startsWith('db/')) ? path.join(dataPath, 'db') : null;
-      if (dbDir) {
+      const hasLegacyTaskComments = entries.some(e => e.entryName === 'taskComments.json');
+      if (dbDir || hasLegacyTaskComments) {
         let dbError: unknown = null;
         try {
           const { prisma } = await import('@/lib/db');
           // wipe tables: timesheets must be cleared before notes in case they reference
           // taskId -> notes; otherwise note deletion will fail due to FK constraint.
           await prisma.$transaction([
-            prisma.taskComment.deleteMany(),
+            prisma.billingRunItem.deleteMany(),
+            prisma.billingRun.deleteMany(),
+            prisma.billingMethod.deleteMany(),
             prisma.taskActivityLog.deleteMany(),
+            prisma.taskComment.deleteMany(),
+            prisma.taskTodo.deleteMany(),
             prisma.attachment.deleteMany(),
             prisma.timesheet.deleteMany(),
             prisma.note.deleteMany(),
@@ -151,170 +242,93 @@ export async function POST(request: NextRequest) {
             }
           };
 
-          // Sanitize data functions - keep only fields that exist in current schema
-          const sanitizeClient = (obj: unknown): Record<string, unknown> => {
-            if (typeof obj !== 'object' || obj === null) return {};
-            const data = obj as Record<string, unknown>;
-            const result: Record<string, unknown> = {};
-            const validFields = ['id', 'name', 'description', 'color', 'active', 'parentClientId', 'createdAt', 'updatedAt'];
-            for (const field of validFields) {
-              if (field in data) {
-                result[field] = data[field];
-              }
-            }
-            // Convert date strings
-            if (typeof result.createdAt === 'string') result.createdAt = new Date(result.createdAt);
-            if (typeof result.updatedAt === 'string') result.updatedAt = new Date(result.updatedAt);
-            return result;
-          };
-
-          const sanitizeProject = (obj: unknown): Record<string, unknown> => {
-            if (typeof obj !== 'object' || obj === null) return {};
-            const data = obj as Record<string, unknown>;
-            const result: Record<string, unknown> = {};
-            const validFields = ['id', 'name', 'description', 'clientId', 'createdAt', 'updatedAt'];
-            for (const field of validFields) {
-              if (field in data) {
-                result[field] = data[field];
-              }
-            }
-            if (typeof result.createdAt === 'string') result.createdAt = new Date(result.createdAt);
-            if (typeof result.updatedAt === 'string') result.updatedAt = new Date(result.updatedAt);
-            return result;
-          };
-
-          const sanitizeNote = (obj: unknown): Record<string, unknown> => {
-            if (typeof obj !== 'object' || obj === null) return {};
-            const data = obj as Record<string, unknown>;
-            const result: Record<string, unknown> = {};
-            const validFields = ['id', 'type', 'title', 'content', 'projectId', 'clientId', 'archived', 'isFavorite', 'favoriteOrder', 'attachments', 'taskStatus', 'taskPriority', 'taskDueDate', 'connectionUrl', 'connectionUsername', 'connectionCredentials', 'createdAt', 'updatedAt', 'contentJson', 'taskTicketPhaseCode', 'taskShortDescription', 'taskBudgetHours'];
-            for (const field of validFields) {
-              if (field in data) {
-                result[field] = data[field];
-              }
-            }
-            if (typeof result.createdAt === 'string') result.createdAt = new Date(result.createdAt);
-            if (typeof result.updatedAt === 'string') result.updatedAt = new Date(result.updatedAt);
-            if (typeof result.taskDueDate === 'string') result.taskDueDate = new Date(result.taskDueDate);
-            return result;
-          };
-
-          const sanitizeTimesheet = (obj: unknown): Record<string, unknown> => {
-            if (typeof obj !== 'object' || obj === null) return {};
-            const data = obj as Record<string, unknown>;
-            const result: Record<string, unknown> = {};
-            const validFields = ['id', 'workDate', 'hoursWorked', 'description', 'taskId', 'projectId', 'clientId', 'rate', 'state', 'createdAt', 'updatedAt'];
-            for (const field of validFields) {
-              if (field in data) {
-                result[field] = data[field];
-              }
-            }
-            if (typeof result.createdAt === 'string') result.createdAt = new Date(result.createdAt);
-            if (typeof result.updatedAt === 'string') result.updatedAt = new Date(result.updatedAt);
-            if (typeof result.workDate === 'string') result.workDate = new Date(result.workDate);
-            return result;
-          };
-
-          const sanitizeAttachment = (obj: unknown): Record<string, unknown> => {
-            if (typeof obj !== 'object' || obj === null) return {};
-            const data = obj as Record<string, unknown>;
-            const result: Record<string, unknown> = {};
-            const validFields = ['id', 'noteId', 'filename', 'mimeType', 'size', 'data', 'createdAt', 'originalName'];
-            for (const field of validFields) {
-              if (field in data) {
-                result[field] = data[field];
-              }
-            }
-            if (typeof result.createdAt === 'string') result.createdAt = new Date(result.createdAt);
-            return result;
-          };
-
-          const sanitizeActivityLog = (obj: unknown): Record<string, unknown> => {
-            if (typeof obj !== 'object' || obj === null) return {};
-            const data = obj as Record<string, unknown>;
-            const result: Record<string, unknown> = {};
-            const validFields = ['id', 'taskId', 'eventType', 'description', 'createdAt'];
-            for (const field of validFields) {
-              if (field in data) {
-                result[field] = data[field];
-              }
-            }
-            if (typeof result.createdAt === 'string') result.createdAt = new Date(result.createdAt);
-            return result;
-          };
-
-          const sanitizeTaskComment = (obj: unknown): Record<string, unknown> => {
-            if (typeof obj !== 'object' || obj === null) return {};
-            const data = obj as Record<string, unknown>;
-            const result: Record<string, unknown> = {};
-            const validFields = ['id', 'taskId', 'author', 'content', 'createdAt'];
-            for (const field of validFields) {
-              if (field in data) {
-                result[field] = data[field];
-              }
-            }
-            if (typeof result.author !== 'string' || !result.author) result.author = 'Imported';
-            if (typeof result.createdAt === 'string') result.createdAt = new Date(result.createdAt);
-            return result;
-          };
-
           const clients = await readJson('clients.json');
           if (clients) {
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore: input derived from exported JSON and should match schema
-            await prisma.client.createMany({ data: clients.map(sanitizeClient) });
+            await prisma.client.createMany({ data: clients });
             counts.clients = clients.length;
           }
           const projects = await readJson('projects.json');
           if (projects) {
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore: input derived from exported JSON and should match schema
-            await prisma.project.createMany({ data: projects.map(sanitizeProject) });
+            await prisma.project.createMany({ data: projects });
             counts.projects = projects.length;
           }
           const notes = await readJson('notes.json');
           if (notes) {
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore: input derived from exported JSON and should match schema
-            await prisma.note.createMany({ data: notes.map(sanitizeNote) });
+            await prisma.note.createMany({ data: notes });
             counts.notes = notes.length;
           }
           const timesheets = await readJson('timesheets.json');
           if (timesheets) {
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore: input derived from exported JSON and should match schema
-            await prisma.timesheet.createMany({ data: timesheets.map(sanitizeTimesheet) });
+            await prisma.timesheet.createMany({ data: timesheets });
             counts.timesheets = timesheets.length;
           }
           const attachments = await readJson('attachments.json');
           if (attachments) {
             // decode base64
             interface AttachmentJson { [key: string]: unknown; data: string; }
-            const withBinary = (attachments as AttachmentJson[]).map(a => {
-              const sanitized = sanitizeAttachment(a);
-              return {
-                ...sanitized,
-                data: Buffer.from(a.data, 'base64'),
-              };
-            });
+            const withBinary = (attachments as AttachmentJson[]).map(a => ({
+              ...a,
+              data: Buffer.from(a.data, 'base64'),
+            }));
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore: input derived from exported JSON and should match schema
+            // @ts-expect-error: input derived from exported JSON and should match schema
             await prisma.attachment.createMany({ data: withBinary });
             counts.attachments = attachments.length;
           }
           const logs = await readJson('activityLogs.json');
           if (logs) {
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore: input derived from exported JSON and should match schema
-            await prisma.taskActivityLog.createMany({ data: logs.map(sanitizeActivityLog) });
+            await prisma.taskActivityLog.createMany({ data: logs });
             counts.activityLogs = logs.length;
           }
-          const taskComments = await readJson('taskComments.json');
-          if (taskComments) {
+          // Try db/comments.json (new format) then db/taskComments.json (current PROD format)
+          const comments = await readJson('comments.json') ?? await readJson('taskComments.json');
+          if (comments) {
+            console.log(`DB import: restoring ${comments.length} comments`);
+            await prisma.taskComment.createMany({ data: comments, skipDuplicates: true });
+            counts.comments = comments.length;
+          } else {
+            console.warn('DB import: no comments file found in backup');
+          }
+
+          const billingMethods = await readJson('billingMethods.json');
+          if (billingMethods) {
+            await prisma.billingMethod.createMany({ data: billingMethods });
+            counts.billingMethods = billingMethods.length;
+          }
+          const billingRuns = await readJson('billingRuns.json');
+          if (billingRuns) {
+            interface BillingRunJson { [key: string]: unknown; pdfData: string | null; }
+            const withBinaryPdf = (billingRuns as BillingRunJson[]).map(r => ({
+              ...r,
+              pdfData: r.pdfData ? Buffer.from(r.pdfData, 'base64') : null,
+            }));
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore: input derived from exported JSON and should match schema
-            await prisma.taskComment.createMany({ data: taskComments.map(sanitizeTaskComment) });
-            counts.taskComments = taskComments.length;
+            // @ts-expect-error: input derived from exported JSON and should match schema
+            await prisma.billingRun.createMany({ data: withBinaryPdf });
+            counts.billingRuns = billingRuns.length;
+          }
+          const billingRunItems = await readJson('billingRunItems.json');
+          if (billingRunItems) {
+            await prisma.billingRunItem.createMany({ data: billingRunItems });
+            counts.billingRunItems = billingRunItems.length;
+          }
+          const taskTodos = await readJson('taskTodos.json');
+          if (taskTodos) {
+            // Two-pass insert to handle self-referencing recurrenceParentId FK:
+            // 1st pass: insert all with recurrenceParentId = null
+            // 2nd pass: update the ones that had a parent
+            interface TaskTodoJson { id: string; recurrenceParentId: string | null; [key: string]: unknown; }
+            const normalized = (taskTodos as TaskTodoJson[]).map(t => ({ ...t, recurrenceParentId: null }));
+            // @ts-expect-error: input derived from exported JSON and should match schema
+            await prisma.taskTodo.createMany({ data: normalized });
+            const withParent = (taskTodos as TaskTodoJson[]).filter(t => t.recurrenceParentId);
+            for (const todo of withParent) {
+              await prisma.taskTodo.update({
+                where: { id: todo.id },
+                data: { recurrenceParentId: todo.recurrenceParentId },
+              });
+            }
+            counts.taskTodos = taskTodos.length;
           }
         } catch (err) {
           console.error('DB import error:', err);
@@ -359,22 +373,11 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Import error:', error);
-    // also log entries for context
-    try {
-      const zip = await (async () => {
-        const formData = await request.formData();
-        const file = formData.get('file') as File | null;
-        if (file) {
-          const buf = Buffer.from(await file.arrayBuffer());
-          return new AdmZip(buf);
-        }
-        return null;
-      })();
-      if (zip) console.error('Entries at failure:', zip.getEntries().map(e => e.entryName));
-    } catch {
-      // ignore
-    }
     // return error message for debugging
     return NextResponse.json({ error: 'Import failed', details: String(error) }, { status: 500 });
+  } finally {
+    if (tempZipPath) {
+      await fs.rm(tempZipPath, { force: true }).catch(() => undefined);
+    }
   }
 }

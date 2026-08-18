@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { memo, useEffect, useRef, useCallback, useState, type MouseEvent } from 'react';
 import { useApp } from '../context/AppContext';
 import { FileText, CheckSquare, Link, Link2, Clock, Plus, X, Star, Paperclip, GripVertical, ChevronRight, ChevronLeft, User, Key, Check, Copy, ExternalLink } from 'lucide-react';
 import type { ConnectionNote } from '@/lib/types';
@@ -11,6 +11,97 @@ import { ConnectionEditorModal } from './ConnectionEditorModal';
 import { Toast } from './Toast';
 import { getContrastTextColor } from '@/lib/colorPalette';
 import type { NoteType, TaskNote, Note } from '@/lib/types';
+
+const copyTextToClipboard = async (value: string) => {
+  if (!value) return false;
+
+  if (typeof window !== 'undefined' && window.isSecureContext && navigator.clipboard && navigator.clipboard.writeText) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return true;
+    } catch {
+      // Fallback below
+    }
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = value;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'absolute';
+  textarea.style.left = '-9999px';
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  textarea.setSelectionRange(0, value.length);
+  const result = document.execCommand('copy');
+  document.body.removeChild(textarea);
+  return result;
+};
+
+const ConnectionCopyButtons = memo(function ConnectionCopyButtons({ note }: { note: ConnectionNote }) {
+  const [copiedField, setCopiedField] = useState<'url' | 'username' | 'password' | null>(null);
+
+  const handleCopy = async (e: MouseEvent<HTMLButtonElement>, field: 'url' | 'username' | 'password') => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const value = note[field] || '';
+    if (!value) return;
+
+    const copiedSuccessfully = await copyTextToClipboard(value);
+    if (copiedSuccessfully) {
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 2000);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2 ml-auto text-gray-400">
+      {note.url && (
+        <>
+          <a
+            href={note.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            title="Ir al enlace"
+            className="p-1 hover:text-blue-400 transition-colors"
+          >
+            <ExternalLink size={16} />
+          </a>
+          <button
+            type="button"
+            onClick={(e) => handleCopy(e, 'url')}
+            title="Copiar URL"
+            className="p-1 hover:text-white transition-colors"
+          >
+            {copiedField === 'url' ? <Check size={16} className="text-green-400" /> : <Link2 size={16} />}
+          </button>
+        </>
+      )}
+      {note.username && (
+        <button
+          type="button"
+          onClick={(e) => handleCopy(e, 'username')}
+          title="Copiar usuario"
+          className="p-1 hover:text-white transition-colors"
+        >
+          {copiedField === 'username' ? <Check size={16} className="text-green-400" /> : <User size={16} />}
+        </button>
+      )}
+      {note.password && (
+        <button
+          type="button"
+          onClick={(e) => handleCopy(e, 'password')}
+          title="Copiar contraseña"
+          className="p-1 hover:text-white transition-colors"
+        >
+          {copiedField === 'password' ? <Check size={16} className="text-green-400" /> : <Key size={16} />}
+        </button>
+      )}
+    </div>
+  );
+});
 
 // Note: timesheet is excluded from NotesList filters as per REQ-002
 // TimeSheets are now viewed in a dedicated view
@@ -67,20 +158,6 @@ export function NotesList() {
     activeTab,
   } = useApp();
 
-  // track which connection field was copied for visual feedback
-  const [copiedInfo, setCopiedInfo] = useState<{ id: string; field: 'url' | 'username' | 'password' | 'title' } | null>(null);
-
-  const handleConnCopy = async (note: ConnectionNote, field: 'url' | 'username' | 'password') => {
-    const value = note[field] || '';
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopiedInfo({ id: note.id, field });
-      setTimeout(() => setCopiedInfo(null), 2000);
-    } catch (err) {
-      console.error('Failed to copy connection field:', err);
-    }
-  };
-
   const handleCopyTitle = async (note: Note) => {
     let titleText = '';
     if (note.type === 'task') {
@@ -96,9 +173,7 @@ export function NotesList() {
       titleText = note.title || '';
     }
     try {
-      await navigator.clipboard.writeText(titleText.trim());
-      setCopiedInfo({ id: note.id, field: 'title' });
-      setTimeout(() => setCopiedInfo(null), 2000);
+      await copyTextToClipboard(titleText.trim());
     } catch (err) {
       console.error('Failed to copy title:', err);
     }
@@ -153,7 +228,7 @@ export function NotesList() {
   }, [panelWidth]);
 
   useEffect(() => {
-    const handleResizeMove = (e: MouseEvent) => {
+    const handleResizeMove = (e: globalThis.MouseEvent) => {
       if (!isResizing.current) return;
       const delta = e.clientX - startX.current;
       const newWidth = Math.max(200, Math.min(600, startWidth.current + delta));
@@ -178,7 +253,7 @@ export function NotesList() {
 
   // Close dropdown when clicking outside
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
+    const handleClickOutside = (e: globalThis.MouseEvent) => {
       if (createDropdownRef.current && !createDropdownRef.current.contains(e.target as Node)) {
         setShowCreateDropdown(false);
       }
@@ -738,72 +813,16 @@ export function NotesList() {
                       {/* Copy title button - only for task notes */}
                       {note.type === 'task' && (
                         <button
+                          type="button"
                           onClick={(e) => { e.stopPropagation(); handleCopyTitle(note); }}
                           title="Copiar título"
                           className="p-1 text-gray-400 hover:text-white transition-colors flex-shrink-0"
                         >
-                          {copiedInfo?.id === note.id && copiedInfo.field === 'title' ? (
-                            <Check size={14} className="text-green-400" />
-                          ) : (
-                            <Copy size={14} />
-                          )}
+                          <Copy size={14} />
                         </button>
                       )}
-                      {/* connection-specific copy icons */}
                       {note.type === 'connection' && (
-                        <div className="flex items-center gap-2 ml-auto text-gray-400">
-                          {note.url && (
-                            <>
-                              <a
-                                href={note.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                title="Ir al enlace"
-                                className="p-1 hover:text-blue-400 transition-colors"
-                              >
-                                <ExternalLink size={16} />
-                              </a>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleConnCopy(note, 'url'); }}
-                                title="Copiar URL"
-                                className="p-1 hover:text-white transition-colors"
-                              >
-                                {copiedInfo?.id === note.id && copiedInfo.field === 'url' ? (
-                                  <Check size={16} className="text-green-400" />
-                                ) : (
-                                  <Link2 size={16} />
-                                )}
-                              </button>
-                            </>
-                          )}
-                          {note.username && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleConnCopy(note, 'username'); }}
-                              title="Copiar usuario"
-                              className="p-1 hover:text-white transition-colors"
-                            >
-                              {copiedInfo?.id === note.id && copiedInfo.field === 'username' ? (
-                                <Check size={16} className="text-green-400" />
-                              ) : (
-                                <User size={16} />
-                              )}
-                            </button>
-                          )}
-                          {note.password && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleConnCopy(note, 'password'); }}
-                              title="Copiar contraseña"
-                              className="p-1 hover:text-white transition-colors"
-                            >
-                              {copiedInfo?.id === note.id && copiedInfo.field === 'password' ? (
-                                <Check size={16} className="text-green-400" />
-                              ) : (
-                                <Key size={16} />
-                              )}
-                            </button>
-                          )}
-                        </div>
+                        <ConnectionCopyButtons note={note as ConnectionNote} />
                       )}
                     </div>
                   </div>
@@ -822,6 +841,13 @@ export function NotesList() {
           onClose={closeEditorModal}
           onSaved={() => refreshNotes()}
           defaultClientId={selectedClientId && selectedClientId !== 'none' ? selectedClientId : undefined}
+        />
+      )}
+      {editorModal.isOpen && editorModal.mode === 'edit' && editorModal.noteType === 'task' && editorModal.noteId && (
+        <TaskEditorModal
+          taskId={editorModal.noteId}
+          onClose={closeEditorModal}
+          onSaved={() => refreshNotes()}
         />
       )}
       {editorModal.isOpen && editorModal.mode === 'create' && editorModal.noteType === 'general' && (

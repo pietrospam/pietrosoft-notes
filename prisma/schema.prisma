@@ -229,6 +229,8 @@ model BillingMethod {
   payloadTemplate    Json?    @map("payload_template") // Template JSON for building the request
   nextInvoiceNumber  Int      @default(1) @map("next_invoice_number") // Per-method invoice counter
   invoicePrefix      String?  @map("invoice_prefix") @db.VarChar(20) // Optional prefix e.g. "FAC-"
+  currency          String   @default("EUR") @db.VarChar(10)
+  paymentTermDays   Int      @default(0) @map("payment_term_days")
   clientParentId     String?  @map("client_parent_id")
   active             Boolean  @default(true)
   createdAt          DateTime @default(now()) @map("created_at")

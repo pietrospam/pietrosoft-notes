@@ -68,6 +68,11 @@ export function BaseEditorModal({
   const isCreatedRef = useRef(false); // Track if note was created
   // Track if editor content has been initialized (to ignore TipTap's initial onChange)
   const contentInitializedRef = useRef(!noteId); // New notes start initialized
+  // Stable refs for callbacks used in loadNote effect (avoids effect re-running on callback identity changes)
+  const onFieldsChangeRef = useRef(onFieldsChange);
+  onFieldsChangeRef.current = onFieldsChange;
+  const setIsDirtyRef = useRef(setIsDirty);
+  setIsDirtyRef.current = setIsDirty;
 
   // Persist note and return new ID (for attachments/images before first save)
   const persistNote = useCallback(async (): Promise<string | null> => {
@@ -171,8 +176,8 @@ export function BaseEditorModal({
             setNote(data);
             setTitle(data.title);
             // Sync fields with loaded data (for Connection, Note editors)
-            onFieldsChange?.(data);
-            setIsDirty(false);
+            onFieldsChangeRef.current?.(data);
+            setIsDirtyRef.current(false);
             
             // Wait for TipTap to initialize before enabling change tracking
             setTimeout(() => {
@@ -198,7 +203,7 @@ export function BaseEditorModal({
         titleInputRef.current?.select();
       }, 100);
     }
-  }, [noteId, onFieldsChange]);
+  }, [noteId, openAttachmentsOnOpen]); // onFieldsChange and setIsDirty accessed via refs to prevent re-triggering on identity changes
 
   // Sync attachments from global context (for when files are dropped via GlobalDropZone)
   useEffect(() => {
@@ -217,6 +222,15 @@ export function BaseEditorModal({
     }
   }, [filteredNotes, noteId, note.id, note.attachments]);
 
+  const handleClose = useCallback(() => {
+    // If dirty, show confirmation modal
+    if (isDirty && Object.keys(pendingChangesRef.current).length > 0) {
+      setShowUnsavedModal(true);
+      return;
+    }
+    onClose();
+  }, [isDirty, onClose]);
+
   // Handle Escape key (only in popup mode)
   useEffect(() => {
     if (inline) return; // Don't handle Escape in inline mode
@@ -227,7 +241,7 @@ export function BaseEditorModal({
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [inline]);
+  }, [inline, handleClose]);
 
   // Cleanup
   useEffect(() => {
@@ -354,15 +368,6 @@ export function BaseEditorModal({
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleClose = () => {
-    // If dirty, show confirmation modal
-    if (isDirty && Object.keys(pendingChangesRef.current).length > 0) {
-      setShowUnsavedModal(true);
-      return;
-    }
-    onClose();
   };
 
   const handleDiscardAndClose = () => {

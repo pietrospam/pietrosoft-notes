@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
+import { promises as fs, createWriteStream } from 'fs';
 import path from 'path';
 import { notifyBackupSuccess, notifyBackupError } from '@/lib/telegram';
 
@@ -22,6 +22,7 @@ function getArgentinaTime(): { hours: number; minutes: number } {
 
 interface BackupSettings {
   retentionCount: number;
+  maxAgeDays: number;
   autoBackupEnabled: boolean;
   autoBackupFrequency: 'daily' | 'weekly' | 'monthly';
   autoBackupTime: string;
@@ -132,14 +133,6 @@ export async function POST() {
 
     // Create ZIP archive
     const archive = archiver('zip', { zlib: { level: 9 } });
-    const chunks: Buffer[] = [];
-
-    archive.on('data', (chunk) => chunks.push(chunk));
-
-    const finishPromise = new Promise<Buffer>((resolve, reject) => {
-      archive.on('end', () => resolve(Buffer.concat(chunks)));
-      archive.on('error', reject);
-    });
 
     // Export database tables
     const [clients, projects, notes, attachments, activityLogs, timesheets, taskComments, billingMethods, billingRuns, billingRunItems, todoNotificationsSent] = await Promise.all([
@@ -228,7 +221,8 @@ export async function POST() {
     archive.append(JSON.stringify(attachmentsWithData, null, 2), { name: 'db/attachments.json' });
 
     // Add data directory if exists (telegram config, etc)
-    const dataDir = process.env.DATA_DIR || './data';
+    const dataDir = process.env.WORKSPACE_PATH || process.env.DATA_DIR || './data';
+    const telegramConfigPath = path.join(dataDir, 'telegram-config.json');
     try {
       const addDirectory = async (dirPath: string, archivePath: string): Promise<void> => {
         const entries = await fs.readdir(dirPath, { withFileTypes: true });
@@ -251,6 +245,14 @@ export async function POST() {
       // Data directory doesn't exist - that's fine
     }
 
+    // Add Telegram configuration if exists
+    try {
+      const telegramConfigContent = await fs.readFile(telegramConfigPath);
+      archive.append(telegramConfigContent, { name: 'config/telegram-config.json' });
+    } catch {
+      // Telegram config file doesn't exist - that's fine
+    }
+
     // Add backup settings
     const backupSettingsPath = path.join(BACKUP_DIR, 'backup-settings.json');
     try {
@@ -260,23 +262,32 @@ export async function POST() {
       // Settings file doesn't exist - that's fine
     }
 
-    await archive.finalize();
-    const zipBuffer = await finishPromise;
+    const output = createWriteStream(filePath);
+    archive.pipe(output);
 
-    // Write to file
-    await fs.writeFile(filePath, zipBuffer);
+    const finishPromise = new Promise<void>((resolve, reject) => {
+      output.on('close', resolve);
+      output.on('error', reject);
+      archive.on('error', reject);
+    });
+
+    await archive.finalize();
+    await finishPromise;
+
+    const fileStat = await fs.stat(filePath);
+    const sizeBytes = fileStat.size;
 
     // Update last auto backup time
     settings.lastAutoBackup = new Date().toISOString();
     await writeSettings(settings);
 
     // Apply retention policy
-    await applyRetentionPolicy(settings.retentionCount);
+    await applyRetentionPolicy(settings);
 
     // Send Telegram notification (async, don't block response)
     notifyBackupSuccess({
       filename,
-      sizeBytes: zipBuffer.length,
+      sizeBytes,
       type: 'auto',
       filePath,
     }).catch(err => console.error('Telegram notification failed:', err));
@@ -284,7 +295,7 @@ export async function POST() {
     return NextResponse.json({
       success: true,
       filename,
-      sizeBytes: zipBuffer.length,
+      sizeBytes,
       stats: manifest.stats,
       type: 'auto',
     });
@@ -329,9 +340,7 @@ export async function GET() {
 }
 
 // Helper: Apply retention policy
-async function applyRetentionPolicy(retentionCount: number): Promise<void> {
-  if (retentionCount <= 0) return;
-
+async function applyRetentionPolicy(settings: BackupSettings): Promise<void> {
   try {
     const JSZip = (await import('jszip')).default;
     const files = await fs.readdir(BACKUP_DIR);
@@ -375,12 +384,37 @@ async function applyRetentionPolicy(retentionCount: number): Promise<void> {
       new Date(b.date).getTime() - new Date(a.date).getTime()
     );
 
+    const now = Date.now();
+    const maxAgeMs = settings.maxAgeDays > 0 ? settings.maxAgeDays * 24 * 60 * 60 * 1000 : 0;
+    const deletedFilenames = new Set<string>();
+
+    if (maxAgeMs > 0) {
+      for (const backup of backupsWithInfo) {
+        if (backup.protected) continue;
+
+        const backupAgeMs = now - new Date(backup.date).getTime();
+        if (backupAgeMs > maxAgeMs) {
+          const filePath = path.join(BACKUP_DIR, backup.filename);
+          try {
+            await fs.unlink(filePath);
+            deletedFilenames.add(backup.filename);
+            console.log(`Retention: Deleted aged backup ${backup.filename}`);
+          } catch (err) {
+            console.warn(`Failed to delete aged backup ${backup.filename}:`, err);
+          }
+        }
+      }
+    }
+
+    if (settings.retentionCount <= 0) return;
+
     let nonProtectedCount = 0;
     for (const backup of backupsWithInfo) {
+      if (deletedFilenames.has(backup.filename)) continue;
       if (backup.protected) continue;
       nonProtectedCount++;
 
-      if (nonProtectedCount > retentionCount) {
+      if (nonProtectedCount > settings.retentionCount) {
         const filePath = path.join(BACKUP_DIR, backup.filename);
         try {
           await fs.unlink(filePath);

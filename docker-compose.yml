@@ -7,12 +7,13 @@ services:
       - "3001:3000"
     volumes:
       - ./data:/data
-      - ./backups:/backups  # Backup storage directory
+      - ${BACKUP_HOST_DIR:-./backups}:/backups  # Backup storage directory
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/pietrosoft_notes
       - WORKSPACE_PATH=/data
       - BACKUP_DIR=/backups
       - NODE_ENV=production
+      - APP_ENV=${APP_ENV:-production}
     depends_on:
       postgres:
         condition: service_healthy

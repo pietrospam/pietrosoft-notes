@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
+import { promises as fs, createWriteStream } from 'fs';
 import path from 'path';
 import JSZip from 'jszip';
 import archiver from 'archiver';
@@ -53,6 +53,11 @@ interface BackupMetadata {
   stats?: BackupManifest['stats'];
 }
 
+interface BackupSettingsSummary {
+  retentionCount: number;
+  maxAgeDays: number;
+}
+
 // Helper: Read manifest from ZIP without extracting
 async function readBackupManifest(zipPath: string): Promise<Partial<BackupManifest> | null> {
   try {
@@ -84,14 +89,17 @@ function extractDateFromFilename(filename: string): string {
 }
 
 // Helper: Read backup settings
-async function readBackupSettings(): Promise<{ retentionCount: number }> {
+async function readBackupSettings(): Promise<BackupSettingsSummary> {
   const settingsPath = path.join(BACKUP_DIR, 'backup-settings.json');
   try {
     const content = await fs.readFile(settingsPath, 'utf-8');
     const settings = JSON.parse(content);
-    return { retentionCount: settings.retentionCount || 0 };
+    return {
+      retentionCount: settings.retentionCount || 0,
+      maxAgeDays: settings.maxAgeDays || 0,
+    };
   } catch {
-    return { retentionCount: 0 }; // 0 = unlimited
+    return { retentionCount: 0, maxAgeDays: 0 }; // 0 = unlimited
   }
 }
 
@@ -99,10 +107,6 @@ async function readBackupSettings(): Promise<{ retentionCount: number }> {
 async function applyRetentionPolicy(): Promise<void> {
   try {
     const settings = await readBackupSettings();
-    if (settings.retentionCount <= 0) {
-      return; // Unlimited retention
-    }
-    
     const files = await fs.readdir(BACKUP_DIR);
     const zipFiles = files.filter(f => f.endsWith('.zip'));
     
@@ -123,11 +127,43 @@ async function applyRetentionPolicy(): Promise<void> {
     backupsWithInfo.sort((a, b) => 
       new Date(b.date).getTime() - new Date(a.date).getTime()
     );
-    
+
+    const now = Date.now();
+    const maxAgeMs = settings.maxAgeDays > 0 ? settings.maxAgeDays * 24 * 60 * 60 * 1000 : 0;
+    const deletedFilenames = new Set<string>();
+
+    // Delete backups that are older than the configured age limit first.
+    if (maxAgeMs > 0) {
+      for (const backup of backupsWithInfo) {
+        if (backup.protected) {
+          continue;
+        }
+
+        const backupAgeMs = now - new Date(backup.date).getTime();
+        if (backupAgeMs > maxAgeMs) {
+          const filePath = path.join(BACKUP_DIR, backup.filename);
+          try {
+            await fs.unlink(filePath);
+            deletedFilenames.add(backup.filename);
+            console.log(`Retention policy: Deleted aged backup ${backup.filename}`);
+          } catch (err) {
+            console.warn(`Failed to delete aged backup ${backup.filename}:`, err);
+          }
+        }
+      }
+    }
+
+    if (settings.retentionCount <= 0) {
+      return; // Unlimited count retention, age cleanup already applied
+    }
+
     // Keep track of non-protected backups
     let nonProtectedCount = 0;
-    
+
     for (const backup of backupsWithInfo) {
+      if (deletedFilenames.has(backup.filename)) {
+        continue;
+      }
       if (backup.protected) {
         continue; // Never delete protected backups
       }
@@ -236,14 +272,6 @@ export async function POST(request: NextRequest) {
     
     // Create ZIP archive
     const archive = archiver('zip', { zlib: { level: 9 } });
-    const chunks: Buffer[] = [];
-    
-    archive.on('data', (chunk) => chunks.push(chunk));
-    
-    const finishPromise = new Promise<Buffer>((resolve, reject) => {
-      archive.on('end', () => resolve(Buffer.concat(chunks)));
-      archive.on('error', reject);
-    });
     
     // Export database tables
     const { prisma } = await import('@/lib/db');
@@ -337,10 +365,8 @@ export async function POST(request: NextRequest) {
     archive.append(JSON.stringify(billingRunItems, null, 2), { name: 'db/billingRunItems.json' });
     
     // Add data directory if exists
-    const dataDir = process.env.DATA_DIR || './data';
-    const telegramConfigPath = process.env.WORKSPACE_PATH
-      ? path.join(process.env.WORKSPACE_PATH, 'telegram-config.json')
-      : path.join(dataDir, 'telegram-config.json');
+    const dataDir = process.env.WORKSPACE_PATH || process.env.DATA_DIR || './data';
+    const telegramConfigPath = path.join(dataDir, 'telegram-config.json');
     try {
       await fs.access(dataDir);
       
@@ -381,20 +407,29 @@ export async function POST(request: NextRequest) {
     } catch {
       // Settings file doesn't exist - that's fine
     }
-    
+
+    const output = createWriteStream(filePath);
+    archive.pipe(output);
+
+    const finishPromise = new Promise<void>((resolve, reject) => {
+      output.on('close', resolve);
+      output.on('error', reject);
+      archive.on('error', reject);
+    });
+
     await archive.finalize();
-    const zipBuffer = await finishPromise;
-    
-    // Write to file
-    await fs.writeFile(filePath, zipBuffer);
-    
+    await finishPromise;
+
+    const fileStat = await fs.stat(filePath);
+    const sizeBytes = fileStat.size;
+
     // Apply retention policy
     await applyRetentionPolicy();
 
     // Send Telegram notification (async, don't block response)
     notifyBackupSuccess({
       filename,
-      sizeBytes: zipBuffer.length,
+      sizeBytes,
       type: 'manual',
       filePath,
     }).catch(err => console.error('Telegram notification failed:', err));
@@ -402,7 +437,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       filename,
-      sizeBytes: zipBuffer.length,
+      sizeBytes,
       stats: manifest.stats,
     });
   } catch (error) {

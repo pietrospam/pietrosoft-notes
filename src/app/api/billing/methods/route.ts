@@ -37,6 +37,8 @@ export async function POST(request: Request) {
       payloadTemplate: body.payloadTemplate,
       nextInvoiceNumber: body.nextInvoiceNumber ?? 1,
       invoicePrefix: body.invoicePrefix,
+      currency: body.currency || 'EUR',
+      paymentTermDays: typeof body.paymentTermDays === 'number' ? Math.max(0, Math.floor(body.paymentTermDays)) : 0,
       clientParentId: body.clientParentId,
       active: body.active ?? true,
     });

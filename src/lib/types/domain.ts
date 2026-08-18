@@ -148,6 +148,7 @@ export interface TaskNote extends NoteBase, TaskFields {
 
 export interface ConnectionFields {
   clientId?: UUID;
+  projectId?: UUID;
   url?: string;
   username?: string;
   password?: string; // Stored plainly in prototype
@@ -329,6 +330,8 @@ export interface BillingMethod {
   payloadTemplate?: Record<string, unknown>; // Template JSON for invoice payload
   nextInvoiceNumber: number; // Per-method invoice counter
   invoicePrefix?: string; // Optional prefix e.g. "FAC-"
+  currency: string; // Currency code defined by the billing method
+  paymentTermDays: number; // Due date in days from invoice date; 0 disables due_date
   clientParentId: string;
   active: boolean;
   createdAt: string;
@@ -341,7 +344,7 @@ export type UpdateBillingMethodInput = Partial<CreateBillingMethodInput>;
 
 export type BillingRunStatus = 'pending' | 'success' | 'failed';
 
-export type BillingInvoiceState = 'borrador' | 'validada' | 'enviada';
+export type BillingInvoiceState = 'borrador' | 'validada' | 'enviada' | 'pagada';
 
 export interface BillingRunItem {
   id: UUID;

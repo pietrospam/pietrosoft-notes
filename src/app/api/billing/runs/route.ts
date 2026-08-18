@@ -9,7 +9,8 @@ import {
   updateBillingRun,
 } from '@/lib/repositories/billing-repo';
 import type { BillingAuthConfig, BillingAuthType } from '@/lib/types';
-import { buildExternalPayload, normalizeBillingItems } from '@/lib/billing-utils';
+import { buildExternalPayload, formatDate, normalizeBillingItems, stripExchangeRateUsd } from '@/lib/billing-utils';
+import { prisma } from '@/lib/db';
 
 // GET /api/billing/runs - List billing runs (optionally filtered)
 export async function GET(request: Request) {
@@ -48,13 +49,39 @@ export async function POST(request: Request) {
       saveAsDraft,
       invoiceTitle: invoiceTitleOverride,
       invoiceNumber: invoiceNumberOverride,
-      currency: currencyOverride,
       exchangeRateUsd,
     } = body;
 
-    const existingRun = runId ? await getBillingRunById(runId) : null;
+    let existingRun = runId ? await getBillingRunById(runId) : null;
+    let resolvedRunId = runId as string | undefined;
     if (runId && !existingRun) {
       return NextResponse.json({ error: 'Billing run not found' }, { status: 404 });
+    }
+
+    // Keep older grid clients idempotent while they transition to sending runId.
+    // The saved request JSON contains the invoice number, which lets us recover
+    // the original run instead of creating a second one.
+    if (!existingRun && requestJsonOverride && typeof requestJsonOverride === 'object') {
+      const json = requestJsonOverride as Record<string, unknown>;
+      const candidateInvoiceNumber = invoiceNumberOverride?.trim()
+        || (typeof json.invoiceNumber === 'string' ? json.invoiceNumber.trim() : '')
+        || (typeof json.number === 'string' ? json.number.trim() : '');
+      if (candidateInvoiceNumber && clientParentIdOverride && yearOverride && monthOverride && methodIdOverride) {
+        const recoveredRun = await prisma.billingRun.findFirst({
+          where: {
+            clientParentId: clientParentIdOverride,
+            year: yearOverride,
+            month: monthOverride,
+            methodId: methodIdOverride,
+            invoiceNumber: candidateInvoiceNumber,
+          },
+          orderBy: { createdAt: 'asc' },
+        });
+        if (recoveredRun) {
+          resolvedRunId = recoveredRun.id;
+          existingRun = await getBillingRunById(recoveredRun.id);
+        }
+      }
     }
 
     const clientParentId = clientParentIdOverride ?? existingRun?.clientParentId;
@@ -62,15 +89,21 @@ export async function POST(request: Request) {
     const month = monthOverride ?? existingRun?.month;
     const methodId = methodIdOverride ?? existingRun?.methodId;
     const invoiceTitle = invoiceTitleOverride ?? existingRun?.invoiceTitle;
-    const periodStart = periodStartOverride ?? existingRun?.periodStart;
-    const periodEnd = periodEndOverride ?? existingRun?.periodEnd;
-
     if (!clientParentId || !year || !month || !methodId) {
       return NextResponse.json(
         { error: 'clientParentId, year, month, and methodId are required' },
         { status: 400 }
       );
     }
+
+    // Older billing runs may not have persisted period dates. Use the billing
+    // month as a safe fallback when sending an existing invoice.
+    const periodStart = periodStartOverride
+      ?? existingRun?.periodStart
+      ?? new Date(Date.UTC(year, month - 1, 1)).toISOString();
+    const periodEnd = periodEndOverride
+      ?? existingRun?.periodEnd
+      ?? new Date(Date.UTC(year, month, 0)).toISOString();
 
     const billingItems = normalizeBillingItems(items || existingRun?.items?.map((item) => ({
       name: item.name,
@@ -103,32 +136,47 @@ export async function POST(request: Request) {
 
     // Get preview data (hours summary)
     const preview = await getBillingPreview(clientParentId, year, month, parsedPeriodStart, parsedPeriodEnd);
-    if (preview.totalHours === 0) {
-      return NextResponse.json(
-        { error: 'No hay horas en estado FINAL para el período seleccionado' },
-        { status: 400 }
-      );
-    }
 
     // Get current invoice number for this billing method (do not increment counter yet)
-    const invoiceNumber = invoiceNumberOverride?.trim() || await peekNextInvoiceNumber(methodId);
+    const invoiceNumber = invoiceNumberOverride?.trim()
+      || existingRun?.invoiceNumber
+      || await peekNextInvoiceNumber(methodId);
     const invoiceDate = new Date(Date.UTC(year, month, 0, 0, 0, 0, 0));
     const payloadInvoiceNumber = invoiceNumber;
+    const methodCurrency = method.currency || 'EUR';
+    const paymentTermDays = method.paymentTermDays || 0;
 
     // Build request payload from method configuration + preview data
     let requestPayload: Record<string, unknown>;
 
     if (requestJsonOverride) {
-      requestPayload = requestJsonOverride;
+      requestPayload = stripExchangeRateUsd(requestJsonOverride) as Record<string, unknown>;
     } else {
-      requestPayload = buildExternalPayload(method.payloadTemplate ?? undefined, preview, payloadInvoiceNumber, invoiceDate, billingItems);
+      requestPayload = buildExternalPayload(
+        method.payloadTemplate ?? undefined,
+        preview,
+        payloadInvoiceNumber,
+        invoiceDate,
+        methodCurrency,
+        paymentTermDays,
+        billingItems
+      );
+      requestPayload = stripExchangeRateUsd(requestPayload) as Record<string, unknown>;
     }
 
-    if (currencyOverride) {
-      requestPayload.currency = currencyOverride;
+    requestPayload.currency = methodCurrency;
+    const hasExplicitDueDate = Object.prototype.hasOwnProperty.call(requestPayload, 'due_date');
+    if (paymentTermDays > 0 && !hasExplicitDueDate) {
+      requestPayload.due_date = formatDate(new Date(Date.UTC(
+        invoiceDate.getUTCFullYear(),
+        invoiceDate.getUTCMonth(),
+        invoiceDate.getUTCDate() + paymentTermDays
+      )));
+    } else if (!hasExplicitDueDate) {
+      delete requestPayload.due_date;
     }
-    if (exchangeRateUsd !== undefined) {
-      requestPayload.exchangeRateUsd = exchangeRateUsd;
+    if (hasExplicitDueDate && (requestPayload.due_date === '' || requestPayload.due_date === null)) {
+      delete requestPayload.due_date;
     }
 
     // Build auth headers
@@ -196,9 +244,7 @@ export async function POST(request: Request) {
 
     // Calculate total amount if rate info is available in template
     const totalAmount = calculateTotalAmount(requestPayload);
-    const invoiceState = saveAsDraft
-      ? (body.invoiceState as string) ?? 'borrador'
-      : (status === 'success' ? 'enviada' : 'validada');
+    const invoiceState = (body.invoiceState as string) ?? 'borrador';
 
     const billingData = {
       clientParentId,
@@ -209,7 +255,7 @@ export async function POST(request: Request) {
       invoiceNumber,
       totalHours: preview.totalHours,
       totalAmount,
-      currency: (requestPayload.currency as string) || undefined,
+      currency: methodCurrency,
       exchangeRateUsd: exchangeRateUsd !== undefined ? Number(exchangeRateUsd) : undefined,
       requestJson: requestPayload,
       responseStatus,
@@ -229,8 +275,8 @@ export async function POST(request: Request) {
       periodEnd: parsedPeriodEnd,
     };
 
-    if (runId) {
-      const billingRun = await updateBillingRun(runId, {
+    if (resolvedRunId) {
+      const billingRun = await updateBillingRun(resolvedRunId, {
         invoiceTitle: billingData.invoiceTitle,
         invoiceNumber: billingData.invoiceNumber,
         totalAmount: billingData.totalAmount,
@@ -243,7 +289,7 @@ export async function POST(request: Request) {
         pdfFilename: billingData.pdfFilename,
         status: billingData.status,
         invoiceState: billingData.invoiceState,
-        errorText: billingData.errorText,
+        errorText: billingData.errorText ?? null,
         items: billingData.items,
         periodStart: billingData.periodStart,
         periodEnd: billingData.periodEnd,
