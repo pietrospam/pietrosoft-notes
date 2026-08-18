@@ -45,6 +45,20 @@ Este comando ejecuta el script `scripts/redeploy.sh` que automatiza todo el proc
 
 La app queda disponible en `http://192.168.100.113:3001`
 
+### Test Deployment
+
+**Server:** `192.168.100.114`
+
+#### Quick Redeploy
+
+```bash
+npm run TEST
+```
+
+La app queda disponible en `http://192.168.100.114:3001`
+
+> En TEST, el script de deploy limpia primero los contenedores legados `pietrosoft-notes-*` que puedan seguir ocupando puertos en el host.
+
 #### Manual Deployment
 
 ```bash
@@ -63,6 +77,8 @@ ssh root@192.168.100.113 "cd /opt/bitacora && docker-compose build --no-cache &&
 | **App** | http://192.168.100.113:3001 | Main application |
 | **Adminer** | http://192.168.100.113:8080 | Database admin UI |
 | **PostgreSQL** | localhost:5432 (internal) | Database server |
+
+En TEST, las URLs equivalentes son `http://192.168.100.114:3001` para la app y `http://192.168.100.114:8080` para Adminer.
 
 **Adminer Login:**
 - System: `PostgreSQL`

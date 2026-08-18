@@ -55,6 +55,8 @@ El script `scripts/redeploy.sh` realiza los siguientes pasos:
 - Ruta remota del proyecto en el servidor: `/opt/bitacora`
 - URL de la aplicación: `http://192.168.100.113:3001` para producción
 - URL de la aplicación: `http://192.168.100.114:3001` para test
+- URL de Adminer: `http://192.168.100.113:8080` para producción
+- URL de Adminer: `http://192.168.100.114:8080` para test
 
 ## Arquitectura Docker Compose
 
@@ -62,7 +64,7 @@ El `docker-compose.yml` define los siguientes servicios:
 
 - `app`
   - Construye la aplicación desde `Dockerfile`
-  - Expone `3001:3000`
+  - Expone el puerto del host configurado por `APP_HOST_PORT` sobre `3000` dentro del contenedor
   - Monta `./data` y un directorio persistente de backups del host
   - Usa variables de entorno:
     - `DATABASE_URL=postgresql://postgres:postgres@postgres:5432/bitacora`
@@ -77,7 +79,7 @@ El `docker-compose.yml` define los siguientes servicios:
   - Volumen persistente `postgres_data`
 - `adminer`
   - Imagen `adminer:latest`
-  - Expone `8080:8080`
+  - Expone el puerto del host configurado por `ADMINER_HOST_PORT` sobre `8080`
   - Adminer se conecta al servicio `postgres`
 - `automations-cron`
   - Contenedor Alpine opcional que ejecuta llamadas periódicas a la API de automations.
@@ -108,6 +110,7 @@ La aplicación tiene endpoints para exportar backups y restaurarlos.
 ## Observaciones importantes
 
 - La diferencia entre `npm run web` y `npm run test` es la IP objetivo de despliegue.
+- En TEST, `scripts/redeploy.sh` elimina primero los contenedores heredados `pietrosoft-notes-*` antes de levantar `bitacora`.
 - `npm run dev` es para desarrollo local y no dispara el despliegue Docker remoto.
 - `scripts/redeploy.sh` pide confirmación doble en producción para evitar despliegues accidentales.
 - La app remota corre en el puerto `3001` exterior y dentro del contenedor en `3000`.
