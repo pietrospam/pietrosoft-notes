@@ -85,27 +85,16 @@ else
   scp -o ControlMaster=no -o ControlPath="$CONTROL_SOCKET" -o ControlPersist=10m "$LOCAL_PATH/.env.test" "$REMOTE_HOST:$REMOTE_PATH/.env"
 fi
 
-# Step 4: Build app image on remote server before backup generation
+# Step 4: Create the backup before replacing the app image. This is important
+# for production databases that may not yet have the latest Prisma migrations.
 echo "� Ensuring backups directory is writable by the app user..."
 ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "mkdir -p $BACKUP_HOST_DIR && chown -R 1000:1000 $BACKUP_HOST_DIR"
 
 if [ "$REMOTE_HOST" = "$PROD_HOST" ]; then
-  echo "🔧 Building remote app image for backup generation..."
-  ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && APP_ENV=$APP_ENV docker compose build app"
-
-  echo "�📦 Creating a remote backup before deploy..."
-  backup_response=$(ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && docker compose run --rm app sh -c 'cat > /tmp/create-backup.js && NODE_PATH=/app/node_modules node /tmp/create-backup.js'" < "$LOCAL_PATH/scripts/create-backup.js")
-
-  echo "$backup_response" | grep -q '"success":true' || {
-    echo "❌ Remote backup failed. Aborting deploy."
-    echo "Response: $backup_response"
-    exit 1
-  }
-
-  backup_filename=$(printf '%s' "$backup_response" | grep -o '"filename":[[:space:]]*"[^"]*"' | sed -E 's/.*"filename":[[:space:]]*"([^"]*)".*/\1/')
-  if [ -z "$backup_filename" ]; then
-    fatal "Failed to parse backup filename. Aborting deploy. Response: $backup_response"
-  fi
+  echo "�📦 Creating a PostgreSQL backup before deploy..."
+  backup_filename="backup-$(date -u +%Y-%m-%dT%H-%M-%S).sql.gz"
+  remote_backup_path="$BACKUP_HOST_DIR/$backup_filename"
+  ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && tmp_backup=/tmp/$backup_filename.sql && docker compose exec -T postgres pg_dump -U postgres -d pietrosoft_notes --no-owner --no-privileges > \"\$tmp_backup\" && gzip -f \"\$tmp_backup\" && mv \"\$tmp_backup.gz\" \"$remote_backup_path\" && test -s \"$remote_backup_path\"" || fatal "Failed to create PostgreSQL backup. Aborting deploy."
 
   echo "📝 Remote backup filename: $backup_filename"
   mkdir -p "$LOCAL_PATH/backups"
@@ -114,25 +103,26 @@ if [ "$REMOTE_HOST" = "$PROD_HOST" ]; then
   echo "✅ Backup downloaded to $LOCAL_PATH/backups/$backup_filename"
 fi
 
-# Step 5: Clean up Docker resources on remote server
+# Step 5: Build the new image after the backup. On startup, start.sh runs
+# `prisma migrate deploy` before the application starts.
+echo "🔧 Building remote app image..."
+ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && APP_ENV=$APP_ENV docker compose build app"
+
+# Step 6: Clean up Docker resources on remote server
 echo "🧹 Cleaning up Docker resources..."
 ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "docker system prune -af --volumes 2>/dev/null || true"
 ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "docker builder prune -af 2>/dev/null || true"
 
-# Step 6: Restart Docker containers on remote server
+# Step 7: Restart Docker containers on remote server
 echo "🔧 Restarting Docker containers..."
-if [ "$REMOTE_HOST" != "$PROD_HOST" ]; then
-  echo "🔧 Building remote app image..."
-  ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && APP_ENV=$APP_ENV docker compose build app"
-fi
 ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && docker compose down && APP_ENV=$APP_ENV docker compose up -d"
 
-# Step 3: Wait for containers and show logs
+# Step 8: Wait for containers and show logs
 echo "⏳ Waiting for app to start..."
 sleep 5
 ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && docker compose logs --tail=20 app"
 
-# Step 4: Show status
+# Step 9: Show status
 echo "📊 Container status:"
 ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && docker compose ps"
 

@@ -31,19 +31,6 @@ const formatCurrency = (amount: number, currency: string) =>
     minimumFractionDigits: 2,
   }).format(amount);
 
-const formatTimelineDate = (isoDate: string) => {
-  const [year, month, day] = isoDate.split('-');
-  return `${day}/${month}/${year}`;
-};
-
-const parseTimelineDate = (value: string): string | null => {
-  const match = value.match(/^([0-3]\d)\/([0-1]\d)\/(\d{4})$/);
-  if (!match) return null;
-  const [, day, month, year] = match;
-  const iso = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-  return Number.isNaN(new Date(iso).getTime()) ? null : iso;
-};
-
 const parseIsoDate = (value?: string): Date | null => {
   if (!value) return null;
   const [year, month, day] = value.split('-');
@@ -110,8 +97,6 @@ export function BillingEditorModal({
   const [selectedMonth, setSelectedMonth] = useState(billingRun?.month ?? DEFAULT_BILLING_DATE.getMonth() + 1);
   const [periodStart, setPeriodStart] = useState(billingRun?.periodStart || defaultPeriodStart);
   const [periodEnd, setPeriodEnd] = useState(billingRun?.periodEnd || defaultPeriodEnd);
-  const [periodStartInput, setPeriodStartInput] = useState(billingRun?.periodStart ? formatTimelineDate(billingRun.periodStart) : formatTimelineDate(defaultPeriodStart));
-  const [periodEndInput, setPeriodEndInput] = useState(billingRun?.periodEnd ? formatTimelineDate(billingRun.periodEnd) : formatTimelineDate(defaultPeriodEnd));
   const [currency, setCurrency] = useState(billingRun?.currency || 'EUR');
   const [exchangeRateUsd, setExchangeRateUsd] = useState<number | undefined>(billingRun?.exchangeRateUsd ?? (billingRun?.currency === 'EUR' ? undefined : 1));
   const [items, setItems] = useState<BillingItemDraft[]>([]);
@@ -154,8 +139,6 @@ export function BillingEditorModal({
       setSelectedMonth(billingRun.month);
       setPeriodStart(billingRun.periodStart);
       setPeriodEnd(billingRun.periodEnd);
-      setPeriodStartInput(formatTimelineDate(billingRun.periodStart));
-      setPeriodEndInput(formatTimelineDate(billingRun.periodEnd));
       setCurrency(billingRun.currency || 'EUR');
       setExchangeRateUsd(billingRun.exchangeRateUsd ?? (billingRun.currency === 'EUR' ? undefined : 1));
       setRequestJsonDirty(false);
@@ -186,8 +169,6 @@ export function BillingEditorModal({
       setSelectedMonth(DEFAULT_BILLING_DATE.getMonth() + 1);
       setPeriodStart(defaultPeriodStart);
       setPeriodEnd(defaultPeriodEnd);
-      setPeriodStartInput(formatTimelineDate(defaultPeriodStart));
-      setPeriodEndInput(formatTimelineDate(defaultPeriodEnd));
       setCurrency('EUR');
       setExchangeRateUsd(undefined);
       setItems([]);
@@ -374,7 +355,7 @@ export function BillingEditorModal({
 
     if (effectiveCurrency) payload.currency = effectiveCurrency;
     return payload;
-  }, [selectedMethod, preview, invoiceNumber, invoiceDate, currency, exchangeRateUsd, dueDateDirty, items, buildRequestPayload, dueDateIso]);
+  }, [selectedMethod, preview, invoiceNumber, invoiceDate, currency, dueDateDirty, items, buildRequestPayload, dueDateIso]);
 
   const getEffectiveRequestPayload = () => {
     if (requestJsonDirty) {
@@ -636,7 +617,6 @@ export function BillingEditorModal({
                 value={periodStart}
                 onChange={(e) => {
                   setPeriodStart(e.target.value);
-                  setPeriodStartInput(formatTimelineDate(e.target.value));
                 }}
                 className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white"
               />
@@ -648,7 +628,6 @@ export function BillingEditorModal({
                 value={periodEnd}
                 onChange={(e) => {
                   setPeriodEnd(e.target.value);
-                  setPeriodEndInput(formatTimelineDate(e.target.value));
                 }}
                 className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white"
               />
