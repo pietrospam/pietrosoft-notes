@@ -9,7 +9,7 @@
 ## 1. Cambio de Branding
 
 ### 1.1 Título de la aplicación
-- **Actual:** "Pietrosoft Notes"
+- **Actual:** "Bitacora"
 - **Nuevo:** "Bitácora"
 - **Ubicación:** TopBar (header de la aplicación)
 

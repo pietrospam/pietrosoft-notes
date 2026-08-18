@@ -64,7 +64,7 @@ postgres:
   environment:
     - POSTGRES_USER=postgres
     - POSTGRES_PASSWORD=postgres
-    - POSTGRES_DB=pietrosoft_notes
+    - POSTGRES_DB=bitacora
   ...
 ```
 
@@ -74,7 +74,7 @@ El archivo `.env` ahora apunta a la base de datos remota para desarrollo local:
 ```bash
 # Para desarrollo local - conecta a PostgreSQL en servidor Docker remoto
 # Los contenedores Docker usan su propia DATABASE_URL en docker-compose.yml
-DATABASE_URL="postgresql://postgres:postgres@192.168.100.113:5432/pietrosoft_notes"
+DATABASE_URL="postgresql://postgres:postgres@192.168.100.113:5432/bitacora"
 ```
 
 **Nota:** Los contenedores Docker no se ven afectados porque docker-compose.yml define su propia `DATABASE_URL` que apunta a `postgres:5432` (nombre del servicio interno).
@@ -138,7 +138,7 @@ El script `scripts/sync-attachments.sh` usa rsync para:
 
 ```
 LOCAL                          SERVIDOR
-./data/attachments/    <--->   /home/pietro/web/pietrosoft-notes/data/attachments/
+./data/attachments/    <--->   /home/pietro/web/bitacora/data/attachments/
 ```
 
 **Nota:** Se usa `rsync --update` que solo copia archivos más nuevos.

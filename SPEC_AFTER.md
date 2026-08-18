@@ -35,7 +35,7 @@ Archivo de instrucciones globales para GitHub Copilot con:
 ## Nueva Estructura
 
 ```
-pietrosoft-notes/
+bitacora/
 ├── .github/
 │   └── copilot-instructions.md  # ✨ NUEVO - Instrucciones para Copilot
 ├── docs/
@@ -102,4 +102,4 @@ ls -la specs/README.md
 
 ---
 
-*GitHub Copilot Specs methodology successfully applied to Pietrosoft Notes.*
+*GitHub Copilot Specs methodology successfully applied to Bitacora.*

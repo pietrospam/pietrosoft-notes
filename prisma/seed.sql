@@ -1,4 +1,4 @@
--- Seed data for Pietrosoft Notes
+-- Seed data for Bitacora
 -- Run this script via Adminer or psql
 
 -- Clean existing data

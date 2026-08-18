@@ -9,12 +9,15 @@ fatal() {
 # Configuration
 PROD_HOST="root@192.168.100.113"
 REMOTE_HOST="${DEPLOY_HOST:-$PROD_HOST}"
-REMOTE_PATH="/opt/pietrosoft-notes"
+REMOTE_PATH="${DEPLOY_PATH:-/opt/bitacora}"
 BACKUP_HOST_DIR="/opt/bitacora-backups"
 LOCAL_PATH="$(cd "$(dirname "$0")/.." && pwd)"
 REMOTE_IP="${REMOTE_HOST#*@}"
-CONTROL_SOCKET="/tmp/pietrosoft-notes-${REMOTE_IP}.sock"
+CONTROL_SOCKET="/tmp/bitacora-${REMOTE_IP}.sock"
+COMPOSE_PROJECT_NAME="bitacora"
+DATABASE_NAME="bitacora"
 SSH_OPTS=(-o ControlMaster=auto -o ControlPersist=10m -o ControlPath="$CONTROL_SOCKET")
+POSTGRES_VOLUME_NAME="${DEPLOY_POSTGRES_VOLUME_NAME:-bitacora_postgres_data}"
 
 if [ "$REMOTE_HOST" = "$PROD_HOST" ]; then
   APP_ENV=production
@@ -44,6 +47,14 @@ cleanup_ssh() {
   ssh "${SSH_OPTS[@]}" -O exit "$REMOTE_HOST" >/dev/null 2>&1 || true
 }
 trap cleanup_ssh EXIT
+
+echo "📁 Ensuring remote path exists..."
+ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "mkdir -p '$REMOTE_PATH'"
+
+if [ "$REMOTE_HOST" != "$PROD_HOST" ]; then
+  echo "🧹 Removing legacy pietrosoft-notes containers from TEST..."
+  ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "legacy_ids=\$(docker ps -aq --filter 'name=^pietrosoft-notes-' || true); if [ -n \"\$legacy_ids\" ]; then docker rm -f \$legacy_ids; fi"
+fi
 
 # Step 0: Determine environment file and sync code to remote server before backup
 if [ "$REMOTE_HOST" = "$PROD_HOST" ]; then
@@ -85,16 +96,18 @@ else
   scp -o ControlMaster=no -o ControlPath="$CONTROL_SOCKET" -o ControlPersist=10m "$LOCAL_PATH/.env.test" "$REMOTE_HOST:$REMOTE_PATH/.env"
 fi
 
+ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && if grep -q '^DATABASE_NAME=' .env; then sed -i 's#^DATABASE_NAME=.*#DATABASE_NAME=$DATABASE_NAME#' .env; else printf '\nDATABASE_NAME=%s\n' '$DATABASE_NAME' >> .env; fi"
+
 # Step 4: Create the backup before replacing the app image. This is important
 # for production databases that may not yet have the latest Prisma migrations.
-echo "� Ensuring backups directory is writable by the app user..."
+echo "📁 Ensuring backups directory is writable by the app user..."
 ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "mkdir -p $BACKUP_HOST_DIR && chown -R 1000:1000 $BACKUP_HOST_DIR"
 
 if [ "$REMOTE_HOST" = "$PROD_HOST" ]; then
-  echo "�📦 Creating a PostgreSQL backup before deploy..."
+  echo "📦 Creating a PostgreSQL backup before deploy..."
   backup_filename="backup-$(date -u +%Y-%m-%dT%H-%M-%S).sql.gz"
   remote_backup_path="$BACKUP_HOST_DIR/$backup_filename"
-  ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && tmp_backup=/tmp/$backup_filename.sql && docker compose exec -T postgres pg_dump -U postgres -d pietrosoft_notes --no-owner --no-privileges > \"\$tmp_backup\" && gzip -f \"\$tmp_backup\" && mv \"\$tmp_backup.gz\" \"$remote_backup_path\" && test -s \"$remote_backup_path\"" || fatal "Failed to create PostgreSQL backup. Aborting deploy."
+  ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && tmp_backup=/tmp/$backup_filename.sql && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME POSTGRES_VOLUME_NAME=$POSTGRES_VOLUME_NAME docker compose exec -T postgres pg_dump -U postgres -d $DATABASE_NAME --no-owner --no-privileges > \"\$tmp_backup\" && gzip -f \"\$tmp_backup\" && mv \"\$tmp_backup.gz\" \"$remote_backup_path\" && test -s \"$remote_backup_path\"" || fatal "Failed to create PostgreSQL backup. Aborting deploy."
 
   echo "📝 Remote backup filename: $backup_filename"
   mkdir -p "$LOCAL_PATH/backups"
@@ -111,20 +124,20 @@ ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "docker builder prune -af 2>/dev/null || tru
 # Step 6: Build the new image after the backup. On startup, start.sh runs
 # `prisma migrate deploy` before the application starts.
 echo "🔧 Building remote app image..."
-ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && APP_ENV=$APP_ENV docker compose build app"
+ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME POSTGRES_VOLUME_NAME=$POSTGRES_VOLUME_NAME APP_ENV=$APP_ENV docker compose build app"
 
 # Step 7: Restart Docker containers on remote server
 echo "🔧 Restarting Docker containers..."
-ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && docker compose down && APP_ENV=$APP_ENV docker compose up -d"
+ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME POSTGRES_VOLUME_NAME=$POSTGRES_VOLUME_NAME docker compose down && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME POSTGRES_VOLUME_NAME=$POSTGRES_VOLUME_NAME APP_ENV=$APP_ENV docker compose up -d"
 
 # Step 8: Wait for containers and show logs
 echo "⏳ Waiting for app to start..."
 sleep 5
-ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && docker compose logs --tail=20 app"
+ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME POSTGRES_VOLUME_NAME=$POSTGRES_VOLUME_NAME docker compose logs --tail=20 app"
 
 # Step 9: Show status
 echo "📊 Container status:"
-ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && docker compose ps"
+ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME POSTGRES_VOLUME_NAME=$POSTGRES_VOLUME_NAME docker compose ps"
 
 echo ""
 if [ "$REMOTE_HOST" = "$PROD_HOST" ]; then

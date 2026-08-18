@@ -8,7 +8,7 @@
 
 ## 1. Overview
 
-Migrate the Pietrosoft Notes application from file-based JSON storage to PostgreSQL database. This provides:
+Migrate the Bitacora application from file-based JSON storage to PostgreSQL database. This provides:
 - ACID compliance for data operations
 - Proper foreign key constraints
 - Better query capabilities for search and filtering
@@ -46,7 +46,7 @@ services:
     ports:
       - "3001:3000"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/pietrosoft_notes
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/bitacora
       - WORKSPACE_PATH=/data
     volumes:
       - ./data:/data
@@ -59,7 +59,7 @@ services:
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=pietrosoft_notes
+      - POSTGRES_DB=bitacora
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -83,7 +83,7 @@ volumes:
 
 **Adminer (Database Admin UI):**
 - Accessible at http://localhost:8080
-- Login: System=PostgreSQL, Server=postgres, User=postgres, Password=postgres, Database=pietrosoft_notes
+- Login: System=PostgreSQL, Server=postgres, User=postgres, Password=postgres, Database=bitacora
 - Lightweight alternative to pgAdmin
 - Supports SQL queries, table browsing, data export/import
 
@@ -251,7 +251,7 @@ export async function listClients(): Promise<Client[]> {
 **Export:**
 ```bash
 # Database dump
-pg_dump -U postgres pietrosoft_notes > backup.sql
+pg_dump -U postgres bitacora > backup.sql
 
 # Attachments
 tar -czvf attachments.tar.gz /data/attachments
@@ -260,7 +260,7 @@ tar -czvf attachments.tar.gz /data/attachments
 **Import:**
 ```bash
 # Database restore
-psql -U postgres pietrosoft_notes < backup.sql
+psql -U postgres bitacora < backup.sql
 
 # Attachments restore
 tar -xzvf attachments.tar.gz -C /data

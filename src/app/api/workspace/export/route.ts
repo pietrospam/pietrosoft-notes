@@ -101,7 +101,7 @@ export async function GET() {
 
     // Generate filename with timestamp
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const filename = `pietrosoft-notes-backup-${timestamp}.zip`;
+    const filename = `bitacora-backup-${timestamp}.zip`;
 
     return new NextResponse(new Uint8Array(zipBuffer), {
       headers: {

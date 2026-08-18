@@ -45,7 +45,7 @@ export async function POST() {
     const dateStr = new Date().toLocaleString('es-AR', { hour12: false });
     const message = 
       `🔔 <b>Prueba de Conexión</b>\n\n` +
-      `✅ Conexión exitosa con Pietrosoft Notes\n` +
+      `✅ Conexión exitosa con Bitacora\n` +
       `🤖 Bot: @${testResult.botName}\n` +
       `📅 Fecha: ${dateStr}\n\n` +
       `Las notificaciones de backup están funcionando correctamente.`;

@@ -23,8 +23,8 @@ import * as path from 'path';
 
 // ─── Arg parsing ─────────────────────────────────────────────────────────────
 const TARGET_URLS: Record<string, string> = {
-  prod: 'postgresql://postgres:postgres@192.168.100.113:5432/pietrosoft_notes',
-  test: 'postgresql://postgres:postgres@192.168.100.114:5432/pietrosoft_notes',
+  prod: 'postgresql://postgres:postgres@192.168.100.113:5432/bitacora',
+  test: 'postgresql://postgres:postgres@192.168.100.114:5432/bitacora',
 };
 
 function parseArgs() {

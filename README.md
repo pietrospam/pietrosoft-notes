@@ -1,4 +1,4 @@
-# Pietrosoft Notes — Prototype
+# Bitacora — Prototype
 
 A local-first note-taking app with WYSIWYG editor, task management, time tracking, and connection credentials storage.
 
@@ -50,10 +50,10 @@ La app queda disponible en `http://192.168.100.113:3001`
 ```bash
 # Deploy to production server
 rsync -avz --exclude 'node_modules' --exclude '.next' --exclude '.git' --exclude 'data' \
-  ./ root@192.168.100.113:/opt/pietrosoft-notes/
+  ./ root@192.168.100.113:/opt/bitacora/
 
 # Build and start services
-ssh root@192.168.100.113 "cd /opt/pietrosoft-notes && docker-compose build --no-cache && docker-compose up -d"
+ssh root@192.168.100.113 "cd /opt/bitacora && docker-compose build --no-cache && docker-compose up -d"
 ```
 
 **Services:**
@@ -69,19 +69,19 @@ ssh root@192.168.100.113 "cd /opt/pietrosoft-notes && docker-compose build --no-
 - Server: `postgres`
 - Username: `postgres`
 - Password: `postgres`
-- Database: `pietrosoft_notes`
+- Database: `bitacora`
 
 **Common Commands:**
 
 ```bash
 # Check logs
-ssh root@192.168.100.113 "cd /opt/pietrosoft-notes && docker-compose logs -f app"
+ssh root@192.168.100.113 "cd /opt/bitacora && docker-compose logs -f app"
 
 # Restart services
-ssh root@192.168.100.113 "cd /opt/pietrosoft-notes && docker-compose restart"
+ssh root@192.168.100.113 "cd /opt/bitacora && docker-compose restart"
 
 # Stop all
-ssh root@192.168.100.113 "cd /opt/pietrosoft-notes && docker-compose down"
+ssh root@192.168.100.113 "cd /opt/bitacora && docker-compose down"
 
 # View container status
 ssh root@192.168.100.113 "docker ps"
@@ -178,7 +178,7 @@ cp data/sample/notes/*.json data/notes/
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DATABASE_URL` | `postgresql://postgres:postgres@postgres:5432/pietrosoft_notes` | PostgreSQL connection string |
+| `DATABASE_URL` | `postgresql://postgres:postgres@postgres:5432/bitacora` | PostgreSQL connection string |
 | `WORKSPACE_PATH` | `./data` | Path for file attachments |
 
 Local development uses [`.env.local`](.env.local). Start from [`.env.example`](.env.example) if you need a template, then keep the real values only in `.env.local`. Docker Compose injects its own `DATABASE_URL` inside containers, so deployed test and production instances do not depend on local files.

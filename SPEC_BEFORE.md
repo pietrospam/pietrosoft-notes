@@ -10,7 +10,7 @@
 ### Estructura existente
 
 ```
-pietrosoft-notes/
+bitacora/
 ├── docs/                           # Documentación general
 │   ├── MAIN_INSTRUCTIONS.md        # Instrucciones principales
 │   ├── BACKLOG.md                  # Backlog de tareas

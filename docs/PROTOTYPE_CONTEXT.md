@@ -1,4 +1,4 @@
-# Pietrosoft Notes — Functional Context
+# Bitacora — Functional Context
 
 ## 0) Purpose of this prototype
 Build a **Proof of Concept** to validate UX, data model, and workflows.

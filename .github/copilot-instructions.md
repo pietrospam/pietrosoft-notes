@@ -1,8 +1,8 @@
-# Copilot Instructions — Pietrosoft Notes
+# Copilot Instructions — Bitacora
 
 ## Project Overview
 
-**Pietrosoft Notes** is a local-first note-taking application with WYSIWYG editor, task management, time tracking, and connection credentials storage. It runs as a single-user Docker deployment with PostgreSQL.
+**Bitacora** is a local-first note-taking application with WYSIWYG editor, task management, time tracking, and connection credentials storage. It runs as a single-user Docker deployment with PostgreSQL.
 
 ## Tech Stack
 

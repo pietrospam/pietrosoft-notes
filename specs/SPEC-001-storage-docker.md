@@ -9,7 +9,7 @@
 
 ## 1. Overview
 
-This specification covers the foundational infrastructure for the Pietrosoft Notes prototype:
+This specification covers the foundational infrastructure for the Bitacora prototype:
 - Docker containerization with volume-mounted workspace
 - File-based JSON storage engine with atomic writes
 - Core domain type definitions

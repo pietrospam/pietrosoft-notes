@@ -1,6 +1,6 @@
 # Specifications Index
 
-Este directorio contiene las especificaciones técnicas del proyecto Pietrosoft Notes.
+Este directorio contiene las especificaciones técnicas del proyecto Bitacora.
 
 ## Specs Activas
 

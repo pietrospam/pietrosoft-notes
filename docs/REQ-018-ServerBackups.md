@@ -632,17 +632,17 @@ crontab -e
 **Opción A: Ejecutar cada hora (recomendado)**
 El endpoint ignora llamadas si el backup no está programado todavía:
 ```bash
-0 * * * * curl -s -X POST http://localhost:3001/api/backups/auto >> /var/log/pietrosoft-backup.log 2>&1
+0 * * * * curl -s -X POST http://localhost:3001/api/backups/auto >> /var/log/bitacora-backup.log 2>&1
 ```
 
 **Opción B: Ejecutar una vez al día a las 3:00 AM**
 ```bash
-0 3 * * * curl -s -X POST http://localhost:3001/api/backups/auto >> /var/log/pietrosoft-backup.log 2>&1
+0 3 * * * curl -s -X POST http://localhost:3001/api/backups/auto >> /var/log/bitacora-backup.log 2>&1
 ```
 
 **Opción C: Ejecutar semanalmente (domingos a las 2:00 AM)**
 ```bash
-0 2 * * 0 curl -s -X POST http://localhost:3001/api/backups/auto >> /var/log/pietrosoft-backup.log 2>&1
+0 2 * * 0 curl -s -X POST http://localhost:3001/api/backups/auto >> /var/log/bitacora-backup.log 2>&1
 ```
 
 ### 15.3 Configuración de Cron en Docker
@@ -652,7 +652,7 @@ Si la aplicación corre en Docker, hay varias opciones:
 **Opción A: Cron en el host (recomendado)**
 Agregar al crontab del servidor que ejecuta Docker:
 ```bash
-0 * * * * curl -s -X POST http://localhost:3001/api/backups/auto >> /var/log/pietrosoft-backup.log 2>&1
+0 * * * * curl -s -X POST http://localhost:3001/api/backups/auto >> /var/log/bitacora-backup.log 2>&1
 ```
 
 **Opción B: Cron dentro del contenedor**
@@ -691,9 +691,9 @@ services:
 ### 15.4 Configuración con systemd timer (alternativa a cron)
 
 ```bash
-# /etc/systemd/system/pietrosoft-backup.service
+# /etc/systemd/system/bitacora-backup.service
 [Unit]
-Description=Pietrosoft Notes Auto Backup
+Description=Bitacora Auto Backup
 After=network.target
 
 [Service]
@@ -702,7 +702,7 @@ ExecStart=/usr/bin/curl -s -X POST http://localhost:3001/api/backups/auto
 ```
 
 ```bash
-# /etc/systemd/system/pietrosoft-backup.timer
+# /etc/systemd/system/bitacora-backup.timer
 [Unit]
 Description=Run Pietrosoft backup hourly
 
@@ -716,8 +716,8 @@ WantedBy=timers.target
 
 Activar:
 ```bash
-sudo systemctl enable pietrosoft-backup.timer
-sudo systemctl start pietrosoft-backup.timer
+sudo systemctl enable bitacora-backup.timer
+sudo systemctl start bitacora-backup.timer
 ```
 
 ### 15.5 Verificar Estado del Backup Automático
@@ -743,7 +743,7 @@ Para verificar que los backups se ejecutan correctamente:
 
 ```bash
 # Ver log del cron
-tail -f /var/log/pietrosoft-backup.log
+tail -f /var/log/bitacora-backup.log
 
 # Verificar último backup
 curl http://localhost:3001/api/backups | jq '.[0]'

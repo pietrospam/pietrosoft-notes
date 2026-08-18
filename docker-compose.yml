@@ -1,15 +1,17 @@
+name: bitacora
+
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "3001:3000"
+      - "${APP_HOST_PORT:-3001}:3000"
     volumes:
       - ./data:/data
       - ${BACKUP_HOST_DIR:-./backups}:/backups  # Backup storage directory
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/pietrosoft_notes
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/${DATABASE_NAME:-bitacora}
       - WORKSPACE_PATH=/data
       - BACKUP_DIR=/backups
       - NODE_ENV=production
@@ -21,12 +23,10 @@ services:
 
   postgres:
     image: postgres:16-alpine
-    ports:
-      - "5432:5432"
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=pietrosoft_notes
+      - POSTGRES_DB=${DATABASE_NAME:-bitacora}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -63,7 +63,7 @@ services:
   adminer:
     image: adminer:latest
     ports:
-      - "8080:8080"
+      - "${ADMINER_HOST_PORT:-8080}:8080"
     environment:
       - ADMINER_DEFAULT_SERVER=postgres
     depends_on:
@@ -72,3 +72,4 @@ services:
 
 volumes:
   postgres_data:
+    name: ${POSTGRES_VOLUME_NAME:-bitacora_postgres_data}

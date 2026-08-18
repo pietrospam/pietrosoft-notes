@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
       const code = (err as { code?: string }).code;
       if (code === 'EACCES' || code === 'EPERM') {
         // cannot write to configured directory, fallback to temp
-        const fallback = path.join(os.tmpdir(), 'pietrosoft-data');
+        const fallback = path.join(os.tmpdir(), 'bitacora-data');
         console.warn(`Permission denied for DATA_DIR ${dataPath}, using fallback ${fallback}`);
         dataPath = fallback;
         try {

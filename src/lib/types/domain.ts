@@ -1,4 +1,4 @@
-// Domain type definitions for Pietrosoft Notes
+// Domain type definitions for Bitacora
 
 // ============================================================================
 // Common Types

@@ -1,4 +1,4 @@
-# Infraestructura de Pietrosoft Notes
+# Infraestructura de Bitacora
 
 ## Resumen general
 
@@ -52,7 +52,7 @@ El script `scripts/redeploy.sh` realiza los siguientes pasos:
 
 ## Servidores y rutas
 
-- Ruta remota del proyecto en el servidor: `/opt/pietrosoft-notes`
+- Ruta remota del proyecto en el servidor: `/opt/bitacora`
 - URL de la aplicación: `http://192.168.100.113:3001` para producción
 - URL de la aplicación: `http://192.168.100.114:3001` para test
 
@@ -65,7 +65,7 @@ El `docker-compose.yml` define los siguientes servicios:
   - Expone `3001:3000`
   - Monta `./data` y un directorio persistente de backups del host
   - Usa variables de entorno:
-    - `DATABASE_URL=postgresql://postgres:postgres@postgres:5432/pietrosoft_notes`
+    - `DATABASE_URL=postgresql://postgres:postgres@postgres:5432/bitacora`
     - `WORKSPACE_PATH=/data`
     - `BACKUP_DIR=/backups`
     - `BACKUP_HOST_DIR=/opt/bitacora-backups` en servidor
@@ -73,7 +73,7 @@ El `docker-compose.yml` define los siguientes servicios:
 - `postgres`
   - Imagen `postgres:16-alpine`
   - Expone `5432:5432`
-  - Usa `POSTGRES_USER=postgres`, `POSTGRES_PASSWORD=postgres`, `POSTGRES_DB=pietrosoft_notes`
+  - Usa `POSTGRES_USER=postgres`, `POSTGRES_PASSWORD=postgres`, `POSTGRES_DB=bitacora`
   - Volumen persistente `postgres_data`
 - `adminer`
   - Imagen `adminer:latest`
@@ -90,7 +90,7 @@ Para acceder a PostgreSQL desde Adminer en los servidores:
 - Server: `postgres`
 - Username: `postgres`
 - Password: `postgres`
-- Database: `pietrosoft_notes`
+- Database: `bitacora`
 
 ## Manejo de variables de entorno
 
