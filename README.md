@@ -181,6 +181,8 @@ cp data/sample/notes/*.json data/notes/
 | `DATABASE_URL` | `postgresql://postgres:postgres@postgres:5432/pietrosoft_notes` | PostgreSQL connection string |
 | `WORKSPACE_PATH` | `./data` | Path for file attachments |
 
+Local development uses [`.env.local`](.env.local). Start from [`.env.example`](.env.example) if you need a template, then keep the real values only in `.env.local`. Docker Compose injects its own `DATABASE_URL` inside containers, so deployed test and production instances do not depend on local files.
+
 ## Known Limitations (Prototype)
 
 - Single user only

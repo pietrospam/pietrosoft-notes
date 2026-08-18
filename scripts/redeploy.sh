@@ -103,15 +103,15 @@ if [ "$REMOTE_HOST" = "$PROD_HOST" ]; then
   echo "✅ Backup downloaded to $LOCAL_PATH/backups/$backup_filename"
 fi
 
-# Step 5: Build the new image after the backup. On startup, start.sh runs
-# `prisma migrate deploy` before the application starts.
-echo "🔧 Building remote app image..."
-ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && APP_ENV=$APP_ENV docker compose build app"
-
-# Step 6: Clean up Docker resources on remote server
+# Step 5: Clean up Docker resources on remote server
 echo "🧹 Cleaning up Docker resources..."
 ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "docker system prune -af --volumes 2>/dev/null || true"
 ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "docker builder prune -af 2>/dev/null || true"
+
+# Step 6: Build the new image after the backup. On startup, start.sh runs
+# `prisma migrate deploy` before the application starts.
+echo "🔧 Building remote app image..."
+ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && APP_ENV=$APP_ENV docker compose build app"
 
 # Step 7: Restart Docker containers on remote server
 echo "🔧 Restarting Docker containers..."
