@@ -51,10 +51,9 @@ trap cleanup_ssh EXIT
 echo "📁 Ensuring remote path exists..."
 ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "mkdir -p '$REMOTE_PATH'"
 
-if [ "$REMOTE_HOST" != "$PROD_HOST" ]; then
-  echo "🧹 Removing legacy pietrosoft-notes containers from TEST..."
-  ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "legacy_ids=\$(docker ps -aq --filter 'name=^pietrosoft-notes-' || true); if [ -n \"\$legacy_ids\" ]; then docker rm -f \$legacy_ids; fi"
-fi
+# Remove old containers from the legacy project name so bind conflicts (like 8080) do not block the new deployment.
+echo "🧹 Removing legacy pietrosoft-notes containers from remote server..."
+ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "legacy_ids=\$(docker ps -aq --filter 'name=^pietrosoft-notes-' || true); if [ -n \"\$legacy_ids\" ]; then docker rm -f \$legacy_ids; fi"
 
 # Step 0: Determine environment file and sync code to remote server before backup
 if [ "$REMOTE_HOST" = "$PROD_HOST" ]; then
@@ -108,7 +107,7 @@ if [ "$REMOTE_HOST" = "$PROD_HOST" ]; then
   echo "📦 Creating a PostgreSQL backup before deploy..."
   backup_filename="backup-$(date -u +%Y-%m-%dT%H-%M-%S).sql.gz"
   remote_backup_path="$BACKUP_HOST_DIR/$backup_filename"
-  ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && tmp_backup=/tmp/$backup_filename.sql && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME POSTGRES_VOLUME_NAME=$POSTGRES_VOLUME_NAME docker compose exec -T postgres pg_dump -U postgres -d $DATABASE_NAME --no-owner --no-privileges > \"\$tmp_backup\" && gzip -f \"\$tmp_backup\" && mv \"\$tmp_backup.gz\" \"$remote_backup_path\" && test -s \"$remote_backup_path\"" || fatal "Failed to create PostgreSQL backup. Aborting deploy."
+  ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd '$REMOTE_PATH' && (docker compose ps --services --status running 2>/dev/null | grep -qx postgres || COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME POSTGRES_VOLUME_NAME=$POSTGRES_VOLUME_NAME APP_ENV=$APP_ENV docker compose up -d postgres) && for i in \$(seq 1 30); do COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME POSTGRES_VOLUME_NAME=$POSTGRES_VOLUME_NAME docker compose exec -T postgres pg_isready -U postgres -d $DATABASE_NAME >/dev/null 2>&1 && break; if [ \$i -eq 30 ]; then echo '❌ postgres did not become ready in time'; exit 1; fi; sleep 2; done && tmp_backup=/tmp/$backup_filename.sql && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME POSTGRES_VOLUME_NAME=$POSTGRES_VOLUME_NAME docker compose exec -T postgres pg_dump -U postgres -d $DATABASE_NAME --no-owner --no-privileges > \"\$tmp_backup\" && gzip -f \"\$tmp_backup\" && mv \"\$tmp_backup.gz\" '$remote_backup_path' && test -s '$remote_backup_path'" || fatal "Failed to create PostgreSQL backup. Aborting deploy."
 
   echo "📝 Remote backup filename: $backup_filename"
   mkdir -p "$LOCAL_PATH/backups"
