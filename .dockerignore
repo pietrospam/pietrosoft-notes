@@ -1,0 +1,23 @@
+.git
+.gitignore
+.github
+.vscode
+.next
+node_modules
+coverage
+dist
+out
+backups
+.data
+*.log
+.env
+.env.*
+.env.local
+.env.*.local
+.DS_Store
+npm-debug.log*
+
+data
+
+# Local artifacts and large runtime state should not be sent to the Docker build context
+# because they bloat the build and can exhaust disk space on the remote host.

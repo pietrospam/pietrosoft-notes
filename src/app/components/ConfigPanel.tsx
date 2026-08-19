@@ -1,14 +1,14 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Building2, FolderKanban, Database, Download, Upload, Loader2, Settings, Save, Clock, Trash2, Server, Shield, ShieldOff, RotateCcw, RefreshCw, Plus, FolderOpen, Timer, Calendar, Clipboard } from 'lucide-react';
+import { Building2, FolderKanban, Database, Download, Upload, Loader2, Settings, Save, Clock, Trash2, Server, Shield, ShieldOff, RotateCcw, RefreshCw, Plus, FolderOpen, Timer, Calendar, Clipboard, Pencil, X } from 'lucide-react';
 import { ClientsManager } from './ClientsManager';
 import { ProjectsManager } from './ProjectsManager';
 import { BillingMethodsManager } from './BillingMethodsManager';
 import { useApp } from '../context/AppContext';
 import { InfoModal } from './InfoModal';
 
-export type ConfigTab = 'clients' | 'projects' | 'backup' | 'preferences' | 'billing';
+export type ConfigTab = 'clients' | 'projects' | 'backup' | 'preferences' | 'billing' | 'system';
 
 interface BackupMetadata {
   filename: string;
@@ -25,6 +25,11 @@ interface BackupMetadata {
     timesheets: number;
     activityLogs: number;
     taskComments?: number;
+    taskTodos?: number;
+    todoNotificationsSent?: number;
+    billingMethods?: number;
+    billingRuns?: number;
+    billingRunItems?: number;
   };
 }
 
@@ -36,6 +41,143 @@ interface BackupSettings {
   autoBackupTime: string;
   backupDirectory: string;
   lastAutoBackup?: string;
+}
+
+const RESTORE_COUNT_LABELS: Array<{ key: string; label: string }> = [
+  { key: 'notes', label: 'Notas' },
+  { key: 'clients', label: 'Clientes' },
+  { key: 'projects', label: 'Proyectos' },
+  { key: 'timesheets', label: 'Timesheets' },
+  { key: 'attachments', label: 'Adjuntos' },
+  { key: 'activityLogs', label: 'Activity Logs' },
+  { key: 'taskComments', label: 'Comentarios de tareas' },
+  { key: 'taskTodos', label: 'TODOs de tareas' },
+  { key: 'billingMethods', label: 'Metodos de facturacion' },
+  { key: 'billingRuns', label: 'Corridas de facturacion' },
+  { key: 'billingRunItems', label: 'Items de facturacion' },
+  { key: 'todoNotificationsSent', label: 'Notificaciones de TODO enviadas' },
+];
+
+function SystemDatabaseSection() {
+  const [stats, setStats] = useState<{
+    databaseName: string;
+    databaseSizeBytes: number;
+    totalRows: number;
+    totalDiskBytes: number;
+    tableCount: number;
+    tables: Array<{ tableName: string; rowCount: number; sizeBytes: number }>;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const res = await fetch('/api/system/database');
+        if (!res.ok) {
+          throw new Error('No se pudo cargar la información de la base de datos');
+        }
+        const data = await res.json();
+        setStats(data);
+      } catch (err) {
+        console.error(err);
+        setError(err instanceof Error ? err.message : 'No se pudo cargar la información');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void fetchData();
+  }, []);
+
+  const formatBytes = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  };
+
+  const prettyTableName = (tableName: string) => {
+    const tableLabels: Record<string, string> = {
+      notes: 'Notas',
+      clients: 'Clientes',
+      projects: 'Proyectos',
+      timesheets: 'Timesheets',
+      attachments: 'Adjuntos',
+      task_activity_logs: 'Activity Logs',
+      task_comments: 'Comentarios',
+      task_todos: 'TODOs',
+      billing_methods: 'Métodos',
+      billing_runs: 'Runs',
+      billing_run_items: 'Items',
+      todo_notifications_sent: 'Notif. TODO',
+    };
+
+    return tableLabels[tableName] ?? tableName.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+  };
+
+  return (
+    <div className="bg-gray-900 rounded-lg p-4 border border-gray-800">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="p-2 bg-violet-500/20 rounded-lg">
+          <Database size={20} className="text-violet-400" />
+        </div>
+        <div>
+          <h3 className="text-lg font-medium text-white">Base de Datos</h3>
+          <p className="text-gray-400 text-sm">Estado, tamaño y cantidad de registros por tabla</p>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-4 p-3 bg-red-900/50 text-red-300 border border-red-700 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex items-center justify-center py-10 text-gray-400">
+          <Loader2 className="animate-spin mr-2" size={18} />
+          Cargando métricas de la base de datos...
+        </div>
+      ) : stats ? (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+            <div className="rounded-xl border border-gray-700 bg-slate-950/60 p-3">
+              <div className="text-xs uppercase tracking-wide text-gray-400">Base</div>
+              <div className="mt-2 text-lg font-semibold text-white">{stats.databaseName}</div>
+            </div>
+            <div className="rounded-xl border border-gray-700 bg-slate-950/60 p-3">
+              <div className="text-xs uppercase tracking-wide text-gray-400">Tamaño</div>
+              <div className="mt-2 text-lg font-semibold text-white">{formatBytes(stats.databaseSizeBytes)}</div>
+            </div>
+            <div className="rounded-xl border border-gray-700 bg-slate-950/60 p-3">
+              <div className="text-xs uppercase tracking-wide text-gray-400">Total filas</div>
+              <div className="mt-2 text-lg font-semibold text-white">{stats.totalRows.toLocaleString()}</div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-gray-700 bg-slate-950/40 overflow-hidden">
+            <div className="flex items-center justify-between border-b border-gray-800 px-3 py-2">
+              <div className="text-sm font-medium text-white">Tablas</div>
+              <div className="text-xs text-gray-400">{stats.tableCount} tablas · {formatBytes(stats.totalDiskBytes)}</div>
+            </div>
+
+            <div className="divide-y divide-gray-800">
+              {stats.tables.map((table) => (
+                <div key={table.tableName} className="grid grid-cols-[minmax(0,1fr)_110px_110px] items-center gap-3 px-3 py-2 text-sm">
+                  <div className="text-gray-200 truncate">{prettyTableName(table.tableName)}</div>
+                  <div className="text-right font-mono text-gray-100">{table.rowCount.toLocaleString()}</div>
+                  <div className="text-right font-mono text-gray-400">{formatBytes(table.sizeBytes)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </> 
+      ) : null}
+    </div>
+  );
 }
 
 function ServerBackupsSection() {
@@ -50,6 +192,22 @@ function ServerBackupsSection() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null);
+  const [uploadFilename, setUploadFilename] = useState('');
+  const [uploadProtected, setUploadProtected] = useState(false);
+  const [uploadedBackupFilename, setUploadedBackupFilename] = useState<string | null>(null);
+  const [editingFilename, setEditingFilename] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
+  const [editingDescription, setEditingDescription] = useState('');
+  const [editingProtected, setEditingProtected] = useState(false);
+  const [savingFilename, setSavingFilename] = useState<string | null>(null);
+  const [showRestoreSummaryModal, setShowRestoreSummaryModal] = useState(false);
+  const [restoreSummaryFilename, setRestoreSummaryFilename] = useState('');
+  const [restoreSummaryCounts, setRestoreSummaryCounts] = useState<Record<string, number>>({});
+  const uploadInputRef = useRef<HTMLInputElement>(null);
 
   // Check if settings have changed
   const hasSettingsChanges = useCallback(() => {
@@ -119,6 +277,102 @@ function ServerBackupsSection() {
     }
   };
 
+  const uploadBackupFile = async (file: File, desiredFilename: string, shouldProtect: boolean) => {
+    setIsUploading(true);
+    setUploadProgress(0);
+    setUploadedBackupFilename(null);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      if (desiredFilename.trim()) {
+        formData.append('filename', desiredFilename.trim());
+      }
+      formData.append('protected', String(shouldProtect));
+
+      const data = await new Promise<{ filename: string }>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/backups');
+
+        xhr.upload.onprogress = (progressEvent) => {
+          if (!progressEvent.lengthComputable) return;
+          setUploadProgress(Math.round((progressEvent.loaded / progressEvent.total) * 100));
+        };
+
+        xhr.onerror = () => reject(new Error('No se pudo subir el backup'));
+        xhr.onload = () => {
+          try {
+            const parsed = JSON.parse(xhr.responseText || '{}') as { error?: string; filename?: string };
+            if (xhr.status >= 200 && xhr.status < 300 && parsed.filename) {
+              resolve({ filename: parsed.filename });
+              return;
+            }
+            reject(new Error(parsed.error || 'Failed to upload backup'));
+          } catch {
+            reject(new Error('Respuesta inválida del servidor'));
+          }
+        };
+
+        xhr.send(formData);
+      });
+
+      setUploadProgress(100);
+      setUploadedBackupFilename(data.filename);
+      setSuccessMessage(`Backup subido: ${data.filename}`);
+      await fetchBackups();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo subir el backup');
+      console.error(err);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleSelectedUploadFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setSelectedUploadFile(file);
+    const effectiveFilename = uploadFilename.trim() || file.name.replace(/\.zip$/i, '');
+    setUploadFilename(effectiveFilename);
+    void uploadBackupFile(file, effectiveFilename, uploadProtected);
+  };
+
+  const resetUploadState = () => {
+    setIsUploading(false);
+    setUploadProgress(0);
+    setSelectedUploadFile(null);
+    setUploadFilename('');
+    setUploadProtected(false);
+    setUploadedBackupFilename(null);
+    if (uploadInputRef.current) {
+      uploadInputRef.current.value = '';
+    }
+  };
+
+  const openUploadModal = () => {
+    resetUploadState();
+    setShowUploadModal(true);
+  };
+
+  const closeUploadModal = () => {
+    if (isUploading) return;
+    setShowUploadModal(false);
+    resetUploadState();
+  };
+
+  const handleRestoreUploadedBackup = async () => {
+    if (!uploadedBackupFilename) return;
+    await handleRestore(uploadedBackupFilename);
+  };
+
+  const handleCloseRestoreSummaryModal = () => {
+    setShowRestoreSummaryModal(false);
+    window.location.reload();
+  };
+
   const handleRestore = async (filename: string) => {
     if (!confirm(`¿Estás seguro de restaurar el backup "${filename}"?\n\nEsto reemplazará TODOS los datos actuales.`)) {
       return;
@@ -132,7 +386,13 @@ function ServerBackupsSection() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to restore');
-      setSuccessMessage(`Backup restaurado: ${data.restored.notes} notas, ${data.restored.clients} clientes, ${data.restored.projects} proyectos`);
+
+      const restoredCounts = (data?.restored ?? {}) as Record<string, number>;
+      setRestoreSummaryFilename(filename);
+      setRestoreSummaryCounts(restoredCounts);
+      setShowRestoreSummaryModal(true);
+      setShowUploadModal(false);
+      setSuccessMessage(`Backup restaurado: ${restoredCounts.notes ?? 0} notas, ${restoredCounts.clients ?? 0} clientes, ${restoredCounts.projects ?? 0} proyectos`);
       refreshNotes();
     } catch (err) {
       setError('No se pudo restaurar el backup');
@@ -173,6 +433,51 @@ function ServerBackupsSection() {
     } catch (err) {
       setError('No se pudo actualizar la protección');
       console.error(err);
+    }
+  };
+
+  const handleStartEditing = (backup: BackupMetadata) => {
+    setEditingFilename(backup.filename);
+    setEditingName(backup.filename.replace(/\.zip$/i, ''));
+    setEditingDescription(backup.description || '');
+    setEditingProtected(backup.protected);
+  };
+
+  const handleCancelEditing = () => {
+    setEditingFilename(null);
+    setEditingName('');
+    setEditingDescription('');
+    setEditingProtected(false);
+  };
+
+  const handleSaveBackupMetadata = async (currentFilename: string) => {
+    setSavingFilename(currentFilename);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      const res = await fetch(`/api/backups/${encodeURIComponent(currentFilename)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: editingName.trim() || currentFilename,
+          description: editingDescription.trim(),
+          protected: editingProtected,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.error || 'Failed to update backup');
+      }
+
+      setSuccessMessage(`Backup actualizado: ${data.filename || currentFilename}`);
+      handleCancelEditing();
+      await fetchBackups();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo actualizar el backup');
+      console.error(err);
+    } finally {
+      setSavingFilename(null);
     }
   };
 
@@ -280,6 +585,14 @@ function ServerBackupsSection() {
             <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
           </button>
           <button
+            onClick={openUploadModal}
+            disabled={isUploading}
+            className="p-2 text-gray-400 hover:text-blue-400 hover:bg-gray-800 rounded-lg transition-colors disabled:opacity-50"
+            title="Subir backup"
+          >
+            <Upload size={18} />
+          </button>
+          <button
             onClick={handleCreateBackup}
             disabled={isCreating}
             className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
@@ -303,6 +616,61 @@ function ServerBackupsSection() {
       {successMessage && (
         <div className="mb-4 p-3 bg-green-900/50 text-green-300 border border-green-700 rounded-lg text-sm">
           {successMessage}
+        </div>
+      )}
+
+      {showRestoreSummaryModal && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/70 px-4" onClick={handleCloseRestoreSummaryModal}>
+          <div className="w-full max-w-lg rounded-xl border border-gray-700 bg-gray-900 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-gray-800 px-5 py-4">
+              <h4 className="text-base font-semibold text-white">Restauracion completada</h4>
+              <button
+                onClick={handleCloseRestoreSummaryModal}
+                className="p-2 text-gray-400 hover:text-white"
+                title="Cerrar"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4 px-5 py-5">
+              <p className="text-sm text-gray-300">
+                Backup restaurado: <span className="font-medium text-white">{restoreSummaryFilename}</span>
+              </p>
+
+              <div className="overflow-hidden rounded-lg border border-gray-700">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-800 text-gray-300">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium">Tabla</th>
+                      <th className="px-3 py-2 text-right font-medium">Registros importados</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {RESTORE_COUNT_LABELS.map((item) => (
+                      <tr key={item.key} className="border-t border-gray-800 text-gray-200">
+                        <td className="px-3 py-2">{item.label}</td>
+                        <td className="px-3 py-2 text-right font-mono">{restoreSummaryCounts[item.key] ?? 0}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <p className="text-xs text-yellow-300">
+                Presiona Aceptar para recargar la aplicacion con los datos restaurados.
+              </p>
+            </div>
+
+            <div className="flex justify-end border-t border-gray-800 px-5 py-4">
+              <button
+                onClick={handleCloseRestoreSummaryModal}
+                className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700"
+              >
+                Aceptar y recargar
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -472,6 +840,127 @@ function ServerBackupsSection() {
         </div>
       )}
 
+      {showUploadModal && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 px-4" onClick={closeUploadModal}>
+          <div className="w-full max-w-lg max-h-[calc(100vh-2rem)] overflow-hidden rounded-xl border border-gray-700 bg-gray-900 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-gray-800 px-5 py-4">
+              <div>
+                <h4 className="text-base font-semibold text-white">Subir backup al servidor</h4>
+                <p className="mt-1 text-sm text-gray-400">Definí el nombre si querés y la subida comienza apenas elegís el ZIP.</p>
+              </div>
+              <button
+                onClick={closeUploadModal}
+                disabled={isUploading}
+                className="p-2 text-gray-400 hover:text-white disabled:opacity-50"
+                title="Cerrar"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4 overflow-y-auto px-5 py-5">
+              <input
+                ref={uploadInputRef}
+                type="file"
+                accept=".zip"
+                onChange={handleSelectedUploadFile}
+                className="hidden"
+              />
+
+              <div className="rounded-lg border border-gray-700 bg-gray-800/50 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-white">Archivo ZIP</p>
+                    <p className="mt-1 truncate text-sm text-gray-400">
+                      {selectedUploadFile ? selectedUploadFile.name : 'Ningún archivo seleccionado'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => uploadInputRef.current?.click()}
+                    disabled={isUploading}
+                    className="shrink-0 rounded-lg bg-gray-700 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-600 disabled:opacity-50"
+                  >
+                    {uploadedBackupFilename ? 'Elegir otro ZIP' : 'Elegir ZIP'}
+                  </button>
+                </div>
+              </div>
+
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-gray-300">Nombre del backup</span>
+                <input
+                  type="text"
+                  value={uploadFilename}
+                  onChange={(e) => setUploadFilename(e.target.value)}
+                  placeholder="backup-cliente-2026-08-18"
+                  disabled={isUploading || !!uploadedBackupFilename}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-60"
+                />
+              </label>
+
+              <label className="flex items-center gap-2 text-sm text-gray-300">
+                <input
+                  type="checkbox"
+                  checked={uploadProtected}
+                  onChange={(e) => setUploadProtected(e.target.checked)}
+                  disabled={isUploading || !!uploadedBackupFilename}
+                  className="rounded border-gray-600 bg-gray-900 text-purple-600 focus:ring-purple-500 disabled:opacity-60"
+                />
+                Dejar protegido al subirlo
+              </label>
+
+              {(isUploading || uploadProgress > 0) && (
+                <div>
+                  <div className="mb-2 flex items-center justify-between text-xs text-gray-400">
+                    <span>{uploadedBackupFilename ? 'Subida completada' : 'Progreso de subida'}</span>
+                    <span>{uploadProgress}%</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-gray-800">
+                    <div
+                      className="h-full rounded-full bg-blue-500 transition-[width] duration-200"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {uploadedBackupFilename && (
+                <div className="rounded-lg border border-emerald-700/50 bg-emerald-900/20 px-3 py-3 text-sm text-emerald-300">
+                  El backup ya fue subido al servidor como <span className="font-medium">{uploadedBackupFilename}</span>. Si querés, podés restaurarlo ahora mismo.
+                </div>
+              )}
+              <div className="rounded-lg border border-yellow-700/50 bg-yellow-900/20 px-3 py-3 text-xs text-yellow-300">
+                Restauración completa obligatoria: también se restaura data/*. Puede tardar bastante con backups grandes.
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 border-t border-gray-800 px-5 py-4">
+              <button
+                onClick={closeUploadModal}
+                disabled={isUploading}
+                className="rounded-lg px-4 py-2 text-sm text-gray-300 transition-colors hover:bg-gray-800 hover:text-white disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              {uploadedBackupFilename && (
+                <button
+                  onClick={handleRestoreUploadedBackup}
+                  disabled={!!restoringFilename}
+                  className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-green-900"
+                >
+                  {restoringFilename === uploadedBackupFilename ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
+                  {restoringFilename === uploadedBackupFilename ? 'Restaurando...' : 'Restaurar ahora'}
+                </button>
+              )}
+            </div>
+            {restoringFilename === uploadedBackupFilename && (
+              <div className="px-5 pb-4 text-xs text-yellow-300">
+                Restaurando backup grande. Este proceso puede tardar varios minutos en TEST.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Backup List */}
       {isLoading ? (
         <div className="flex items-center justify-center py-8">
@@ -486,64 +975,155 @@ function ServerBackupsSection() {
           {backups.map((backup) => (
             <div
               key={backup.filename}
-              className="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg border border-gray-700/50 hover:border-gray-600/50 transition-colors"
+              className="p-3 bg-slate-900/70 rounded-xl border border-gray-700/60 hover:border-gray-600/70 transition-colors shadow-[0_0_0_1px_rgba(255,255,255,0.02)]"
             >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-white font-medium text-sm truncate">
-                    {backup.filename}
-                  </span>
-                  {backup.protected && (
-                    <span title="Protegido">
-                      <Shield size={14} className="text-yellow-500 flex-shrink-0" />
-                    </span>
+              <div className="flex items-center justify-between gap-3 min-w-0 py-0.5">
+                <div className="flex-1 min-w-0">
+                  {editingFilename === backup.filename ? (
+                    <div className="space-y-2 pr-3 w-full">
+                      <input
+                        type="text"
+                        value={editingName}
+                        onChange={(e) => setEditingName(e.target.value)}
+                        className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                      />
+                      <input
+                        type="text"
+                        value={editingDescription}
+                        onChange={(e) => setEditingDescription(e.target.value)}
+                        placeholder="Descripción opcional"
+                        className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                      />
+                      <label className="flex items-center gap-2 text-xs text-gray-300">
+                        <input
+                          type="checkbox"
+                          checked={editingProtected}
+                          onChange={(e) => setEditingProtected(e.target.checked)}
+                          className="rounded border-gray-600 bg-gray-900 text-purple-600 focus:ring-purple-500"
+                        />
+                        Protegido
+                      </label>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-white font-medium text-sm truncate leading-tight">
+                        {backup.filename}
+                      </span>
+                      {backup.protected && (
+                        <span title="Protegido" className="shrink-0">
+                          <Shield size={14} className="text-yellow-500" />
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
-                <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-                  <span>{formatDate(backup.createdAt)}</span>
-                  <span>{formatSize(backup.sizeBytes)}</span>
-                  {backup.stats && (
-                    <span>
-                      {backup.stats.notes}n / {backup.stats.clients}c / {backup.stats.projects}p
-                    </span>
+
+                <div className="flex items-center gap-1 shrink-0 rounded-md border border-gray-700/50 bg-gray-950/40 px-1 py-0.5">
+                  {editingFilename === backup.filename ? (
+                    <>
+                      <button
+                        onClick={() => handleSaveBackupMetadata(backup.filename)}
+                        disabled={savingFilename === backup.filename}
+                        className="h-7 w-7 flex items-center justify-center text-gray-400 hover:text-green-400 hover:bg-gray-700 rounded-md transition-colors disabled:opacity-50"
+                        title="Guardar cambios"
+                      >
+                        {savingFilename === backup.filename ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                      </button>
+                      <button
+                        onClick={handleCancelEditing}
+                        disabled={savingFilename === backup.filename}
+                        className="h-7 w-7 flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-700 rounded-md transition-colors disabled:opacity-50"
+                        title="Cancelar"
+                      >
+                        <X size={16} />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => handleStartEditing(backup)}
+                        className="h-7 w-7 flex items-center justify-center text-gray-400 hover:text-purple-400 hover:bg-gray-700 rounded-md transition-colors"
+                        title="Editar nombre y señalización"
+                      >
+                        <Pencil size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleToggleProtect(backup.filename, backup.protected)}
+                        className="h-7 w-7 flex items-center justify-center text-gray-400 hover:text-yellow-400 hover:bg-gray-700 rounded-md transition-colors"
+                        title={backup.protected ? 'Quitar protección' : 'Proteger'}
+                      >
+                        {backup.protected ? <ShieldOff size={16} /> : <Shield size={16} />}
+                      </button>
+                    </>
                   )}
+                  <button
+                    onClick={() => handleDownload(backup.filename)}
+                    className="h-7 w-7 flex items-center justify-center text-gray-400 hover:text-blue-400 hover:bg-gray-700 rounded-md transition-colors"
+                    title="Descargar"
+                  >
+                    <Download size={16} />
+                  </button>
+                  <button
+                    onClick={() => handleRestore(backup.filename)}
+                    disabled={restoringFilename === backup.filename}
+                    className="h-7 w-7 flex items-center justify-center text-gray-400 hover:text-green-400 hover:bg-gray-700 rounded-md transition-colors disabled:opacity-50"
+                    title="Restaurar"
+                  >
+                    {restoringFilename === backup.filename ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <RotateCcw size={16} />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => handleDelete(backup.filename)}
+                    disabled={backup.protected}
+                    className="h-7 w-7 flex items-center justify-center text-gray-400 hover:text-red-400 hover:bg-gray-700 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={backup.protected ? 'No se puede eliminar (protegido)' : 'Eliminar'}
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 </div>
               </div>
-              <div className="flex items-center gap-1 ml-2">
-                <button
-                  onClick={() => handleToggleProtect(backup.filename, backup.protected)}
-                  className="p-1.5 text-gray-400 hover:text-yellow-400 hover:bg-gray-700 rounded transition-colors"
-                  title={backup.protected ? 'Quitar protección' : 'Proteger'}
-                >
-                  {backup.protected ? <ShieldOff size={16} /> : <Shield size={16} />}
-                </button>
-                <button
-                  onClick={() => handleDownload(backup.filename)}
-                  className="p-1.5 text-gray-400 hover:text-blue-400 hover:bg-gray-700 rounded transition-colors"
-                  title="Descargar"
-                >
-                  <Download size={16} />
-                </button>
-                <button
-                  onClick={() => handleRestore(backup.filename)}
-                  disabled={restoringFilename === backup.filename}
-                  className="p-1.5 text-gray-400 hover:text-green-400 hover:bg-gray-700 rounded transition-colors disabled:opacity-50"
-                  title="Restaurar"
-                >
-                  {restoringFilename === backup.filename ? (
-                    <Loader2 size={16} className="animate-spin" />
-                  ) : (
-                    <RotateCcw size={16} />
+
+              <div className="mt-2">
+                {backup.description && (
+                  <div className="text-xs text-gray-300 truncate">{backup.description}</div>
+                )}
+                <div className="mt-2 text-xs text-gray-500">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span>{formatDate(backup.createdAt)}</span>
+                    <span>{formatSize(backup.sizeBytes)}</span>
+                  </div>
+
+                  {backup.stats && (
+                    <details className="group mt-2 block text-[11px] text-gray-400">
+                      <summary className="cursor-pointer list-none select-none text-gray-300 hover:text-white [&::-webkit-details-marker]:hidden">
+                        <span className="inline-flex items-center gap-1 rounded-md border border-gray-700/50 bg-gray-900/60 px-2 py-1">
+                          <span className="text-gray-400 transition-transform duration-200 group-open:rotate-90">▸</span>
+                          <span className="font-medium text-gray-200">Registros</span>
+                          <span className="text-gray-400">{backup.stats.notes ?? 0}n / {backup.stats.clients ?? 0}c / {backup.stats.projects ?? 0}p</span>
+                        </span>
+                      </summary>
+                      <div className="mt-2 rounded-lg border border-gray-700/60 bg-gray-900/80 p-2 shadow-inner">
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                          <div className="text-gray-300">Notas</div><div className="text-right font-mono text-gray-200">{backup.stats.notes ?? 0}</div>
+                          <div className="text-gray-300">Clientes</div><div className="text-right font-mono text-gray-200">{backup.stats.clients ?? 0}</div>
+                          <div className="text-gray-300">Proyectos</div><div className="text-right font-mono text-gray-200">{backup.stats.projects ?? 0}</div>
+                          <div className="text-gray-300">Timesheets</div><div className="text-right font-mono text-gray-200">{backup.stats.timesheets ?? 0}</div>
+                          <div className="text-gray-300">Adjuntos</div><div className="text-right font-mono text-gray-200">{backup.stats.attachments ?? 0}</div>
+                          <div className="text-gray-300">Activity Logs</div><div className="text-right font-mono text-gray-200">{backup.stats.activityLogs ?? 0}</div>
+                          <div className="text-gray-300">Comentarios</div><div className="text-right font-mono text-gray-200">{backup.stats.taskComments ?? 0}</div>
+                          <div className="text-gray-300">TODOs</div><div className="text-right font-mono text-gray-200">{backup.stats.taskTodos ?? 0}</div>
+                          <div className="text-gray-300">Métodos</div><div className="text-right font-mono text-gray-200">{backup.stats.billingMethods ?? 0}</div>
+                          <div className="text-gray-300">Runs</div><div className="text-right font-mono text-gray-200">{backup.stats.billingRuns ?? 0}</div>
+                          <div className="text-gray-300">Items</div><div className="text-right font-mono text-gray-200">{backup.stats.billingRunItems ?? 0}</div>
+                          <div className="text-gray-300">Notif. TODO</div><div className="text-right font-mono text-gray-200">{backup.stats.todoNotificationsSent ?? 0}</div>
+                        </div>
+                      </div>
+                    </details>
                   )}
-                </button>
-                <button
-                  onClick={() => handleDelete(backup.filename)}
-                  disabled={backup.protected}
-                  className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-gray-700 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={backup.protected ? 'No se puede eliminar (protegido)' : 'Eliminar'}
-                >
-                  <Trash2 size={16} />
-                </button>
+                </div>
               </div>
             </div>
           ))}
@@ -555,81 +1135,8 @@ function ServerBackupsSection() {
 
 function BackupManager() {
   const { refreshNotes } = useApp();
-  const [isExporting, setIsExporting] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
-  const [importResult, setImportResult] = useState<{ success: boolean; message: string } | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [showInfoModal, setShowInfoModal] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleExport = async () => {
-    setIsExporting(true);
-    try {
-      const response = await fetch('/api/workspace/export');
-      if (!response.ok) throw new Error('Export failed');
-      
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = response.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] || 'backup.zip';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Export error:', error);
-      alert('Export failed. Please try again.');
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (!confirm('This will replace all existing data. Are you sure you want to continue?')) {
-      event.target.value = '';
-      return;
-    }
-
-    setIsImporting(true);
-    setImportResult(null);
-
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const response = await fetch('/api/workspace/import', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const result = await response.json();
-      console.log('Import response:', result);
-
-      if (response.ok) {
-        const msg = `Imported: ${result.imported.notes} notes, ${result.imported.timesheets || 0} timesheets, ${result.imported.clients} clients, ${result.imported.projects} projects, ${result.imported.attachments} attachments, ${result.imported.activityLogs || 0} activity logs, ${result.imported.comments || 0} comments`;
-        setImportResult({ success: true, message: msg });
-        // show modal asking user to refresh UI
-        setInfoMessage(msg + '\nPlease refresh to update the interface.');
-        setShowInfoModal(true);
-        // also refresh notes state in the background so sidebar updates soon
-        refreshNotes();
-      } else {
-        const msg = result.error || 'Import failed';
-        const details = result.details ? `\nDetails: ${result.details}` : '';
-        setImportResult({ success: false, message: msg + details });
-      }
-    } catch (error) {
-      console.error('Import error:', error);
-      setImportResult({ success: false, message: 'Import failed. Please try again.' });
-    } finally {
-      setIsImporting(false);
-      event.target.value = '';
-    }
-  };
 
   return (
     <div className="p-6 max-w-2xl">
@@ -645,25 +1152,6 @@ function BackupManager() {
             window.location.reload();
           }}
         />
-      {/* Export Section */}
-        <div className="bg-gray-900 rounded-lg p-4 border border-gray-800">
-          <h3 className="text-lg font-medium text-white mb-2">Export Workspace</h3>
-          <p className="text-gray-400 text-sm mb-4">
-            Download a complete backup of all your notes, clients, projects, attachments (including blob data), and database tables as a ZIP file.
-          </p>
-          <button
-            onClick={handleExport}
-            disabled={isExporting}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            {isExporting ? (
-              <Loader2 size={18} className="animate-spin" />
-            ) : (
-              <Download size={18} />
-            )}
-            {isExporting ? 'Exporting...' : 'Export Backup'}
-          </button>
-        </div>
 
         {/* Wipe Section */}
         <div className="bg-gray-900 rounded-lg p-4 border border-red-800">
@@ -696,43 +1184,6 @@ function BackupManager() {
             <Trash2 size={18} />
             Wipe Workspace
           </button>
-        </div>
-
-        {/* Import Section */}
-        <div className="bg-gray-900 rounded-lg p-4 border border-gray-800">
-          <h3 className="text-lg font-medium text-white mb-2">Import Workspace</h3>
-          <p className="text-gray-400 text-sm mb-4">
-            Restore data from a previous backup ZIP file. <span className="text-yellow-500">Warning: This will replace all existing data.</span>
-          </p>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".zip"
-            onChange={handleImport}
-            className="hidden"
-          />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isImporting}
-            className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            {isImporting ? (
-              <Loader2 size={18} className="animate-spin" />
-            ) : (
-              <Upload size={18} />
-            )}
-            {isImporting ? 'Importing...' : 'Import Backup'}
-          </button>
-
-          {importResult && (
-            <div className={`mt-4 p-3 rounded-lg text-sm ${
-              importResult.success 
-                ? 'bg-green-900/50 text-green-300 border border-green-700' 
-                : 'bg-red-900/50 text-red-300 border border-red-700'
-            }`}>
-              {importResult.message}
-            </div>
-          )}
         </div>
 
         {/* Server Backups Section */}
@@ -1115,6 +1566,19 @@ export function ConfigPanel() {
               Preferencias
             </button>
             <button
+              onClick={() => setActiveTab('system')}
+              className={`
+                w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors
+                ${activeTab === 'system'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                }
+              `}
+            >
+              <Server size={18} />
+              Sistema
+            </button>
+            <button
               onClick={() => setActiveTab('billing')}
               className={`
                 w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors
@@ -1137,6 +1601,7 @@ export function ConfigPanel() {
         {activeTab === 'projects' && <ProjectsManager />}
         {activeTab === 'backup' && <BackupManager />}
         {activeTab === 'preferences' && <PreferencesManager />}
+        {activeTab === 'system' && <SystemDatabaseSection />}
         {activeTab === 'billing' && <BillingMethodsManager />}
       </div>
     </div>

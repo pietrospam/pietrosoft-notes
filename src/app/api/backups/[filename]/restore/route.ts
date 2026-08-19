@@ -14,6 +14,9 @@ interface RouteParams {
 // POST /api/backups/[filename]/restore - Restore from a backup
 export async function POST(_request: NextRequest, { params }: RouteParams) {
   try {
+    // Always restore full backup contents, including legacy data files.
+    const restoreLegacyDataFiles = true;
+
     const { filename } = await params;
     
     // Validate filename (prevent path traversal)
@@ -59,6 +62,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       attachments: 0,
       activityLogs: 0,
       taskComments: 0,
+      taskTodos: 0,
       billingMethods: 0,
       billingRuns: 0,
       billingRunItems: 0,
@@ -68,8 +72,10 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     // Delete existing data in correct order (respecting FK constraints)
     await prisma.$transaction([
       prisma.todoNotificationSent.deleteMany(),
+      prisma.billingRunItem.deleteMany(),
       prisma.billingRun.deleteMany(),
       prisma.billingMethod.deleteMany(),
+      prisma.taskTodo.deleteMany(),
       prisma.taskComment.deleteMany(),
       prisma.taskActivityLog.deleteMany(),
       prisma.attachment.deleteMany(),
@@ -78,124 +84,33 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       prisma.project.deleteMany(),
       prisma.client.deleteMany(),
     ]);
-    
-    const sanitizeClient = (obj: unknown): Record<string, unknown> => {
-      if (typeof obj !== 'object' || obj === null) return {};
-      const data = obj as Record<string, unknown>;
-      const result: Record<string, unknown> = {};
-      const validFields = ['id', 'name', 'description', 'color', 'active', 'parentClientId', 'createdAt', 'updatedAt'];
-      for (const field of validFields) {
-        if (field in data) result[field] = data[field];
-      }
-      if (typeof result.createdAt === 'string') result.createdAt = new Date(result.createdAt);
-      if (typeof result.updatedAt === 'string') result.updatedAt = new Date(result.updatedAt);
-      return result;
-    };
-
-    const sanitizeProject = (obj: unknown): Record<string, unknown> => {
-      if (typeof obj !== 'object' || obj === null) return {};
-      const data = obj as Record<string, unknown>;
-      const result: Record<string, unknown> = {};
-      const validFields = ['id', 'name', 'description', 'clientId', 'createdAt', 'updatedAt'];
-      for (const field of validFields) {
-        if (field in data) result[field] = data[field];
-      }
-      if (typeof result.createdAt === 'string') result.createdAt = new Date(result.createdAt);
-      if (typeof result.updatedAt === 'string') result.updatedAt = new Date(result.updatedAt);
-      return result;
-    };
-
-    const sanitizeNote = (obj: unknown): Record<string, unknown> => {
-      if (typeof obj !== 'object' || obj === null) return {};
-      const data = obj as Record<string, unknown>;
-      const result: Record<string, unknown> = {};
-      const validFields = ['id', 'type', 'title', 'content', 'projectId', 'clientId', 'archived', 'isFavorite', 'favoriteOrder', 'attachments', 'taskStatus', 'taskPriority', 'taskDueDate', 'connectionUrl', 'connectionUsername', 'connectionCredentials', 'createdAt', 'updatedAt', 'contentJson', 'taskTicketPhaseCode', 'taskShortDescription', 'taskBudgetHours'];
-      for (const field of validFields) {
-        if (field in data) result[field] = data[field];
-      }
-      if (typeof result.createdAt === 'string') result.createdAt = new Date(result.createdAt);
-      if (typeof result.updatedAt === 'string') result.updatedAt = new Date(result.updatedAt);
-      if (typeof result.taskDueDate === 'string') result.taskDueDate = new Date(result.taskDueDate);
-      return result;
-    };
-
-    const sanitizeTimesheet = (obj: unknown): Record<string, unknown> => {
-      if (typeof obj !== 'object' || obj === null) return {};
-      const data = obj as Record<string, unknown>;
-      const result: Record<string, unknown> = {};
-      const validFields = ['id', 'workDate', 'hoursWorked', 'description', 'taskId', 'projectId', 'clientId', 'rate', 'state', 'createdAt', 'updatedAt'];
-      for (const field of validFields) {
-        if (field in data) result[field] = data[field];
-      }
-      if (typeof result.createdAt === 'string') result.createdAt = new Date(result.createdAt);
-      if (typeof result.updatedAt === 'string') result.updatedAt = new Date(result.updatedAt);
-      if (typeof result.workDate === 'string') result.workDate = new Date(result.workDate);
-      return result;
-    };
-
-    const sanitizeAttachment = (obj: unknown): Record<string, unknown> => {
-      if (typeof obj !== 'object' || obj === null) return {};
-      const data = obj as Record<string, unknown>;
-      const result: Record<string, unknown> = {};
-      const validFields = ['id', 'noteId', 'filename', 'originalName', 'mimeType', 'size', 'data', 'createdAt'];
-      for (const field of validFields) {
-        if (field in data) result[field] = data[field];
-      }
-      if (typeof result.createdAt === 'string') result.createdAt = new Date(result.createdAt);
-      return result;
-    };
-
-    const sanitizeActivityLog = (obj: unknown): Record<string, unknown> => {
-      if (typeof obj !== 'object' || obj === null) return {};
-      const data = obj as Record<string, unknown>;
-      const result: Record<string, unknown> = {};
-      const validFields = ['id', 'taskId', 'eventType', 'description', 'createdAt'];
-      for (const field of validFields) {
-        if (field in data) result[field] = data[field];
-      }
-      if (typeof result.createdAt === 'string') result.createdAt = new Date(result.createdAt);
-      return result;
-    };
-
-    const sanitizeTaskComment = (obj: unknown): Record<string, unknown> => {
-      if (typeof obj !== 'object' || obj === null) return {};
-      const data = obj as Record<string, unknown>;
-      const result: Record<string, unknown> = {};
-      const validFields = ['id', 'taskId', 'author', 'content', 'createdAt'];
-      for (const field of validFields) {
-        if (field in data) result[field] = data[field];
-      }
-      if (typeof result.author !== 'string' || !result.author) result.author = 'Imported';
-      if (typeof result.createdAt === 'string') result.createdAt = new Date(result.createdAt);
-      return result;
-    };
 
     // Import in correct order (parents before children)
     const clients = await readJson('db/clients.json');
     if (clients && Array.isArray(clients)) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await prisma.client.createMany({ data: clients.map(sanitizeClient) as any });
+      await prisma.client.createMany({ data: clients as any });
       counts.clients = clients.length;
     }
     
     const projects = await readJson('db/projects.json');
     if (projects && Array.isArray(projects)) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await prisma.project.createMany({ data: projects.map(sanitizeProject) as any });
+      await prisma.project.createMany({ data: projects as any });
       counts.projects = projects.length;
     }
     
     const notes = await readJson('db/notes.json');
     if (notes && Array.isArray(notes)) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await prisma.note.createMany({ data: notes.map(sanitizeNote) as any });
+      await prisma.note.createMany({ data: notes as any });
       counts.notes = notes.length;
     }
     
     const timesheets = await readJson('db/timesheets.json');
     if (timesheets && Array.isArray(timesheets)) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await prisma.timesheet.createMany({ data: timesheets.map(sanitizeTimesheet) as any });
+      await prisma.timesheet.createMany({ data: timesheets as any });
       counts.timesheets = timesheets.length;
     }
     
@@ -203,13 +118,10 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     if (attachments && Array.isArray(attachments)) {
       // Decode base64 data back to Buffer
       interface AttachmentJson { [key: string]: unknown; data: string; }
-      const withBinary = (attachments as AttachmentJson[]).map(a => {
-        const sanitized = sanitizeAttachment(a);
-        return {
-          ...sanitized,
-          data: Buffer.from(a.data, 'base64'),
-        };
-      });
+      const withBinary = (attachments as AttachmentJson[]).map(a => ({
+        ...a,
+        data: Buffer.from(a.data, 'base64'),
+      }));
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await prisma.attachment.createMany({ data: withBinary as any });
       counts.attachments = attachments.length;
@@ -218,15 +130,34 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     const activityLogs = await readJson('db/activityLogs.json');
     if (activityLogs && Array.isArray(activityLogs)) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await prisma.taskActivityLog.createMany({ data: activityLogs.map(sanitizeActivityLog) as any });
+      await prisma.taskActivityLog.createMany({ data: activityLogs as any });
       counts.activityLogs = activityLogs.length;
     }
     
-    const taskComments = await readJson('db/taskComments.json');
+    const taskComments = await readJson('db/taskComments.json') ?? await readJson('db/comments.json');
     if (taskComments && Array.isArray(taskComments)) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await prisma.taskComment.createMany({ data: taskComments.map(sanitizeTaskComment) as any });
+      await prisma.taskComment.createMany({ data: taskComments as any, skipDuplicates: true });
       counts.taskComments = taskComments.length;
+    }
+
+    const taskTodos = await readJson('db/taskTodos.json');
+    if (taskTodos && Array.isArray(taskTodos)) {
+      interface TaskTodoJson { id: string; recurrenceParentId: string | null; [key: string]: unknown; }
+      const normalized = (taskTodos as TaskTodoJson[]).map(todo => ({
+        ...todo,
+        recurrenceParentId: null,
+      }));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await prisma.taskTodo.createMany({ data: normalized as any });
+      for (const todo of taskTodos as TaskTodoJson[]) {
+        if (!todo.recurrenceParentId) continue;
+        await prisma.taskTodo.update({
+          where: { id: todo.id },
+          data: { recurrenceParentId: todo.recurrenceParentId },
+        });
+      }
+      counts.taskTodos = taskTodos.length;
     }
 
     const todoNotificationsSent = await readJson('db/todoNotificationsSent.json');
@@ -264,54 +195,71 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       counts.billingRunItems = billingRunItems.length;
     }
     
-    // Optionally restore data directory files
+    // Database tables are restored above. Legacy data folders are restored too
+    // to guarantee complete restores for legacy and mixed backups.
     const dataDir = process.env.WORKSPACE_PATH || './data';
     const dataFolders = ['notes', 'clients', 'projects', 'attachments'];
     
-    // Restore config files, if present
+    // Restore config files, if present. These are optional and should not fail the
+    // overall restore after the DB tables were already imported.
+    const warnings: string[] = [];
+    const safeWriteFile = async (label: string, targetPath: string, content: Buffer) => {
+      try {
+        await fs.mkdir(path.dirname(targetPath), { recursive: true });
+        await fs.writeFile(targetPath, content);
+      } catch (err) {
+        warnings.push(`${label}: ${String(err)}`);
+      }
+    };
+
     const telegramConfigFile = zip.file('config/telegram-config.json');
     if (telegramConfigFile) {
       const telegramConfigBuffer = await telegramConfigFile.async('nodebuffer');
       const telegramConfigPath = process.env.WORKSPACE_PATH
         ? path.join(process.env.WORKSPACE_PATH, 'telegram-config.json')
         : path.join(process.env.DATA_DIR || './data', 'telegram-config.json');
-      await fs.mkdir(path.dirname(telegramConfigPath), { recursive: true });
-      await fs.writeFile(telegramConfigPath, telegramConfigBuffer);
+      await safeWriteFile('telegram config', telegramConfigPath, telegramConfigBuffer);
     }
 
     const backupSettingsFile = zip.file('config/backup-settings.json');
     if (backupSettingsFile) {
       const backupSettingsBuffer = await backupSettingsFile.async('nodebuffer');
       const backupSettingsPath = path.join(BACKUP_DIR, 'backup-settings.json');
-      await fs.writeFile(backupSettingsPath, backupSettingsBuffer);
+      await safeWriteFile('backup settings', backupSettingsPath, backupSettingsBuffer);
     }
 
     let filesRestored = 0;
-    for (const folder of dataFolders) {
-      const prefix = `data/${folder}/`;
-      const files = Object.keys(zip.files).filter(name => 
-        name.startsWith(prefix) && !name.endsWith('/')
-      );
-      
-      for (const fileName of files) {
-        const file = zip.file(fileName);
-        if (!file) continue;
-        
-        const content = await file.async('nodebuffer');
-        const targetPath = path.join(dataDir, fileName.replace('data/', ''));
-        
-        // Ensure directory exists
-        await fs.mkdir(path.dirname(targetPath), { recursive: true });
-        await fs.writeFile(targetPath, content);
-        filesRestored++;
+    if (restoreLegacyDataFiles) {
+      for (const folder of dataFolders) {
+        const prefix = `data/${folder}/`;
+        const files = Object.keys(zip.files).filter(name =>
+          name.startsWith(prefix) && !name.endsWith('/'));
+
+        for (const fileName of files) {
+          const file = zip.file(fileName);
+          if (!file) continue;
+
+          try {
+            const content = await file.async('nodebuffer');
+            const targetPath = path.join(dataDir, fileName.replace('data/', ''));
+            await safeWriteFile(`legacy file ${fileName}`, targetPath, content);
+            filesRestored++;
+          } catch (err) {
+            warnings.push(`${fileName}: ${String(err)}`);
+          }
+        }
       }
     }
     
     return NextResponse.json({
       success: true,
-      message: 'Backup restored successfully',
+      message: warnings.length > 0
+        ? 'Backup restored successfully with warnings'
+        : 'Backup restored successfully',
       restored: counts,
       filesRestored,
+      legacyDataFilesRestored: restoreLegacyDataFiles,
+      warnings,
     });
   } catch (error) {
     console.error('Error restoring backup:', error);

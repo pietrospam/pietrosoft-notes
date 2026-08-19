@@ -7,6 +7,17 @@ export const dynamic = 'force-dynamic';
 
 const BACKUP_DIR = process.env.BACKUP_DIR || './backups';
 
+function sanitizeBackupFilename(input: string): string {
+  const withoutExtension = input.replace(/\.zip$/i, '');
+  const normalized = withoutExtension
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^[-.]+|[-.]+$/g, '');
+
+  return `${normalized || 'backup'}.zip`;
+}
+
 // GET /api/backups/[filename] - Download a specific backup
 export async function GET(
   request: NextRequest,
@@ -110,9 +121,26 @@ export async function PATCH(
     }
     
     const body = await request.json();
+    let nextFilename = filename;
+
+    if (typeof body.filename === 'string') {
+      const sanitizedFilename = sanitizeBackupFilename(body.filename);
+      if (sanitizedFilename !== filename) {
+        const targetPath = path.join(BACKUP_DIR, sanitizedFilename);
+        try {
+          await fs.access(targetPath);
+          return NextResponse.json({ error: 'A backup with that name already exists' }, { status: 409 });
+        } catch {
+          await fs.rename(filePath, targetPath);
+          nextFilename = sanitizedFilename;
+        }
+      }
+    }
+
+    const nextFilePath = path.join(BACKUP_DIR, nextFilename);
     
     // Read current ZIP
-    const zipBuffer = await fs.readFile(filePath);
+    const zipBuffer = await fs.readFile(nextFilePath);
     const zip = await JSZip.loadAsync(zipBuffer);
     
     // Read and update manifest
@@ -141,9 +169,9 @@ export async function PATCH(
       compressionOptions: { level: 9 }
     });
     
-    await fs.writeFile(filePath, updatedBuffer);
+    await fs.writeFile(nextFilePath, updatedBuffer);
     
-    return NextResponse.json({ success: true, manifest });
+    return NextResponse.json({ success: true, filename: nextFilename, manifest });
   } catch (error) {
     console.error('Error updating backup:', error);
     return NextResponse.json({ error: 'Failed to update backup' }, { status: 500 });

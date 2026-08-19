@@ -220,7 +220,7 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
       attributes: {
         class: readOnly 
           ? bare
-            ? 'text-[10px] leading-tight text-gray-400 [&_p]:!m-0 [&_p]:!mb-0.5 [&_p]:!leading-tight [&_p]:text-[10px] [&_a]:text-[10px] [&_a]:text-blue-300 [&_a]:underline'
+            ? 'text-sm leading-relaxed text-gray-300 [&_p]:!m-0 [&_p]:!mb-1 [&_p]:!leading-relaxed [&_p]:text-sm [&_a]:text-sm [&_a]:text-blue-300 [&_a]:underline'
             : compact
             ? 'prose prose-invert prose-sm prose-compact max-w-none'
             : 'prose prose-invert prose-sm max-w-none'

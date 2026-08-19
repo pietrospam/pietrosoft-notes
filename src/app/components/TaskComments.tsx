@@ -255,7 +255,7 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
       </div>
       {loading && <p className="text-[11px] text-gray-500">cargando...</p>}
       {comments.length === 0 && !loading && <p className="text-[11px] text-gray-500 italic">Sin comentarios</p>}
-      <div className="space-y-1 text-xs">
+      <div className="space-y-1.5 text-sm">
         {comments.map(c => {
           const isSystemComment = c.author === '🤖 Sistema';
           const commentText = getCommentPlainText(c.content as object).trim();
@@ -275,10 +275,10 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
             >
               {isSystemComment ? (
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="min-w-0 flex-1 truncate text-[10px] leading-none italic text-gray-300 opacity-90">
+                  <span className="min-w-0 flex-1 truncate text-sm leading-snug italic text-gray-300 opacity-90">
                     {commentText || 'Sin contenido'}
                   </span>
-                  <div className="flex items-center gap-1 shrink-0 text-[10px] leading-none text-gray-400">
+                  <div className="flex items-center gap-1 shrink-0 text-[11px] leading-none text-gray-400">
                     <span>{commentMeta}</span>
                     <button
                       onClick={() => handleCopyComment(c)}
@@ -333,7 +333,7 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
               ) : (
                 <>
                   <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex items-center gap-1 text-[10px] leading-none text-gray-400">
+                    <div className="min-w-0 flex items-center gap-1 text-[11px] leading-none text-gray-400">
                       <span className={`truncate max-w-[120px] ${isSystemComment ? 'text-gray-300' : ''}`}>{c.author}</span>
                       <span className="text-gray-600">•</span>
                       <span>{c.createdAt ? new Date(c.createdAt).toLocaleString('es-AR', { hour12: false }) : 'Sin fecha'}</span>
@@ -370,7 +370,7 @@ export const TaskComments = forwardRef<TaskCommentsRef, TaskCommentsProps>(funct
                       )}
                     </div>
                   </div>
-                  <div className={isSystemComment ? 'mt-0.5 text-[10px] leading-tight text-gray-400 opacity-70 [&_p]:!mb-0.5 [&_p]:!leading-tight [&_p:last-child]:!mb-0' : 'mt-1'}>
+                  <div className={isSystemComment ? 'mt-0.5 text-[11px] leading-snug text-gray-400 opacity-70 [&_p]:!mb-0.5 [&_p]:!leading-snug [&_p:last-child]:!mb-0' : 'mt-1'}>
                   <TipTapEditor
                     ref={(instance) => {
                       if (instance) commentEditorRefs.current[c.id] = instance;

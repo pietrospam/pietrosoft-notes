@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { promises as fs, createWriteStream } from 'fs';
+import os from 'os';
 import path from 'path';
 import JSZip from 'jszip';
 import archiver from 'archiver';
+import Busboy from 'busboy';
+import { Readable } from 'stream';
 import { notifyBackupSuccess, notifyBackupError } from '@/lib/telegram';
 
 export const dynamic = 'force-dynamic';
 
 const BACKUP_DIR = process.env.BACKUP_DIR || './backups';
 const ARGENTINA_TIMEZONE = 'America/Buenos_Aires';
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024 * 1024;
 
 /**
  * Generate timestamp string in Argentina timezone for filenames
@@ -56,6 +60,178 @@ interface BackupMetadata {
 interface BackupSettingsSummary {
   retentionCount: number;
   maxAgeDays: number;
+}
+
+interface UploadedBackupPayload {
+  tempPath: string;
+  originalFilename: string;
+  requestedFilename?: string;
+  description?: string;
+  protected: boolean;
+}
+
+function sanitizeBackupFilename(input: string): string {
+  const withoutExtension = input.replace(/\.zip$/i, '');
+  const normalized = withoutExtension
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^[-.]+|[-.]+$/g, '');
+
+  return `${normalized || `backup-${getArgentinaTimestamp()}`}.zip`;
+}
+
+async function ensureUniqueFilename(filename: string): Promise<string> {
+  let candidate = filename;
+  let counter = 1;
+
+  while (true) {
+    try {
+      await fs.access(path.join(BACKUP_DIR, candidate));
+      const base = filename.replace(/\.zip$/i, '');
+      candidate = `${base}-${counter}.zip`;
+      counter += 1;
+    } catch {
+      return candidate;
+    }
+  }
+}
+
+async function moveFileSafely(sourcePath: string, targetPath: string): Promise<void> {
+  try {
+    await fs.rename(sourcePath, targetPath);
+  } catch (err) {
+    const code = (err as { code?: string }).code;
+    if (code !== 'EXDEV') {
+      throw err;
+    }
+    await fs.copyFile(sourcePath, targetPath);
+    await fs.unlink(sourcePath);
+  }
+}
+
+async function writeMultipartUploadToTempFile(request: NextRequest): Promise<UploadedBackupPayload> {
+  const tempPath = path.join(os.tmpdir(), `backup-upload-${Date.now()}-${Math.random().toString(36).slice(2)}.zip`);
+  const contentType = request.headers.get('content-type');
+  if (!contentType) throw new Error('Missing multipart content type');
+
+  let originalFilename = '';
+  let requestedFilename = '';
+  let description = '';
+  let isProtected = false;
+
+  await new Promise<void>((resolve, reject) => {
+    const parser = Busboy({
+      headers: { 'content-type': contentType },
+      limits: { fileSize: MAX_UPLOAD_BYTES },
+    });
+
+    let foundFile = false;
+    let output: ReturnType<typeof createWriteStream> | null = null;
+    let parserFinished = false;
+    let outputFinished = false;
+
+    const complete = () => {
+      if (parserFinished && outputFinished) resolve();
+    };
+
+    parser.on('field', (fieldname, value) => {
+      if (typeof value !== 'string') {
+        return;
+      }
+
+      if (fieldname === 'filename') requestedFilename = value;
+      if (fieldname === 'description') description = value;
+      if (fieldname === 'protected') isProtected = value === 'true';
+    });
+
+    parser.on('file', (fieldname, stream, info) => {
+      if (fieldname !== 'file' || foundFile) {
+        stream.resume();
+        return;
+      }
+
+      foundFile = true;
+      originalFilename = info.filename || '';
+      output = createWriteStream(tempPath);
+
+      stream.on('limit', () => reject(new Error(`Backup file is too large (maximum ${MAX_UPLOAD_BYTES / (1024 * 1024)} MB)`)));
+      stream.on('error', reject);
+      output.on('error', reject);
+      output.on('close', () => {
+        outputFinished = true;
+        complete();
+      });
+      stream.pipe(output);
+    });
+
+    parser.on('error', reject);
+    parser.on('finish', () => {
+      if (!foundFile) {
+        reject(new Error('No backup file provided'));
+      } else {
+        parserFinished = true;
+        complete();
+      }
+    });
+
+    const body = request.body;
+    if (!body) {
+      reject(new Error('Empty request body'));
+      return;
+    }
+
+    Readable.fromWeb(body as unknown as import('stream/web').ReadableStream).pipe(parser);
+  }).catch(async error => {
+    await fs.rm(tempPath, { force: true }).catch(() => undefined);
+    throw error;
+  });
+
+  return {
+    tempPath,
+    originalFilename,
+    requestedFilename: requestedFilename || undefined,
+    description: description || undefined,
+    protected: isProtected,
+  };
+}
+
+async function handleUploadedBackup(request: NextRequest) {
+  const upload = await writeMultipartUploadToTempFile(request);
+
+  try {
+    const uploadedFileName = upload.originalFilename || '';
+    if (!uploadedFileName.toLowerCase().endsWith('.zip')) {
+      return NextResponse.json({ error: 'Backup file must be a .zip' }, { status: 400 });
+    }
+
+    const incomingName = upload.requestedFilename || uploadedFileName;
+
+    await fs.mkdir(BACKUP_DIR, { recursive: true });
+
+    const desiredFilename = sanitizeBackupFilename(incomingName);
+    const finalFilename = await ensureUniqueFilename(desiredFilename);
+    const finalPath = path.join(BACKUP_DIR, finalFilename);
+
+    // Move the uploaded ZIP directly to backups. Re-compressing large files here
+    // can take a very long time and makes the UI look stuck at 100%.
+    await moveFileSafely(upload.tempPath, finalPath);
+    const stat = await fs.stat(finalPath);
+
+    await applyRetentionPolicy();
+
+    return NextResponse.json({
+      success: true,
+      uploaded: true,
+      filename: finalFilename,
+      createdAt: stat.mtime.toISOString(),
+      sizeBytes: stat.size,
+      description: upload.description,
+      protected: false,
+    });
+  } finally {
+    await fs.rm(upload.tempPath, { force: true }).catch(() => undefined);
+  }
 }
 
 // Helper: Read manifest from ZIP without extracting
@@ -250,6 +426,11 @@ export async function GET() {
 // POST /api/backups - Create a new backup
 export async function POST(request: NextRequest) {
   try {
+    const contentType = request.headers.get('content-type') || '';
+    if (contentType.startsWith('multipart/form-data')) {
+      return await handleUploadedBackup(request);
+    }
+
     // Parse request body for optional description
     let description: string | undefined;
     let isProtected = false;

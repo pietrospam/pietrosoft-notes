@@ -82,6 +82,7 @@ rsync -avz --delete --delete-excluded -e "ssh ${SSH_OPTS[*]}" \
   --exclude '.next' \
   --exclude '.git' \
   --exclude '/backups' \
+  --exclude '/data' \
   --exclude 'data/attachments/*' \
   --exclude '*.log' \
   --exclude '.env*' \
@@ -117,18 +118,27 @@ if [ "$REMOTE_HOST" = "$PROD_HOST" ]; then
 fi
 
 # Step 5: Clean up Docker resources on remote server
-echo "🧹 Cleaning up Docker resources..."
-ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "docker system prune -af --volumes 2>/dev/null || true"
-ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "docker builder prune -af 2>/dev/null || true"
+if [ "${DEPLOY_PRUNE:-0}" = "1" ]; then
+  echo "🧹 Cleaning up Docker resources (DEPLOY_PRUNE=1)..."
+  ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "docker system prune -af --volumes 2>/dev/null || true"
+  ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "docker builder prune -af 2>/dev/null || true"
+else
+  echo "ℹ️ Skipping Docker prune (set DEPLOY_PRUNE=1 to enable)."
+fi
 
 # Step 6: Build the new image after the backup. On startup, start.sh runs
 # `prisma migrate deploy` before the application starts.
 echo "🔧 Building remote app image..."
 ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME POSTGRES_VOLUME_NAME=$POSTGRES_VOLUME_NAME APP_ENV=$APP_ENV docker compose build app"
 
-# Step 7: Restart Docker containers on remote server
+# Step 7: Restart Docker containers on remote server. For TEST, reset the
+# named Postgres volume to clear stale crash data and avoid unhealthy loops.
 echo "🔧 Restarting Docker containers..."
-ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME POSTGRES_VOLUME_NAME=$POSTGRES_VOLUME_NAME docker compose down && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME POSTGRES_VOLUME_NAME=$POSTGRES_VOLUME_NAME APP_ENV=$APP_ENV docker compose up -d"
+if [ "$REMOTE_HOST" != "$PROD_HOST" ]; then
+  ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME POSTGRES_VOLUME_NAME=$POSTGRES_VOLUME_NAME docker compose down -v || true && docker volume rm ${COMPOSE_PROJECT_NAME}_postgres_data 2>/dev/null || true && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME POSTGRES_VOLUME_NAME=$POSTGRES_VOLUME_NAME APP_ENV=$APP_ENV docker compose up -d"
+else
+  ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "cd $REMOTE_PATH && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME POSTGRES_VOLUME_NAME=$POSTGRES_VOLUME_NAME docker compose down && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME POSTGRES_VOLUME_NAME=$POSTGRES_VOLUME_NAME APP_ENV=$APP_ENV docker compose up -d"
+fi
 
 # Step 8: Wait for containers and show logs
 echo "⏳ Waiting for app to start..."
